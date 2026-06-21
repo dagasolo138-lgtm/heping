@@ -42,33 +42,52 @@ function chooseProfileId(time, seed) {
   return 'coldRain';
 }
 
-function buildWeather(time, seed) {
+function buildWeather(time, seed, season) {
   const window = timeWindow(time);
   const profile = WEATHER_PROFILES[chooseProfileId(time, seed)];
   const variation = (hashSeed(`${seed}:temperature:${time?.year}:${time?.day}:${window}`) % 5) - 2;
+  const seasonTemperatureModifier = Number(season?.temperatureModifier ?? 0);
+  const temperature = profile.temperature + variation + seasonTemperatureModifier;
   return {
     ...profile,
-    key: `${time?.year}:${time?.day}:${window}`,
-    temperature: profile.temperature + variation,
-    requiresFire: profile.isRain || profile.temperature + variation <= 8,
+    key: `${time?.year}:${time?.day}:${window}:${season?.id ?? 'base'}`,
+    baseTemperature: profile.temperature + variation,
+    seasonId: season?.id ?? null,
+    seasonTemperatureModifier,
+    temperature,
+    requiresFire: profile.isRain || temperature <= 8,
     window,
   };
 }
 
 export function createWeatherSystem({ eventBus, gameTime, seed = 'starting-valley-weather-v1' }) {
-  let weather = buildWeather(gameTime.now(), seed);
+  let seasonSystem = null;
+  let weather = buildWeather(gameTime.now(), seed, null);
+
+  function getSeason() {
+    return seasonSystem?.get?.() ?? null;
+  }
 
   function get() {
     return structuredClone(weather);
   }
 
-  function sync() {
-    const next = buildWeather(gameTime.now(), seed);
-    if (next.key === weather.key) return get();
+  function refresh({ emit = true } = {}) {
+    const next = buildWeather(gameTime.now(), seed, getSeason());
+    const changed = next.key !== weather.key || next.temperature !== weather.temperature;
     weather = next;
-    eventBus.emit('environment:weather', { weather: get(), time: gameTime.stamp() });
+    if (emit && changed) eventBus.emit('environment:weather', { weather: get(), time: gameTime.stamp() });
     return get();
   }
 
-  return Object.freeze({ get, sync });
+  function sync() {
+    return refresh();
+  }
+
+  function setSeasonSystem(nextSeasonSystem) {
+    seasonSystem = nextSeasonSystem;
+    return refresh();
+  }
+
+  return Object.freeze({ get, sync, setSeasonSystem });
 }
