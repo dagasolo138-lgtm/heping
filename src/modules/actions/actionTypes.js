@@ -6,6 +6,7 @@ export const ACTION_TYPES = Object.freeze({
   DELIVER_MATERIALS: 'deliverMaterials',
   BUILD_SITE: 'buildSite',
   REST: 'rest',
+  SLEEP: 'sleep',
 });
 
 export const ACTION_META = Object.freeze({
@@ -16,6 +17,7 @@ export const ACTION_META = Object.freeze({
   [ACTION_TYPES.DELIVER_MATERIALS]: { label: '运送建材', workDuration: 0.45, phaseLabel: '装载建材' },
   [ACTION_TYPES.BUILD_SITE]: { label: '施工', workDuration: 1.8, phaseLabel: '搭建中' },
   [ACTION_TYPES.REST]: { label: '休息', workDuration: 4.2, phaseLabel: '休息中' },
+  [ACTION_TYPES.SLEEP]: { label: '睡眠', workDuration: 12, phaseLabel: '入睡中' },
 });
 
 export function actionLabel(type) {
