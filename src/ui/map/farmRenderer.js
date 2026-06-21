@@ -45,12 +45,11 @@ function drawSoil(context, field, origin, zoom) {
 }
 
 function drawCrop(context, field, origin, zoom) {
-  const width = field.footprint.width * zoom;
-  const height = field.footprint.height * zoom;
   const growth = Math.max(0, Math.min(1, field.growth.progressed / field.growth.required));
   const mature = field.status === 'mature';
+  const dormant = field.seasonal?.id === 'dormant';
   const stalkHeight = zoom * (0.16 + growth * 0.34);
-  const color = mature ? '#d7b955' : '#7faa4e';
+  const color = mature ? '#d7b955' : dormant ? '#8d9a78' : '#7faa4e';
 
   context.strokeStyle = color;
   context.lineWidth = Math.max(.7, zoom * .045);
@@ -72,6 +71,17 @@ function drawCrop(context, field, origin, zoom) {
   }
 }
 
+function fieldLabel(field) {
+  if (field.status === 'mature') return '成熟待收';
+  if (field.status === 'growing') {
+    if (field.seasonal?.id === 'dormant') return field.seasonal.label;
+    return `生长中 ${Math.round((field.growth.progressed / field.growth.required) * 100)}%`;
+  }
+  if (field.status === 'readyToSow') return field.seasonal?.label ?? '待播种';
+  if (field.status === 'clearing') return '开垦中';
+  return '待开垦';
+}
+
 export function drawFarms(context, fields, camera, viewport) {
   if (!fields?.length) return;
   context.save();
@@ -81,7 +91,7 @@ export function drawFarms(context, fields, camera, viewport) {
     drawSoil(context, field, origin, camera.zoom);
     if (field.status === 'growing' || field.status === 'mature') drawCrop(context, field, origin, camera.zoom);
 
-    const label = field.status === 'mature' ? '粟米成熟' : field.status === 'growing' ? `粟苗 ${Math.round((field.growth.progressed / field.growth.required) * 100)}%` : field.status === 'readyToSow' ? '待播种' : field.status === 'clearing' ? '开垦中' : '待开垦';
+    const label = fieldLabel(field);
     context.fillStyle = 'rgba(10, 17, 13, .58)';
     context.fillRect(origin.x, origin.y - Math.max(14, camera.zoom * .72), field.footprint.width * camera.zoom, Math.max(11, camera.zoom * .55));
     context.fillStyle = '#e7d5a0';
