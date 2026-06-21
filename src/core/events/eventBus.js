@@ -12,5 +12,8 @@ export function createEventBus() {
     listeners.get('*')?.forEach((listener) => listener({ eventName, payload }));
   }
 
-  return { on, emit };
+  const bus = { on, emit };
+  // 当前项目只有一个世界运行时；启动器可用此引用挂接独立模块，避免反向耦合到页面入口。
+  globalThis.__shenglingEventBus = bus;
+  return bus;
 }
