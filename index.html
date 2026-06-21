@@ -11,19 +11,19 @@
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SHENGLING / FOUNDATION 03</p>
+        <p class="eyebrow">SHENGLING / FOUNDATION 04</p>
         <h1>生灵</h1>
-        <p class="subtitle">人物系统 · 起始河谷 · 自主行动原型</p>
+        <p class="subtitle">人物系统 · 起始河谷 · 建造与分工原型</p>
       </div>
       <div class="topbar__status" aria-live="polite">
         <span class="status-dot"></span>
-        <span id="system-status">村民正在分头寻找水源、食物与木材</span>
+        <span id="system-status">村民正在筹备第一座集体草棚</span>
       </div>
     </header>
 
     <section class="phase-note">
-      <strong>第三阶段：</strong>
-      村民会读取饥饿、口渴、精力、技能、背包和营地库存，自动取水、采集浆果、砍树、搬运资源与休息。每次完成行动都会写入该人物的人生事实。
+      <strong>第四阶段：</strong>
+      草棚工地会自动建立。木材先从营地领出，再被送往工地；材料齐全后，具备建造技能的人开始施工。完工后全体村民获得第一处住所。
     </section>
 
     <section class="map-panel panel">
@@ -55,6 +55,10 @@
           <div class="strip-heading"><p class="panel__kicker">CAMP STOCK</p><h3>营地储备</h3></div>
           <div id="camp-resources" class="resource-chips" aria-live="polite"></div>
         </section>
+        <section class="construction-watch">
+          <div class="strip-heading"><p class="panel__kicker">CONSTRUCTION</p><h3>聚落建造</h3></div>
+          <div id="construction-status" class="construction-status" aria-live="polite"></div>
+        </section>
         <section class="action-feed">
           <div class="strip-heading"><p class="panel__kicker">LIVING RECORD</p><h3>即时动向</h3></div>
           <ol id="action-log" class="action-log" aria-live="polite"></ol>
@@ -81,19 +85,19 @@
 
     <section class="foundation-grid">
       <article class="foundation-card">
-        <p class="panel__kicker">SURVIVAL LOOP</p>
-        <h3>需求驱动</h3>
-        <p>口渴和饥饿优先于生产；精力低时会返回营地休息。职业决定效率和默认偏好，不会把人锁死。</p>
+        <p class="panel__kicker">BUILD LOOP</p>
+        <h3>工地有材料流</h3>
+        <p>建材从共享营地库存被领出，由居民实际运送到工地。工地记录材料、保留额度和施工进度。</p>
       </article>
       <article class="foundation-card">
-        <p class="panel__kicker">COOPERATION</p>
-        <h3>共享库存</h3>
-        <p>木材、浆果与清水归还到同一营地。砍伐者、采集者与搬运者开始通过资源缺口产生协作。</p>
+        <p class="panel__kicker">FIRST HOME</p>
+        <h3>集体草棚</h3>
+        <p>第一座草棚容纳十二人，并为夜间休息、防雨和未来的居住归属提供基础。</p>
       </article>
       <article class="foundation-card">
         <p class="panel__kicker">NEXT</p>
-        <h3>建造与分工</h3>
-        <p>下一轮会加入篝火、棚屋、储物点和建造任务，让木材真正变成可居住的聚落。</p>
+        <h3>夜晚与居住</h3>
+        <p>下一轮会加入昼夜、睡位、天气和体力恢复，让“有房子”真正改变每个村民的生活。</p>
       </article>
     </section>
   </main>
