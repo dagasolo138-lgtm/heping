@@ -9,7 +9,7 @@ function uniqueStrings(values = []) {
 
 export function createPerson(input = {}, timeStamp) {
   const person = createBlankPerson();
-  const birth = input.birth ?? { year: 1, day: 1 };
+  const birth = input.identity?.birth ?? input.birth ?? person.identity.birth;
 
   person.id = input.id ?? createId('person');
   person.identity = {
