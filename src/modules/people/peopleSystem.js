@@ -3,7 +3,7 @@ import { validatePerson } from './personValidation.js';
 import { getPerson, listPeople, getPeopleByIds, getAlivePeople } from './personQueries.js';
 import { patchPersonState, setOccupation, setLocation, setExtension, addStatusTag, removeStatusTag } from './personMutations.js';
 import { applyNeedDelta } from './personState.js';
-import { appendLifeEvent, appendPlayerMemory } from './personMemory.js';
+import { appendLifeEvent, appendPersonalMemory, appendEncounterMemory } from './personMemory.js';
 import { adjustRelation, linkParentChild, linkSiblings, linkSpouses } from './personRelations.js';
 import { changeItem, equipItem, addClaim } from './personInventory.js';
 import { markDead } from './personLifecycle.js';
@@ -11,6 +11,25 @@ import { PEOPLE_SCHEMA_VERSION } from './personSchema.js';
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function migrateSnapshot(snapshot) {
+  if (snapshot?.schemaVersion === PEOPLE_SCHEMA_VERSION) return clone(snapshot);
+  if (snapshot?.schemaVersion !== 1 || !Array.isArray(snapshot.people)) return snapshot;
+
+  return {
+    ...clone(snapshot),
+    schemaVersion: PEOPLE_SCHEMA_VERSION,
+    people: snapshot.people.map((person) => ({
+      ...clone(person),
+      schemaVersion: PEOPLE_SCHEMA_VERSION,
+      memories: {
+        ...clone(person.memories ?? {}),
+        personal: clone(person.memories?.personal ?? person.memories?.player ?? []),
+        recent: clone(person.memories?.recent ?? []),
+      },
+    })),
+  };
 }
 
 export function createPeopleSystem({ eventBus, gameTime }) {
@@ -66,7 +85,8 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     };
   }
 
-  function importState(snapshot) {
+  function importState(rawSnapshot) {
+    const snapshot = migrateSnapshot(rawSnapshot);
     if (snapshot?.schemaVersion !== PEOPLE_SCHEMA_VERSION || !Array.isArray(snapshot.people)) {
       throw new Error('人物存档格式不兼容。');
     }
@@ -98,7 +118,8 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     addStatusTag: (id, tag) => transact(id, 'state:status:add', (draft) => addStatusTag(draft, tag)).person,
     removeStatusTag: (id, tag) => transact(id, 'state:status:remove', (draft) => removeStatusTag(draft, tag)).person,
     addLifeEvent: (id, event) => transact(id, 'memory:life-event', (draft) => appendLifeEvent(draft, { ...event, time: event.time ?? stamp() })).result,
-    addPlayerMemory: (id, event) => transact(id, 'memory:player-event', (draft) => appendPlayerMemory(draft, { ...event, time: event.time ?? stamp() })).result,
+    addPersonalMemory: (id, memory) => transact(id, 'memory:personal', (draft) => appendPersonalMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
+    addEncounterMemory: (id, memory) => transact(id, 'memory:encounter', (draft) => appendEncounterMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
     adjustRelation: (id, otherId, patch) => transact(id, 'relation:adjust', (draft) => adjustRelation(draft, otherId, patch)).person,
     changeItem: (id, itemId, delta) => transact(id, 'inventory:item', (draft) => changeItem(draft, itemId, delta)).person,
     equipItem: (id, slot, itemId) => transact(id, 'inventory:equip', (draft) => equipItem(draft, slot, itemId)).person,
