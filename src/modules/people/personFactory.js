@@ -26,6 +26,7 @@ export function createPerson(input = {}, timeStamp) {
     preferences: uniqueStrings(input.work?.preferences ?? input.preferences ?? []),
   };
   person.state = { ...person.state, ...(input.state ?? {}) };
+  person.activity = { ...person.activity, ...(input.activity ?? {}) };
   person.traits = uniqueStrings(input.traits ?? []);
   person.family = { ...person.family, ...(input.family ?? {}) };
   person.relations = structuredClone(input.relations ?? {});
