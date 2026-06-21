@@ -19,7 +19,8 @@ export function addFeature(map, feature) {
 }
 
 export function removeFeature(map, featureId) {
-  const before = map.features.length;
-  map.features = map.features.filter((feature) => feature.id !== featureId);
-  return before !== map.features.length;
+  const feature = map.features.find((item) => item.id === featureId);
+  if (!feature) return null;
+  map.features = map.features.filter((item) => item.id !== featureId);
+  return structuredClone(feature);
 }
