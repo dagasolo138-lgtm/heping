@@ -2,17 +2,17 @@ import { createId } from '../../core/ids/createId.js';
 import { ACTION_TYPES } from './actionTypes.js';
 import { createRuntimeTask, advanceRuntimeTask } from './actionExecutor.js';
 import { completeAction } from './actionEffects.js';
+import { collectConstructionMaterial, deliverConstructionMaterial, performConstructionWork } from './constructionEffects.js';
+import { ensureInitialShelter, planConstructionAction } from './constructionPlanner.js';
 import { planNextAction } from './actionPlanner.js';
 
 const CAMP_ID = 'starting-camp';
 
 function copy(value) { return structuredClone(value); }
 function near(first, second) { return Math.hypot(first.x - second.x, first.y - second.y) <= 3; }
-function taskView(task, phase) {
-  return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination) };
-}
+function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination) }; }
 
-export function createActionSystem({ peopleSystem, mapSystem, campStore, eventBus, gameTime }) {
+export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, eventBus, gameTime }) {
   const agents = new Map();
   const logs = [];
   let running = false;
@@ -58,36 +58,90 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, eventBu
     return ids;
   }
 
+  function setActivity(person, task, phase) {
+    peopleSystem.setActivity(person.id, {
+      status: task.phase === 'moving' ? 'moving' : task.type === ACTION_TYPES.REST ? 'resting' : 'working',
+      current: taskView(task, phase ?? (task.phase === 'moving' ? '前往目标' : task.phaseLabel)),
+    });
+  }
+
   function assign(person, agent, planned) {
     const task = createRuntimeTask(planned, agent, mapSystem);
     if (!task) return false;
     agent.task = task;
-    peopleSystem.setActivity(person.id, {
-      status: task.phase === 'moving' ? 'moving' : task.type === ACTION_TYPES.REST ? 'resting' : 'working',
-      current: taskView(task, task.phase === 'moving' ? '前往目标' : task.phaseLabel),
-    });
+    setActivity(person, task);
     eventBus.emit('actions:assigned', { personId: person.id, task: copy(task) });
     return true;
+  }
+
+  function isEmergency(person) {
+    return person.state.thirst >= 62 || person.state.hunger >= 62 || person.state.energy <= 28
+      || Object.values(person.inventory.items).some((value) => Number(value) > 0);
   }
 
   function plan() {
     ensureAgents();
     const camp = campStore.get(CAMP_ID);
     if (!camp) return;
+    const started = ensureInitialShelter({ buildingSystem, mapSystem, camp });
+    if (started) log('村民在营地旁划定了集体草棚的工地。', 'construction');
+
     const actionCounts = counts();
     const reservedFeatureIds = reservations();
     const people = peopleSystem.getAlive();
     people.forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent || agent.task) return;
-      const planned = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
+      const generic = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
+      const construction = isEmergency(person) ? null : planConstructionAction({ person, camp, buildingSystem, actionCounts });
+      const planned = construction ?? generic;
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
       if (planned.data.featureId) reservedFeatureIds.add(planned.data.featureId);
     });
   }
 
+  function clearTask(agent, personId) {
+    agent.task = null;
+    peopleSystem.setActivity(personId, { status: 'idle', current: null });
+  }
+
+  function continueMaterialDelivery(agent, task) {
+    const transition = collectConstructionMaterial({ agent, task, peopleSystem, campStore, buildingSystem, campId: CAMP_ID });
+    if (!transition.nextTask) {
+      clearTask(agent, agent.personId);
+      if (transition.summary) log(transition.summary, task.type, agent.personId);
+      return;
+    }
+    const nextTask = createRuntimeTask(transition.nextTask, agent, mapSystem);
+    if (!nextTask) {
+      buildingSystem.cancelReservation(task.data.siteId, task.data.reservationId);
+      clearTask(agent, agent.personId);
+      log('运送建材的路线被阻断，调拨已取消。', task.type, agent.personId);
+      return;
+    }
+    agent.task = nextTask;
+    const person = peopleSystem.get(agent.personId);
+    setActivity(person, nextTask, '送往工地');
+    log(transition.summary, task.type, agent.personId);
+  }
+
   function finish(agent, task) {
+    if (task.type === ACTION_TYPES.DELIVER_MATERIALS) {
+      if (task.data.stage === 'collect') return continueMaterialDelivery(agent, task);
+      const result = deliverConstructionMaterial({ agent, task, peopleSystem, buildingSystem, gameTime });
+      if (result) log(result.summary, task.type, result.personId);
+      agent.task = null;
+      return;
+    }
+
+    if (task.type === ACTION_TYPES.BUILD_SITE) {
+      const result = performConstructionWork({ agent, task, peopleSystem, buildingSystem, gameTime });
+      if (result) log(result.summary, task.type, result.personId);
+      agent.task = null;
+      return;
+    }
+
     const result = completeAction({ agent, task, peopleSystem, mapSystem, campStore, gameTime, campId: CAMP_ID });
     if (result) log(result.summary, task.type, result.personId);
     agent.task = null;
@@ -101,12 +155,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, eventBu
       const speed = Math.max(0.7, 1.34 * (0.55 + person.state.energy / 180));
       const update = advanceRuntimeTask(agent, delta, speed);
       if (!update) return;
-      if (update.kind === 'arrived') {
-        peopleSystem.setActivity(person.id, {
-          status: update.task.type === ACTION_TYPES.REST ? 'resting' : 'working',
-          current: taskView(update.task, update.task.phaseLabel),
-        });
-      }
+      if (update.kind === 'arrived') setActivity(person, update.task, update.task.phaseLabel);
       if (update.kind === 'completed') finish(agent, update.task);
     });
   }
