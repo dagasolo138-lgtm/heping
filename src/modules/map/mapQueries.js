@@ -49,11 +49,13 @@ export function isWalkable(map, x, y) {
   return !map.features.some((feature) => feature.x === x && feature.y === y && feature.blocking);
 }
 
-export function findNearestFeature(map, { x, y, kinds = [] } = {}) {
+export function findNearestFeature(map, { x, y, kinds = [], excludeIds = [] } = {}) {
   const allowed = new Set(kinds);
+  const excluded = new Set(excludeIds);
   let best = null;
   map.features.forEach((feature) => {
     if (allowed.size && !allowed.has(feature.kind)) return;
+    if (excluded.has(feature.id)) return;
     const distance = (feature.x - x) ** 2 + (feature.y - y) ** 2;
     if (!best || distance < best.distance) best = { feature, distance };
   });
