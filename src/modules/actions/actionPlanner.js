@@ -1,7 +1,7 @@
 import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 
-const ITEM_TYPES = Object.freeze(['wood', 'berries', 'water']);
+const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
 const ACTION_CAPS = Object.freeze({
   [ACTION_TYPES.FETCH_WATER]: 3,
   [ACTION_TYPES.GATHER_BERRIES]: 3,
@@ -92,7 +92,7 @@ function canAssign(type, context, person) {
 }
 
 function makeByType(type, context) {
-  const { person, mapSystem, camp, reservedFeatureIds } = context;
+  const { person, mapSystem, reservedFeatureIds } = context;
   if (type === ACTION_TYPES.FETCH_WATER) return makeWaterTask(person, mapSystem);
   if (type === ACTION_TYPES.GATHER_BERRIES) return makeBerryTask(person, mapSystem, reservedFeatureIds);
   if (type === ACTION_TYPES.CHOP_TREE) return makeChopTask(person, mapSystem, reservedFeatureIds);
@@ -111,9 +111,10 @@ export function planNextAction(context) {
   const waterGoal = Math.max(12, population * 3);
   const foodGoal = Math.max(10, population * 2);
   const woodGoal = Math.max(18, population * 2.5);
+  const foodAmount = amount(camp.items, 'berries') + amount(camp.items, 'millet');
   const shortages = {
     water: amount(camp.items, 'water') < waterGoal,
-    berries: amount(camp.items, 'berries') < foodGoal,
+    food: foodAmount < foodGoal,
     wood: amount(camp.items, 'wood') < woodGoal,
   };
 
@@ -126,7 +127,7 @@ export function planNextAction(context) {
 
   for (const type of candidates) {
     if (type === ACTION_TYPES.FETCH_WATER && !shortages.water && person.state.thirst < 62) continue;
-    if (type === ACTION_TYPES.GATHER_BERRIES && !shortages.berries && person.state.hunger < 62) continue;
+    if (type === ACTION_TYPES.GATHER_BERRIES && !shortages.food && person.state.hunger < 62) continue;
     if (type === ACTION_TYPES.CHOP_TREE && !shortages.wood) continue;
     if (!canAssign(type, context, person)) continue;
     const task = makeByType(type, context);
