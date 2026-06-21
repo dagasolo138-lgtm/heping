@@ -1,7 +1,7 @@
 import { CAMP_ITEM_LABELS } from '../settlements/campStore.js';
 import { ACTION_TYPES } from './actionTypes.js';
 
-const RESOURCE_IDS = ['wood', 'berries', 'water'];
+const RESOURCE_IDS = ['wood', 'berries', 'millet', 'water'];
 
 function itemText(items) {
   return Object.entries(items)
