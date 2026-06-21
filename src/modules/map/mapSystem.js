@@ -57,7 +57,11 @@ export function createMapSystem({ eventBus, gameTime }) {
     findNearestWalkableNeighbor: (targetX, targetY, fromX, fromY) => map ? findNearestWalkableNeighbor(map, targetX, targetY, fromX, fromY) : null,
     findNearestWaterAccess: (fromX, fromY) => map ? findNearestWaterAccess(map, fromX, fromY) : null,
     setTerrain: (x, y, terrainId) => { setTerrainAt(requireMap(), x, y, terrainId); commit('terrain:set'); },
-    addFeature: (feature) => { addFeature(requireMap(), feature); commit('feature:add'); },
-    removeFeature: (featureId) => { const removed = removeFeature(requireMap(), featureId); if (removed) commit('feature:remove'); return removed; },
+    addFeature: (feature) => { addFeature(requireMap(), feature); commit('feature:add'); return clone(feature); },
+    removeFeature: (featureId) => {
+      const removed = removeFeature(requireMap(), featureId);
+      if (removed) commit('feature:remove');
+      return removed;
+    },
   });
 }
