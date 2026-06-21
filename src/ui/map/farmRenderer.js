@@ -1,0 +1,92 @@
+import { isInViewport } from './terrainRenderer.js';
+
+function toScreen(x, y, camera, viewport) {
+  return {
+    x: (x - camera.x) * camera.zoom + viewport.width / 2,
+    y: (y - camera.y) * camera.zoom + viewport.height / 2,
+  };
+}
+
+function visible(field, camera, viewport) {
+  const centerX = field.anchor.x + field.footprint.width / 2;
+  const centerY = field.anchor.y + field.footprint.height / 2;
+  return isInViewport(centerX, centerY, camera, viewport, Math.max(field.footprint.width, field.footprint.height));
+}
+
+function drawSoil(context, field, origin, zoom) {
+  const width = field.footprint.width * zoom;
+  const height = field.footprint.height * zoom;
+  const progress = field.clearing.required ? field.clearing.completed / field.clearing.required : 0;
+  const alpha = field.status === 'planned' ? 0.16 : 0.72;
+  context.fillStyle = `rgba(104, 75, 41, ${alpha})`;
+  context.fillRect(origin.x, origin.y, width, height);
+
+  context.strokeStyle = field.status === 'planned' ? 'rgba(224, 190, 110, .55)' : 'rgba(73, 49, 30, .55)';
+  context.lineWidth = Math.max(.7, zoom * .045);
+  context.setLineDash(field.status === 'planned' ? [Math.max(3, zoom * .22), Math.max(2, zoom * .12)] : []);
+  context.strokeRect(origin.x, origin.y, width, height);
+  context.setLineDash([]);
+
+  if (field.status !== 'planned') {
+    context.strokeStyle = 'rgba(205, 166, 95, .28)';
+    for (let row = 0; row < field.footprint.height; row += 1) {
+      const y = origin.y + (row + .55) * zoom;
+      context.beginPath();
+      context.moveTo(origin.x + zoom * .2, y);
+      context.lineTo(origin.x + width - zoom * .2, y);
+      context.stroke();
+    }
+  }
+
+  if (field.status === 'clearing') {
+    context.fillStyle = 'rgba(229, 199, 123, .76)';
+    context.fillRect(origin.x, origin.y - Math.max(11, zoom * .58), width * Math.max(.08, progress), Math.max(6, zoom * .22));
+  }
+}
+
+function drawCrop(context, field, origin, zoom) {
+  const width = field.footprint.width * zoom;
+  const height = field.footprint.height * zoom;
+  const growth = Math.max(0, Math.min(1, field.growth.progressed / field.growth.required));
+  const mature = field.status === 'mature';
+  const stalkHeight = zoom * (0.16 + growth * 0.34);
+  const color = mature ? '#d7b955' : '#7faa4e';
+
+  context.strokeStyle = color;
+  context.lineWidth = Math.max(.7, zoom * .045);
+  for (let row = 0; row < field.footprint.height; row += 1) {
+    for (let column = 0; column < field.footprint.width; column += 1) {
+      const x = origin.x + (column + .5) * zoom;
+      const y = origin.y + (row + .67) * zoom;
+      context.beginPath();
+      context.moveTo(x, y);
+      context.lineTo(x + ((row + column) % 2 ? zoom * .06 : -zoom * .05), y - stalkHeight);
+      context.stroke();
+      if (mature) {
+        context.fillStyle = '#ead172';
+        context.beginPath();
+        context.ellipse(x, y - stalkHeight, Math.max(1, zoom * .055), Math.max(1.4, zoom * .1), -.35, 0, Math.PI * 2);
+        context.fill();
+      }
+    }
+  }
+}
+
+export function drawFarms(context, fields, camera, viewport) {
+  if (!fields?.length) return;
+  context.save();
+  fields.forEach((field) => {
+    if (!visible(field, camera, viewport)) return;
+    const origin = toScreen(field.anchor.x, field.anchor.y, camera, viewport);
+    drawSoil(context, field, origin, camera.zoom);
+    if (field.status === 'growing' || field.status === 'mature') drawCrop(context, field, origin, camera.zoom);
+
+    const label = field.status === 'mature' ? '粟米成熟' : field.status === 'growing' ? `粟苗 ${Math.round((field.growth.progressed / field.growth.required) * 100)}%` : field.status === 'readyToSow' ? '待播种' : field.status === 'clearing' ? '开垦中' : '待开垦';
+    context.fillStyle = 'rgba(10, 17, 13, .58)';
+    context.fillRect(origin.x, origin.y - Math.max(14, camera.zoom * .72), field.footprint.width * camera.zoom, Math.max(11, camera.zoom * .55));
+    context.fillStyle = '#e7d5a0';
+    context.font = `${Math.max(9, camera.zoom * .4)}px sans-serif`;
+    context.fillText(`${field.label} · ${label}`, origin.x + Math.max(3, camera.zoom * .18), origin.y - Math.max(4, camera.zoom * .18));
+  });
+  context.restore();
+}
