@@ -7,24 +7,25 @@
   <title>生灵 · 起始河谷</title>
   <link rel="stylesheet" href="./src/styles/main.css" />
   <link rel="stylesheet" href="./src/styles/construction.css" />
+  <link rel="stylesheet" href="./src/styles/environment.css" />
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SHENGLING / FOUNDATION 04</p>
+        <p class="eyebrow">SHENGLING / FOUNDATION 06</p>
         <h1>生灵</h1>
-        <p class="subtitle">人物系统 · 起始河谷 · 建造与分工原型</p>
+        <p class="subtitle">起始河谷 · 生存、建造与环境耐久原型</p>
       </div>
       <div class="topbar__status" aria-live="polite">
         <span class="status-dot"></span>
-        <span id="system-status">村民正在筹备第一座集体草棚</span>
+        <span id="system-status">起始河谷正在经历第一轮天气变化</span>
       </div>
     </header>
 
     <section class="phase-note">
-      <strong>第四阶段：</strong>
-      草棚工地会自动建立。木材先从营地领出，再被送往工地；材料齐全后，具备建造技能的人开始施工。完工后全体村民获得第一处住所。
+      <strong>第六阶段：</strong>
+      天气会改变移动和户外工作效率。降雨与寒冷会让村民潮湿、受寒；草棚能提供遮蔽，篝火会消耗木材并在附近提供温暖。
     </section>
 
     <section class="map-panel panel">
@@ -43,6 +44,7 @@
         <canvas id="map-canvas" aria-label="起始河谷地图"></canvas>
         <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
         <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
+        <div id="weather-readout" class="map-overlay map-overlay--weather">晴朗 · 18℃ · 篝火燃料 4.0</div>
       </div>
       <div class="map-legend">
         <span><i class="legend-swatch legend-swatch--forest"></i>林地</span>
@@ -86,19 +88,19 @@
 
     <section class="foundation-grid">
       <article class="foundation-card">
-        <p class="panel__kicker">BUILD LOOP</p>
-        <h3>工地有材料流</h3>
-        <p>建材从共享营地库存被领出，由居民实际运送到工地。工地记录材料、保留额度和施工进度。</p>
+        <p class="panel__kicker">WEATHER</p>
+        <h3>天气有代价</h3>
+        <p>降雨和寒冷会降低户外行动效率，并持续积累潮湿与受寒。没有遮蔽或火源的人会逐渐失去状态。</p>
       </article>
       <article class="foundation-card">
-        <p class="panel__kicker">FIRST HOME</p>
-        <h3>集体草棚</h3>
-        <p>第一座草棚容纳十二人，并为夜间休息、防雨和未来的居住归属提供基础。</p>
+        <p class="panel__kicker">FIRE</p>
+        <h3>篝火需要木材</h3>
+        <p>篝火在夜晚、降雨和寒冷中消耗燃料。燃料不足时，村民会带着营地木材前去添柴。</p>
       </article>
       <article class="foundation-card">
-        <p class="panel__kicker">NEXT</p>
-        <h3>夜晚与居住</h3>
-        <p>下一轮会加入昼夜、睡位、天气和体力恢复，让“有房子”真正改变每个村民的生活。</p>
+        <p class="panel__kicker">SHELTER</p>
+        <h3>草棚成为保护</h3>
+        <p>住处不再只是归属数据：在雨天和寒冷中，它能减少环境暴露，并让夜晚恢复更稳定。</p>
       </article>
     </section>
   </main>
