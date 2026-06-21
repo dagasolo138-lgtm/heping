@@ -6,6 +6,10 @@
 .map-overlay--farm { top:184px; right:13px; color:#e8d784; border-color:rgba(218,191,100,.3); background:rgba(55,48,20,.74); }
 .map-overlay--expansion { top:218px; right:13px; color:#d8e2a8; border-color:rgba(188,206,127,.3); background:rgba(37,52,26,.76); }
 .map-overlay--food { top:252px; right:13px; color:#f0b987; border-color:rgba(226,153,91,.32); background:rgba(61,38,24,.76); }
+.build-info-readout { position:fixed; right:13px; bottom:12px; z-index:40; display:flex; align-items:center; gap:8px; max-width:calc(100vw - 26px); padding:6px 8px; border:1px solid rgba(163,190,213,.28); border-radius:7px; background:rgba(13,21,29,.86); box-shadow:0 7px 24px rgba(0,0,0,.22); color:#abc0d0; font-size:11px; line-height:1.25; letter-spacing:.02em; }
+.build-info-readout__label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.build-info-readout a { flex:0 0 auto; color:#e6c879; text-decoration:none; border-bottom:1px solid rgba(230,200,121,.42); }
+.build-info-readout a:focus-visible { outline:2px solid #e6c879; outline-offset:2px; }
 .resource-chip--fire strong { color:#efb45f; }
 .resource-chip--fire.is-out strong { color:#a5afb0; }
 .resource-chip--storage strong { color:#c5d79c; }
@@ -13,4 +17,4 @@
 .exposure-summary { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }
 .exposure-summary span { padding:4px 7px; border:1px solid rgba(150,199,226,.24); border-radius:999px; color:#bcd5e5; background:rgba(83,124,148,.12); font-size:12px; }
 .food-freshness-detail { margin:9px 0 0; padding-top:9px; border-top:1px solid rgba(226,184,117,.16); color:#d9c7aa; font-size:12px; line-height:1.55; }
-@media (max-width:420px) { .map-overlay--weather { top:45px; right:10px; font-size:11px; } .map-overlay--season { top:75px; right:10px; font-size:11px; } .map-overlay--ecology { top:105px; right:10px; font-size:11px; } .map-overlay--road { top:135px; right:10px; font-size:11px; } .map-overlay--farm { top:165px; right:10px; font-size:11px; } .map-overlay--expansion { top:195px; right:10px; font-size:11px; } .map-overlay--food { top:225px; right:10px; font-size:11px; } }
+@media (max-width:420px) { .map-overlay--weather { top:45px; right:10px; font-size:11px; } .map-overlay--season { top:75px; right:10px; font-size:11px; } .map-overlay--ecology { top:105px; right:10px; font-size:11px; } .map-overlay--road { top:135px; right:10px; font-size:11px; } .map-overlay--farm { top:165px; right:10px; font-size:11px; } .map-overlay--expansion { top:195px; right:10px; font-size:11px; } .map-overlay--food { top:225px; right:10px; font-size:11px; } .build-info-readout { right:10px; bottom:9px; gap:6px; padding:5px 7px; font-size:10px; } }
