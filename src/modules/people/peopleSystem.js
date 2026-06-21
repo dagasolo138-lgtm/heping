@@ -1,7 +1,7 @@
 import { createPerson } from './personFactory.js';
 import { validatePerson } from './personValidation.js';
 import { getPerson, listPeople, getPeopleByIds, getAlivePeople } from './personQueries.js';
-import { patchPersonState, setOccupation, setLocation, setExtension, addStatusTag, removeStatusTag } from './personMutations.js';
+import { patchPersonState, setOccupation, setLocation, setActivity, setExtension, addStatusTag, removeStatusTag } from './personMutations.js';
 import { applyNeedDelta } from './personState.js';
 import { appendLifeEvent, appendPersonalMemory, appendEncounterMemory } from './personMemory.js';
 import { adjustRelation, linkParentChild, linkSiblings, linkSpouses } from './personRelations.js';
@@ -13,23 +13,38 @@ function clone(value) {
   return structuredClone(value);
 }
 
-function migrateSnapshot(snapshot) {
-  if (snapshot?.schemaVersion === PEOPLE_SCHEMA_VERSION) return clone(snapshot);
-  if (snapshot?.schemaVersion !== 1 || !Array.isArray(snapshot.people)) return snapshot;
+function migrateSnapshot(rawSnapshot) {
+  if (!rawSnapshot || !Array.isArray(rawSnapshot.people)) return rawSnapshot;
+  const snapshot = clone(rawSnapshot);
 
-  return {
-    ...clone(snapshot),
-    schemaVersion: PEOPLE_SCHEMA_VERSION,
-    people: snapshot.people.map((person) => ({
-      ...clone(person),
-      schemaVersion: PEOPLE_SCHEMA_VERSION,
+  if (snapshot.schemaVersion === 1) {
+    snapshot.people = snapshot.people.map((person) => ({
+      ...person,
+      schemaVersion: 2,
       memories: {
-        ...clone(person.memories ?? {}),
+        ...(person.memories ?? {}),
         personal: clone(person.memories?.personal ?? person.memories?.player ?? []),
         recent: clone(person.memories?.recent ?? []),
       },
-    })),
-  };
+    }));
+    snapshot.schemaVersion = 2;
+  }
+
+  if (snapshot.schemaVersion === 2) {
+    snapshot.people = snapshot.people.map((person) => ({
+      ...person,
+      schemaVersion: 3,
+      activity: person.activity ?? {
+        status: 'idle',
+        current: null,
+        lastCompleted: null,
+        completedCount: 0,
+      },
+    }));
+    snapshot.schemaVersion = 3;
+  }
+
+  return snapshot;
 }
 
 export function createPeopleSystem({ eventBus, gameTime }) {
@@ -114,6 +129,7 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     applyNeedDelta: (id, delta) => transact(id, 'state:needs', (draft) => applyNeedDelta(draft, delta)).person,
     setOccupation: (id, occupation) => transact(id, 'work:occupation', (draft) => setOccupation(draft, occupation)).person,
     setLocation: (id, location) => transact(id, 'location:set', (draft) => setLocation(draft, location)).person,
+    setActivity: (id, activity) => transact(id, 'activity:set', (draft) => setActivity(draft, activity)).person,
     setExtension: (id, namespace, value) => transact(id, 'extension:set', (draft) => setExtension(draft, namespace, value)).person,
     addStatusTag: (id, tag) => transact(id, 'state:status:add', (draft) => addStatusTag(draft, tag)).person,
     removeStatusTag: (id, tag) => transact(id, 'state:status:remove', (draft) => removeStatusTag(draft, tag)).person,
