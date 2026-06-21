@@ -32,7 +32,7 @@ export function planConstructionAction({ person, camp, buildingSystem, actionCou
   if (!summary || summary.status === 'complete') return null;
 
   const woodNeed = Number(summary.materialNeed.wood ?? 0);
-  if (woodNeed > 0 && Number(camp.items.wood ?? 0) > 0 && !hasActiveTask(actionCounts, ACTION_TYPES.DELIVER_MATERIALS, 2)) {
+  if (woodNeed > 0 && Number(camp.items.wood ?? 0) > 0 && !hasActiveTask(actionCounts, ACTION_TYPES.DELIVER_MATERIALS, 1)) {
     const reservation = buildingSystem.reserveMaterial(site.id, 'wood', Math.min(3, woodNeed, Number(camp.items.wood ?? 0)));
     if (!reservation) return null;
     return createTask(ACTION_TYPES.DELIVER_MATERIALS, camp.anchor, {
