@@ -9,15 +9,52 @@ function isFootprintWalkable(mapSystem, anchor, footprint) {
   return true;
 }
 
-export function findInitialShelterPlacement({ mapSystem, campAnchor }) {
-  const type = getBuildingType('communalShelter');
-  const candidates = [
-    { x: campAnchor.x + 8, y: campAnchor.y - 9 },
-    { x: campAnchor.x - 15, y: campAnchor.y - 8 },
-    { x: campAnchor.x + 8, y: campAnchor.y + 7 },
-    { x: campAnchor.x - 15, y: campAnchor.y + 7 },
-  ];
-  return candidates.find((anchor) => isFootprintWalkable(mapSystem, anchor, type.footprint)) ?? null;
+function overlaps(firstAnchor, firstFootprint, secondAnchor, secondFootprint) {
+  return firstAnchor.x < secondAnchor.x + secondFootprint.width
+    && firstAnchor.x + firstFootprint.width > secondAnchor.x
+    && firstAnchor.y < secondAnchor.y + secondFootprint.height
+    && firstAnchor.y + firstFootprint.height > secondAnchor.y;
+}
+
+function isFootprintClear(mapSystem, anchor, footprint, buildings = []) {
+  if (!isFootprintWalkable(mapSystem, anchor, footprint)) return false;
+  return !buildings.some((building) => overlaps(anchor, footprint, building.anchor, building.footprint));
+}
+
+function findPlacement({ typeId, mapSystem, campAnchor, buildings = [], candidates }) {
+  const type = getBuildingType(typeId);
+  return candidates.find((anchor) => isFootprintClear(mapSystem, anchor, type.footprint, buildings)) ?? null;
+}
+
+export function findInitialShelterPlacement({ mapSystem, campAnchor, buildings = [] }) {
+  return findPlacement({
+    typeId: 'communalShelter',
+    mapSystem,
+    campAnchor,
+    buildings,
+    candidates: [
+      { x: campAnchor.x + 8, y: campAnchor.y - 9 },
+      { x: campAnchor.x - 15, y: campAnchor.y - 8 },
+      { x: campAnchor.x + 8, y: campAnchor.y + 7 },
+      { x: campAnchor.x - 15, y: campAnchor.y + 7 },
+    ],
+  });
+}
+
+export function findStorageShedPlacement({ mapSystem, campAnchor, buildings = [] }) {
+  return findPlacement({
+    typeId: 'storageShed',
+    mapSystem,
+    campAnchor,
+    buildings,
+    candidates: [
+      { x: campAnchor.x - 9, y: campAnchor.y + 6 },
+      { x: campAnchor.x + 10, y: campAnchor.y + 7 },
+      { x: campAnchor.x - 9, y: campAnchor.y - 8 },
+      { x: campAnchor.x + 10, y: campAnchor.y - 8 },
+      { x: campAnchor.x - 4, y: campAnchor.y + 10 },
+    ],
+  });
 }
 
 export function buildingCenter(building) {
