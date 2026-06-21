@@ -38,6 +38,11 @@ export function ensureSettlementConstruction(context) {
   return null;
 }
 
+// Legacy name retained because the action runtime imports it. It now plans the next settlement building.
+export function ensureInitialShelter(context) {
+  return ensureSettlementConstruction(context);
+}
+
 export function planConstructionAction({ person, camp, buildingSystem, actionCounts }) {
   const site = buildingSystem.list({ includeCompleted: false })[0] ?? null;
   if (!site) return null;
