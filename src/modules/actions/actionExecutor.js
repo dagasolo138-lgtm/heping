@@ -4,6 +4,11 @@ function distance(first, second) {
   return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
+function roadMultiplierAt(agent) {
+  const roadSystem = globalThis.shengling?.roadSystem;
+  return Math.max(1, Number(roadSystem?.getMovementMultiplierAt?.(agent.x, agent.y) ?? 1));
+}
+
 export function createRuntimeTask(task, position, mapSystem) {
   const route = findPath({ start: position, goal: task.destination, isWalkable: mapSystem.isWalkable });
   if (route === null) return null;
@@ -21,7 +26,7 @@ export function advanceRuntimeTask(agent, deltaSeconds, speedTilesPerSecond) {
   if (!task) return null;
 
   if (task.phase === 'moving') {
-    let remaining = Math.max(0, deltaSeconds * speedTilesPerSecond);
+    let remaining = Math.max(0, deltaSeconds * speedTilesPerSecond * roadMultiplierAt(agent));
     while (remaining > 0 && task.routeIndex < task.route.length) {
       const target = task.route[task.routeIndex];
       const gap = distance(agent, target);
