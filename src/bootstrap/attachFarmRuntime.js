@@ -4,9 +4,9 @@ function updatePhaseCopy() {
   const eyebrow = document.querySelector('.eyebrow');
   const subtitle = document.querySelector('.subtitle');
   const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 10';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造与稳定食物来源原型';
-  if (note) note.innerHTML = '<strong>第十阶段：</strong>储物棚完成后，村民会开垦第一块粟田。粟米会经历开垦、播种、生长与收获，收获后进入营地成为新的稳定食物。';
+  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 12';
+  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造、农业与四季原型';
+  if (note) note.innerHTML = '<strong>第十二阶段：</strong>一年固定为 360 天，春夏秋冬各 90 天。粟米只在春季播种，夏季加速生长，秋季减慢，冬季暂停；成熟作物全年可收获。';
 }
 
 function ensureReadout() {
@@ -29,14 +29,22 @@ function renderReadout(readout, farmSystem) {
     return;
   }
   if (summary.mature) {
-    readout.textContent = `农事 · ${summary.mature} 块粟田成熟 · 种子 ${summary.seedStock}`;
+    readout.textContent = `农事 · ${summary.mature} 块粟田成熟待收 · 种子 ${summary.seedStock}`;
     return;
   }
   if (summary.growing) {
     readout.textContent = `农事 · ${summary.growing} 块粟田生长中 · 种子 ${summary.seedStock}`;
     return;
   }
-  readout.textContent = `农事 · 待开垦/播种 ${summary.clearing} 块 · 种子 ${summary.seedStock}`;
+  if (summary.waitingToSow) {
+    readout.textContent = `农事 · ${summary.waitingToSow} 块粟田等待春播 · 种子 ${summary.seedStock}`;
+    return;
+  }
+  if (summary.sowable) {
+    readout.textContent = `农事 · ${summary.sowable} 块粟田可播种 · 种子 ${summary.seedStock}`;
+    return;
+  }
+  readout.textContent = `农事 · 待开垦 ${summary.clearing} 块 · 种子 ${summary.seedStock}`;
 }
 
 function patchMilletChip(runtime) {
@@ -64,6 +72,7 @@ export function attachFarmRuntime() {
     gameTime: runtime.gameTime,
     mapSystem: runtime.mapSystem,
     buildingSystem: runtime.buildingSystem,
+    seasonSystem: runtime.seasonSystem,
   });
   updatePhaseCopy();
   const readout = ensureReadout();
@@ -78,6 +87,7 @@ export function attachFarmRuntime() {
     const status = document.querySelector('#system-status');
     if (status) status.textContent = `${field.label}的粟米已经成熟，村民可以开始收获。`;
   });
+  eventBus.on('seasons:changed', () => renderReadout(readout, farmSystem));
   eventBus.on('camp:changed', () => patchMilletChip(runtime));
 
   globalThis.shengling = Object.freeze({ ...runtime, farmSystem });
