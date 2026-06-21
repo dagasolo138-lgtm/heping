@@ -17,6 +17,10 @@ function normalizeCapacity(value) {
   return Math.max(0, Math.round(Number(value || 0) * 100) / 100);
 }
 
+function signedRound(value) {
+  return Math.round(Number(value || 0) * 100) / 100;
+}
+
 function usedCapacity(camp) {
   return normalize(Object.values(camp.items).reduce((sum, amount) => sum + normalize(amount), 0));
 }
@@ -72,7 +76,7 @@ export function createCampStore({ eventBus, gameTime }) {
     const deltaLimit = requested > 0 ? storageSnapshot(camp).available : Infinity;
     const actualRequest = requested > 0 ? Math.min(requested, deltaLimit) : requested;
     const after = normalize(before + actualRequest);
-    const actualDelta = normalize(after - before);
+    const actualDelta = signedRound(after - before);
     if (after === 0) delete camp.items[itemId];
     else camp.items[itemId] = after;
     camp.updatedAt = gameTime.stamp();
