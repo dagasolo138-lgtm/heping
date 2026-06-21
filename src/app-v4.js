@@ -6,6 +6,9 @@ import { createMapSystem } from './modules/map/mapSystem.js';
 import { placeStartingSettlers } from './modules/map/placeStartingSettlers.js';
 import { createCampStore, CAMP_ITEM_LABELS } from './modules/settlements/campStore.js';
 import { createBuildingSystem } from './modules/buildings/buildingSystem.js';
+import { createWeatherSystem } from './modules/environment/weatherSystem.js';
+import { createFireSystem } from './modules/environment/fireSystem.js';
+import { getExposure } from './modules/environment/exposureSystem.js';
 import { createActionSystem } from './modules/actions/actionSystem.js';
 import { createMapView } from './ui/map/mapView.js';
 import { occupationLabel } from './data/constants/occupations.js';
@@ -18,12 +21,23 @@ const people = createPeopleSystem({ eventBus: bus, gameTime: time });
 const map = createMapSystem({ eventBus: bus, gameTime: time });
 const camp = createCampStore({ eventBus: bus, gameTime: time });
 const buildings = createBuildingSystem({ eventBus: bus, gameTime: time });
+const weather = createWeatherSystem({ eventBus: bus, gameTime: time });
 
 createFounders(people);
 const valley = map.createStartingValley();
 placeStartingSettlers({ peopleSystem: people, map: valley });
 camp.create({ id: 'starting-camp', label: '起始营地', anchor: valley.spawnPoint, items: { wood: 3, berries: 2, water: 1 } });
-const actions = createActionSystem({ peopleSystem: people, mapSystem: map, campStore: camp, buildingSystem: buildings, eventBus: bus, gameTime: time });
+const fire = createFireSystem({ eventBus: bus, gameTime: time, mapSystem: map });
+const actions = createActionSystem({
+  peopleSystem: people,
+  mapSystem: map,
+  campStore: camp,
+  buildingSystem: buildings,
+  weatherSystem: weather,
+  fireSystem: fire,
+  eventBus: bus,
+  gameTime: time,
+});
 
 const $ = (selector) => document.querySelector(selector);
 const peopleList = $('#people-list');
@@ -31,6 +45,7 @@ const detail = $('#person-detail');
 const count = $('#people-count');
 const status = $('#system-status');
 const clock = $('#world-time');
+const weatherReadout = $('#weather-readout');
 const resources = $('#camp-resources');
 const construction = $('#construction-status');
 const log = $('#action-log');
@@ -43,6 +58,8 @@ const view = createMapView({
   getRenderPeople: () => actions.getRenderPeople(),
   getRenderBuildings: () => buildings.list(),
   getDayPhase: () => actions.getDayPhase(),
+  getWeather: () => actions.getWeather(),
+  getFire: () => actions.getFire(),
   controls: [...document.querySelectorAll('[data-map-control]')],
   onPersonSelect: (id) => select(id, false),
   onReadout: ({ x, y, zoom }) => { $('#map-readout').textContent = `坐标 ${x}, ${y} · ${Math.round(zoom)} px/m`; },
@@ -53,7 +70,18 @@ function esc(value = '') {
 }
 
 function conditionLabel(tag) {
-  return ({ sleeping: '睡眠中', sheltered: '有住所', exposed: '露宿' }[tag] ?? tag);
+  return ({
+    sleeping: '睡眠中', sheltered: '有住所', exposed: '露宿',
+    soaked: '淋湿', chilled: '受寒', warm: '温暖', dry: '干燥',
+  }[tag] ?? tag);
+}
+
+function renderEnvironment() {
+  const currentWeather = actions.getWeather();
+  const currentFire = actions.getFire();
+  const fireLabel = currentFire.lit ? `篝火燃料 ${currentFire.fuel.toFixed(1)}` : '篝火已熄灭';
+  weatherReadout.textContent = `${currentWeather.label} · ${currentWeather.temperature}℃ · ${fireLabel}`;
+  weatherReadout.classList.toggle('is-rain', currentWeather.isRain);
 }
 
 function select(id, focus = true) {
@@ -85,6 +113,7 @@ function renderDetail() {
   const runtime = actions.getRenderPeople().find((item) => item.id === person.id) ?? person;
   const home = person.location.homeId ? buildings.get(person.location.homeId) : null;
   const current = person.activity.current;
+  const exposure = getExposure(person);
   const skillRows = Object.entries(person.work.skills).filter(([, value]) => value > 0).sort(([, a], [, b]) => b - a).slice(0, 4)
     .map(([name, value]) => `<div><span>${esc(name)}</span><b>${value}</b></div>`).join('');
   const events = person.memories.lifeEvents.slice(-4).reverse().map((event) => `<li><time>${esc(event.time.label)}</time><p>${esc(event.summary)}</p></li>`).join('');
@@ -97,6 +126,7 @@ function renderDetail() {
       <div class="tag-row">${person.traits.map((trait) => `<span class="tag">${traitLabel(trait)}</span>`).join('')}${conditions}</div>
     </div></div>
     <div class="activity-banner ${current ? '' : 'activity-banner--idle'}"><span class="activity-banner__dot"></span><div><small>当前行动</small><strong>${current ? `${esc(current.label)} · ${esc(current.phase)}` : '待命'}</strong></div></div>
+    <div class="exposure-summary"><span>潮湿 ${Math.round(exposure.wetness)} / 100</span><span>受寒 ${Math.round(exposure.cold)} / 100</span></div>
     <div class="metrics-grid">
       <div class="metric"><span>饥饿</span><strong>${Math.round(person.state.hunger)}</strong></div>
       <div class="metric"><span>口渴</span><strong>${Math.round(person.state.thirst)}</strong></div>
@@ -106,14 +136,17 @@ function renderDetail() {
       <div class="metric"><span>行动</span><strong>${person.activity.completedCount ?? 0}</strong></div>
     </div>
     <div class="detail-columns"><section class="detail-card"><h3>技能倾向</h3><div class="skill-list">${skillRows}</div><p class="muted">${esc(person.work.preferences.join('、') || '暂无偏好')}</p></section>
-      <section class="detail-card"><h3>生活状态</h3><p>居所：${home ? esc(home.label) : '露宿营地'}</p><p>夜间条件：${person.state.statusTags.includes('exposed') ? '露宿，恢复较慢且压力增加' : home ? '有草棚遮蔽，睡眠恢复加成' : '尚未结算'}</p><p>物品：${esc(items)}</p></section>
+      <section class="detail-card"><h3>生活状态</h3><p>居所：${home ? esc(home.label) : '露宿营地'}</p><p>环境：${person.state.statusTags.includes('exposed') ? '露宿时恢复较慢' : home ? '草棚可阻隔雨寒' : '尚未结算'}</p><p>物品：${esc(items)}</p></section>
       <section class="detail-card"><h3>人物关系</h3><p>伴侣：${person.family.spouseId ? '已有伴侣' : '无'}</p><p>手足：${person.family.siblingIds.length} 人</p><p>子女：${person.family.childIds.length} 人</p></section></div>
     <section class="history-card"><div class="history-card__header"><h3>人生事实</h3><span>${person.memories.lifeEvents.length} 条</span></div><ol>${events}</ol></section>`;
 }
 
 function renderCamp() {
   const items = camp.get('starting-camp')?.items ?? {};
-  resources.innerHTML = ['water', 'berries', 'wood'].map((name) => `<span class="resource-chip resource-chip--${name}"><b>${CAMP_ITEM_LABELS[name]}</b><strong>${Number(items[name] ?? 0)}</strong></span>`).join('');
+  const currentFire = actions.getFire();
+  const stock = ['water', 'berries', 'wood'].map((name) => `<span class="resource-chip resource-chip--${name}"><b>${CAMP_ITEM_LABELS[name]}</b><strong>${Number(items[name] ?? 0)}</strong></span>`);
+  stock.push(`<span class="resource-chip resource-chip--fire ${currentFire.lit ? '' : 'is-out'}"><b>篝火</b><strong>${currentFire.lit ? currentFire.fuel.toFixed(1) : '熄灭'}</strong></span>`);
+  resources.innerHTML = stock.join('');
 }
 
 function renderConstruction() {
@@ -142,6 +175,7 @@ function render() {
   renderDetail();
   renderCamp();
   renderConstruction();
+  renderEnvironment();
   renderLog();
   view.setSelectedPerson(selectedId);
   view.redraw();
@@ -170,12 +204,30 @@ bus.on('environment:phase', ({ phase }) => {
   status.textContent = phase.isNight ? '夜幕降临，村民正回到营地与住所。' : `${phase.label}，起始河谷正在苏醒。`;
   view.redraw();
 });
+bus.on('environment:weather', ({ weather: currentWeather }) => {
+  status.textContent = `天气转为${currentWeather.label}，气温 ${currentWeather.temperature}℃。`;
+  renderEnvironment();
+  view.redraw();
+});
+bus.on('environment:fire', () => { renderEnvironment(); renderCamp(); view.redraw(); });
+bus.on('environment:updated', () => { renderEnvironment(); view.redraw(); });
 bus.on('simulation:time', ({ time: stamp, phase }) => {
   clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(phase?.label ?? '')} · ${esc(stamp.label)}`;
+  renderEnvironment();
   view.redraw();
 });
 bus.on('map:changed', ({ map: nextMap }) => { view.setMap(nextMap); view.redraw(); });
 
-window.shengling = Object.freeze({ peopleSystem: people, mapSystem: map, campStore: camp, buildingSystem: buildings, actionSystem: actions, gameTime: time, mapView: view });
+window.shengling = Object.freeze({
+  peopleSystem: people,
+  mapSystem: map,
+  campStore: camp,
+  buildingSystem: buildings,
+  weatherSystem: weather,
+  fireSystem: fire,
+  actionSystem: actions,
+  gameTime: time,
+  mapView: view,
+});
 render();
 actions.start();
