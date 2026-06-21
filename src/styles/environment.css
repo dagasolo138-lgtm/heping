@@ -1,0 +1,7 @@
+.map-overlay--weather { top:48px; right:13px; color:#d6e7f0; }
+.map-overlay--weather.is-rain { border-color:rgba(150,199,226,.35); background:rgba(16,35,52,.72); }
+.resource-chip--fire strong { color:#efb45f; }
+.resource-chip--fire.is-out strong { color:#a5afb0; }
+.exposure-summary { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }
+.exposure-summary span { padding:4px 7px; border:1px solid rgba(150,199,226,.24); border-radius:999px; color:#bcd5e5; background:rgba(83,124,148,.12); font-size:12px; }
+@media (max-width:420px) { .map-overlay--weather { top:45px; right:10px; font-size:11px; } }
