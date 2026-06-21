@@ -15,13 +15,11 @@ function drawTree(context, feature, point, size) {
   const cx = point.x + unit * 0.5;
   const cy = point.y + unit * 0.54;
   const canopy = unit * scale;
-
   context.save();
   context.fillStyle = 'rgba(10, 20, 14, 0.24)';
   context.beginPath();
   context.ellipse(cx + canopy * 0.14, point.y + unit * 0.92, canopy * 0.6, canopy * 0.17, -0.15, 0, Math.PI * 2);
   context.fill();
-
   context.strokeStyle = '#65462c';
   context.lineWidth = Math.max(1.1, unit * 0.13);
   context.lineCap = 'round';
@@ -29,15 +27,10 @@ function drawTree(context, feature, point, size) {
   context.moveTo(cx, point.y + unit * 0.72);
   context.quadraticCurveTo(cx - unit * 0.04, point.y + unit * 0.55, cx + unit * 0.08, point.y + unit * 0.42);
   context.stroke();
-
-  const circles = [
-    [-0.22, 0.35, 0.29, '#254f38'],
-    [0.18, 0.29, 0.33, '#1e4632'],
-    [0.02, 0.12, 0.37, '#315f40'],
-    [-0.18, 0.09, 0.24, '#40734b'],
-    [0.23, 0.12, 0.22, '#376747'],
-  ];
-  circles.forEach(([x, y, radius, color]) => {
+  [
+    [-0.22, 0.35, 0.29, '#254f38'], [0.18, 0.29, 0.33, '#1e4632'], [0.02, 0.12, 0.37, '#315f40'],
+    [-0.18, 0.09, 0.24, '#40734b'], [0.23, 0.12, 0.22, '#376747'],
+  ].forEach(([x, y, radius, color]) => {
     context.fillStyle = color;
     context.beginPath();
     context.arc(cx + canopy * x, point.y + canopy * y + unit * 0.12, canopy * radius, 0, Math.PI * 2);
@@ -52,13 +45,11 @@ function drawStone(context, feature, point, size) {
   const cx = point.x + unit * 0.5;
   const cy = point.y + unit * 0.67;
   const radius = unit * (0.32 + (seed % 10) / 100);
-
   context.save();
   context.fillStyle = 'rgba(9, 13, 12, 0.2)';
   context.beginPath();
   context.ellipse(cx + radius * 0.18, cy + radius * 0.62, radius * 1.2, radius * 0.32, 0, 0, Math.PI * 2);
   context.fill();
-
   context.fillStyle = '#aaa89b';
   context.beginPath();
   context.moveTo(cx - radius, cy + radius * 0.55);
@@ -66,7 +57,6 @@ function drawStone(context, feature, point, size) {
   context.quadraticCurveTo(cx + radius * 0.78, cy - radius * 0.62, cx + radius, cy + radius * 0.55);
   context.closePath();
   context.fill();
-
   context.strokeStyle = 'rgba(77, 79, 75, 0.45)';
   context.lineWidth = Math.max(0.8, unit * 0.05);
   context.stroke();
@@ -78,7 +68,6 @@ function drawBerryBush(context, feature, point, size) {
   const seed = hashSeed(feature.id);
   const cx = point.x + unit * 0.5;
   const cy = point.y + unit * 0.62;
-
   context.save();
   ['#315840', '#3e6848', '#275039'].forEach((color, index) => {
     context.fillStyle = color;
@@ -96,12 +85,13 @@ function drawBerryBush(context, feature, point, size) {
   context.restore();
 }
 
-function drawCampfire(context, point, size, time) {
+function drawCampfire(context, point, size, time, fire) {
   const unit = Math.max(5, size);
   const cx = point.x + unit * 0.5;
   const cy = point.y + unit * 0.65;
-  const flame = 0.29 + Math.sin(time / 170) * 0.045;
-
+  const lit = fire?.lit ?? true;
+  const fuelRatio = fire ? Math.max(0, Math.min(1, fire.fuel / fire.maxFuel)) : 1;
+  const flame = (0.24 + Math.sin(time / 170) * 0.045) * (0.55 + fuelRatio * 0.45);
   context.save();
   context.strokeStyle = '#65452a';
   context.lineWidth = Math.max(1, unit * 0.12);
@@ -113,18 +103,25 @@ function drawCampfire(context, point, size, time) {
   context.lineTo(cx - unit * 0.25, cy - unit * 0.06);
   context.stroke();
 
-  context.fillStyle = 'rgba(237, 146, 63, 0.22)';
-  context.beginPath();
-  context.arc(cx, cy - unit * 0.12, unit * 0.62, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = '#e9903f';
-  context.beginPath();
-  context.arc(cx, cy - unit * 0.12, unit * flame, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = '#ffe1a0';
-  context.beginPath();
-  context.arc(cx, cy - unit * 0.16, unit * 0.11, 0, Math.PI * 2);
-  context.fill();
+  if (lit) {
+    context.fillStyle = `rgba(237, 146, 63, ${0.12 + fuelRatio * 0.16})`;
+    context.beginPath();
+    context.arc(cx, cy - unit * 0.12, unit * (0.38 + fuelRatio * 0.28), 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = '#e9903f';
+    context.beginPath();
+    context.arc(cx, cy - unit * 0.12, unit * flame, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = '#ffe1a0';
+    context.beginPath();
+    context.arc(cx, cy - unit * 0.16, unit * 0.1, 0, Math.PI * 2);
+    context.fill();
+  } else {
+    context.fillStyle = '#514b44';
+    context.beginPath();
+    context.ellipse(cx, cy - unit * 0.02, unit * 0.2, unit * 0.09, 0, 0, Math.PI * 2);
+    context.fill();
+  }
   context.restore();
 }
 
@@ -145,14 +142,14 @@ function drawSupplyCrate(context, point, size) {
   context.restore();
 }
 
-export function drawFeatures(context, map, camera, viewport, time) {
+export function drawFeatures(context, map, camera, viewport, time, fire) {
   map.features.forEach((feature) => {
     if (!isInViewport(feature.x, feature.y, camera, viewport, 3)) return;
     const point = toScreen(feature, camera, viewport);
     if (feature.kind === 'tree') drawTree(context, feature, point, camera.zoom);
     if (feature.kind === 'stone') drawStone(context, feature, point, camera.zoom);
     if (feature.kind === 'berryBush') drawBerryBush(context, feature, point, camera.zoom);
-    if (feature.kind === 'campfire') drawCampfire(context, point, camera.zoom, time);
+    if (feature.kind === 'campfire') drawCampfire(context, point, camera.zoom, time, fire);
     if (feature.kind === 'supplyCrate') drawSupplyCrate(context, point, camera.zoom);
   });
 }
