@@ -41,7 +41,6 @@ function drawToken(context, person, point, tileSize, time, selected) {
     context.stroke();
   }
 
-  context.fillStyle = palette.rope;
   context.fillStyle = palette.robe;
   context.beginPath();
   context.moveTo(cx - sprite * 0.26, cy + sprite * 0.04);
