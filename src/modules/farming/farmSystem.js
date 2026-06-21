@@ -34,34 +34,68 @@ function eligibleTerrain(terrain) {
   return terrain === TERRAIN.GRASS || terrain === TERRAIN.TALL_GRASS;
 }
 
-export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem }) {
+export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem, seasonSystem = null }) {
   const fields = new Map();
   let seedStock = 2;
 
+  function getSeason() {
+    return seasonSystem?.get?.() ?? null;
+  }
+
+  function getCropRule(cropId) {
+    return seasonSystem?.getCropRule?.(cropId) ?? { canSow: true, growthMultiplier: 1, waitingLabel: '可播种' };
+  }
+
+  function fieldSeasonalState(field) {
+    const season = getSeason();
+    const rule = getCropRule(field.cropId);
+    if (field.status === 'readyToSow') {
+      return rule.canSow
+        ? { id: 'sowable', label: '可播种', seasonId: season?.id ?? null }
+        : { id: 'waiting-spring', label: rule.waitingLabel ?? '等待春播', seasonId: season?.id ?? null };
+    }
+    if (field.status === 'growing' && Number(rule.growthMultiplier) <= 0) {
+      return { id: 'dormant', label: '冬季停长', seasonId: season?.id ?? null };
+    }
+    if (field.status === 'growing') return { id: 'growing', label: '生长中', seasonId: season?.id ?? null };
+    if (field.status === 'mature') return { id: 'mature', label: '成熟待收', seasonId: season?.id ?? null };
+    if (field.status === 'clearing') return { id: 'clearing', label: '开垦中', seasonId: season?.id ?? null };
+    return { id: 'planned', label: '待开垦', seasonId: season?.id ?? null };
+  }
+
+  function viewField(field) {
+    return clone({ ...field, seasonal: fieldSeasonalState(field) });
+  }
+
   function listFields() {
-    return [...fields.values()].map(clone);
+    return [...fields.values()].map(viewField);
   }
 
   function get(fieldId) {
     const field = fields.get(fieldId);
-    return field ? clone(field) : null;
+    return field ? viewField(field) : null;
   }
 
   function getSummary() {
     const list = [...fields.values()];
+    const readyToSow = list.filter((field) => field.status === 'readyToSow');
     return {
       total: list.length,
       clearing: list.filter((field) => field.status === 'clearing' || field.status === 'planned').length,
       growing: list.filter((field) => field.status === 'growing').length,
       mature: list.filter((field) => field.status === 'mature').length,
+      readyToSow: readyToSow.length,
+      sowable: readyToSow.filter((field) => getCropRule(field.cropId).canSow).length,
+      waitingToSow: readyToSow.filter((field) => !getCropRule(field.cropId).canSow).length,
       seedStock,
+      season: getSeason(),
     };
   }
 
   function emit(reason, field = null) {
     eventBus.emit('farms:changed', {
       reason,
-      field: field ? clone(field) : null,
+      field: field ? viewField(field) : null,
       fields: listFields(),
       summary: getSummary(),
       time: gameTime.stamp(),
@@ -114,12 +148,12 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
   }
 
   function nextWorkField() {
-    const priority = ['mature', 'readyToSow', 'planned', 'clearing'];
-    for (const status of priority) {
-      const field = [...fields.values()].find((item) => item.status === status);
-      if (field) return clone(field);
-    }
-    return null;
+    const mature = [...fields.values()].find((field) => field.status === 'mature');
+    if (mature) return viewField(mature);
+    const sowable = [...fields.values()].find((field) => field.status === 'readyToSow' && getCropRule(field.cropId).canSow);
+    if (sowable) return viewField(sowable);
+    const clearing = [...fields.values()].find((field) => field.status === 'planned' || field.status === 'clearing');
+    return clearing ? viewField(clearing) : null;
   }
 
   function clearField(fieldId, workAmount) {
@@ -140,7 +174,8 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
 
   function sow(fieldId) {
     const field = fields.get(fieldId);
-    if (!field || field.status !== 'readyToSow' || seedStock < 1) return null;
+    const rule = field ? getCropRule(field.cropId) : null;
+    if (!field || field.status !== 'readyToSow' || !rule?.canSow || seedStock < 1) return null;
     const crop = getCropType(field.cropId);
     seedStock -= crop.seedsPerPlanting;
     field.status = 'growing';
@@ -179,13 +214,15 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
       if (field.status !== 'growing') return;
       const elapsed = Math.max(0, nowTick - Number(field.growth.lastTick ?? nowTick));
       if (!elapsed) return;
-      field.growth.progressed = Math.min(field.growth.required, field.growth.progressed + elapsed * cropGrowthMultiplier(weather));
+      const rule = getCropRule(field.cropId);
+      const multiplier = cropGrowthMultiplier(weather) * Math.max(0, Number(rule.growthMultiplier ?? 1));
+      field.growth.progressed = Math.min(field.growth.required, field.growth.progressed + elapsed * multiplier);
       field.growth.lastTick = nowTick;
       field.updatedAt = gameTime.stamp();
       if (field.growth.progressed >= field.growth.required) {
         field.status = 'mature';
         field.matureAt = gameTime.stamp();
-        eventBus.emit('farms:matured', { field: clone(field), time: gameTime.stamp() });
+        eventBus.emit('farms:matured', { field: viewField(field), time: gameTime.stamp() });
       }
       changed = true;
     });
@@ -194,6 +231,7 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
   }
 
   eventBus.on('simulation:time', ({ weather }) => { syncGrowth(weather); });
+  eventBus.on('seasons:changed', () => emit('season:changed'));
 
   return Object.freeze({
     ensureFirstField,
