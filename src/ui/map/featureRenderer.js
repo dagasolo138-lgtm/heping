@@ -1,3 +1,4 @@
+import { hashSeed } from '../../core/random/seededRandom.js';
 import { isInViewport } from './terrainRenderer.js';
 
 function toScreen(feature, camera, viewport) {
@@ -7,86 +8,150 @@ function toScreen(feature, camera, viewport) {
   };
 }
 
-function drawTree(context, point, size) {
-  const unit = Math.max(3, size);
-  context.fillStyle = 'rgba(10, 18, 14, 0.28)';
-  context.beginPath();
-  context.ellipse(point.x + unit * 0.54, point.y + unit * 0.76, unit * 0.38, unit * 0.14, 0, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = '#6e4a2f';
-  context.fillRect(point.x + unit * 0.43, point.y + unit * 0.42, unit * 0.16, unit * 0.36);
-  context.fillStyle = '#1f4f37';
-  context.beginPath();
-  context.arc(point.x + unit * 0.52, point.y + unit * 0.35, unit * 0.34, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = '#326b49';
-  context.beginPath();
-  context.arc(point.x + unit * 0.38, point.y + unit * 0.28, unit * 0.22, 0, Math.PI * 2);
-  context.arc(point.x + unit * 0.65, point.y + unit * 0.26, unit * 0.2, 0, Math.PI * 2);
-  context.fill();
-}
+function drawTree(context, feature, point, size) {
+  const unit = Math.max(5, size);
+  const seed = hashSeed(feature.id);
+  const scale = 0.82 + (seed % 19) / 100;
+  const cx = point.x + unit * 0.5;
+  const cy = point.y + unit * 0.54;
+  const canopy = unit * scale;
 
-function drawStone(context, point, size) {
-  const unit = Math.max(3, size);
-  context.fillStyle = 'rgba(9, 13, 12, 0.25)';
+  context.save();
+  context.fillStyle = 'rgba(10, 20, 14, 0.24)';
   context.beginPath();
-  context.ellipse(point.x + unit * 0.56, point.y + unit * 0.75, unit * 0.34, unit * 0.11, 0, 0, Math.PI * 2);
+  context.ellipse(cx + canopy * 0.14, point.y + unit * 0.92, canopy * 0.6, canopy * 0.17, -0.15, 0, Math.PI * 2);
   context.fill();
-  context.fillStyle = '#9b9c91';
-  context.beginPath();
-  context.moveTo(point.x + unit * 0.24, point.y + unit * 0.7);
-  context.lineTo(point.x + unit * 0.34, point.y + unit * 0.36);
-  context.lineTo(point.x + unit * 0.68, point.y + unit * 0.27);
-  context.lineTo(point.x + unit * 0.82, point.y + unit * 0.67);
-  context.closePath();
-  context.fill();
-}
 
-function drawBerryBush(context, point, size) {
-  const unit = Math.max(3, size);
-  context.fillStyle = '#315741';
+  context.strokeStyle = '#65462c';
+  context.lineWidth = Math.max(1.1, unit * 0.13);
+  context.lineCap = 'round';
   context.beginPath();
-  context.arc(point.x + unit * 0.48, point.y + unit * 0.56, unit * 0.32, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = '#bc4c68';
-  [[0.38, 0.48], [0.6, 0.56], [0.48, 0.67]].forEach(([x, y]) => {
+  context.moveTo(cx, point.y + unit * 0.72);
+  context.quadraticCurveTo(cx - unit * 0.04, point.y + unit * 0.55, cx + unit * 0.08, point.y + unit * 0.42);
+  context.stroke();
+
+  const circles = [
+    [-0.22, 0.35, 0.29, '#254f38'],
+    [0.18, 0.29, 0.33, '#1e4632'],
+    [0.02, 0.12, 0.37, '#315f40'],
+    [-0.18, 0.09, 0.24, '#40734b'],
+    [0.23, 0.12, 0.22, '#376747'],
+  ];
+  circles.forEach(([x, y, radius, color]) => {
+    context.fillStyle = color;
     context.beginPath();
-    context.arc(point.x + unit * x, point.y + unit * y, Math.max(1, unit * 0.06), 0, Math.PI * 2);
+    context.arc(cx + canopy * x, point.y + canopy * y + unit * 0.12, canopy * radius, 0, Math.PI * 2);
     context.fill();
   });
+  context.restore();
+}
+
+function drawStone(context, feature, point, size) {
+  const unit = Math.max(5, size);
+  const seed = hashSeed(feature.id);
+  const cx = point.x + unit * 0.5;
+  const cy = point.y + unit * 0.67;
+  const radius = unit * (0.32 + (seed % 10) / 100);
+
+  context.save();
+  context.fillStyle = 'rgba(9, 13, 12, 0.2)';
+  context.beginPath();
+  context.ellipse(cx + radius * 0.18, cy + radius * 0.62, radius * 1.2, radius * 0.32, 0, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = '#aaa89b';
+  context.beginPath();
+  context.moveTo(cx - radius, cy + radius * 0.55);
+  context.quadraticCurveTo(cx - radius * 0.75, cy - radius * 0.75, cx - radius * 0.05, cy - radius);
+  context.quadraticCurveTo(cx + radius * 0.78, cy - radius * 0.62, cx + radius, cy + radius * 0.55);
+  context.closePath();
+  context.fill();
+
+  context.strokeStyle = 'rgba(77, 79, 75, 0.45)';
+  context.lineWidth = Math.max(0.8, unit * 0.05);
+  context.stroke();
+  context.restore();
+}
+
+function drawBerryBush(context, feature, point, size) {
+  const unit = Math.max(5, size);
+  const seed = hashSeed(feature.id);
+  const cx = point.x + unit * 0.5;
+  const cy = point.y + unit * 0.62;
+
+  context.save();
+  ['#315840', '#3e6848', '#275039'].forEach((color, index) => {
+    context.fillStyle = color;
+    context.beginPath();
+    context.arc(cx + (index - 1) * unit * 0.16, cy - (index % 2) * unit * 0.12, unit * (0.25 + index * 0.02), 0, Math.PI * 2);
+    context.fill();
+  });
+  context.fillStyle = '#ba4560';
+  for (let index = 0; index < 3; index += 1) {
+    const offset = ((seed >>> (index * 4)) & 7) / 7;
+    context.beginPath();
+    context.arc(cx - unit * 0.18 + index * unit * 0.18, cy - unit * (0.03 + offset * 0.16), Math.max(1.2, unit * 0.07), 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
 }
 
 function drawCampfire(context, point, size, time) {
-  const unit = Math.max(3, size);
-  context.fillStyle = '#5b4530';
-  context.fillRect(point.x + unit * 0.22, point.y + unit * 0.62, unit * 0.56, unit * 0.16);
-  const flame = 0.36 + Math.sin(time / 170) * 0.06;
-  context.fillStyle = '#f0a44c';
+  const unit = Math.max(5, size);
+  const cx = point.x + unit * 0.5;
+  const cy = point.y + unit * 0.65;
+  const flame = 0.29 + Math.sin(time / 170) * 0.045;
+
+  context.save();
+  context.strokeStyle = '#65452a';
+  context.lineWidth = Math.max(1, unit * 0.12);
+  context.lineCap = 'round';
   context.beginPath();
-  context.arc(point.x + unit * 0.5, point.y + unit * 0.58, unit * flame, 0, Math.PI * 2);
+  context.moveTo(cx - unit * 0.25, cy + unit * 0.13);
+  context.lineTo(cx + unit * 0.25, cy - unit * 0.06);
+  context.moveTo(cx + unit * 0.25, cy + unit * 0.13);
+  context.lineTo(cx - unit * 0.25, cy - unit * 0.06);
+  context.stroke();
+
+  context.fillStyle = 'rgba(237, 146, 63, 0.22)';
+  context.beginPath();
+  context.arc(cx, cy - unit * 0.12, unit * 0.62, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = '#e9903f';
+  context.beginPath();
+  context.arc(cx, cy - unit * 0.12, unit * flame, 0, Math.PI * 2);
   context.fill();
   context.fillStyle = '#ffe1a0';
   context.beginPath();
-  context.arc(point.x + unit * 0.5, point.y + unit * 0.57, unit * 0.14, 0, Math.PI * 2);
+  context.arc(cx, cy - unit * 0.16, unit * 0.11, 0, Math.PI * 2);
   context.fill();
+  context.restore();
 }
 
 function drawSupplyCrate(context, point, size) {
-  const unit = Math.max(3, size);
-  context.fillStyle = '#8e623a';
-  context.fillRect(point.x + unit * 0.2, point.y + unit * 0.34, unit * 0.6, unit * 0.48);
-  context.strokeStyle = '#4a3020';
-  context.lineWidth = Math.max(1, unit * 0.08);
-  context.strokeRect(point.x + unit * 0.2, point.y + unit * 0.34, unit * 0.6, unit * 0.48);
+  const unit = Math.max(5, size);
+  const x = point.x + unit * 0.2;
+  const y = point.y + unit * 0.37;
+  context.save();
+  context.fillStyle = '#9a6b3f';
+  context.fillRect(x, y, unit * 0.62, unit * 0.46);
+  context.strokeStyle = '#4d3220';
+  context.lineWidth = Math.max(0.8, unit * 0.06);
+  context.strokeRect(x, y, unit * 0.62, unit * 0.46);
+  context.beginPath();
+  context.moveTo(x, y + unit * 0.12);
+  context.lineTo(x + unit * 0.62, y + unit * 0.34);
+  context.stroke();
+  context.restore();
 }
 
 export function drawFeatures(context, map, camera, viewport, time) {
   map.features.forEach((feature) => {
-    if (!isInViewport(feature.x, feature.y, camera, viewport)) return;
+    if (!isInViewport(feature.x, feature.y, camera, viewport, 3)) return;
     const point = toScreen(feature, camera, viewport);
-    if (feature.kind === 'tree') drawTree(context, point, camera.zoom);
-    if (feature.kind === 'stone') drawStone(context, point, camera.zoom);
-    if (feature.kind === 'berryBush') drawBerryBush(context, point, camera.zoom);
+    if (feature.kind === 'tree') drawTree(context, feature, point, camera.zoom);
+    if (feature.kind === 'stone') drawStone(context, feature, point, camera.zoom);
+    if (feature.kind === 'berryBush') drawBerryBush(context, feature, point, camera.zoom);
     if (feature.kind === 'campfire') drawCampfire(context, point, camera.zoom, time);
     if (feature.kind === 'supplyCrate') drawSupplyCrate(context, point, camera.zoom);
   });
