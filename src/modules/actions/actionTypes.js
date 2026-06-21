@@ -3,6 +3,8 @@ export const ACTION_TYPES = Object.freeze({
   GATHER_BERRIES: 'gatherBerries',
   CHOP_TREE: 'chopTree',
   HAUL_TO_CAMP: 'haulToCamp',
+  DELIVER_MATERIALS: 'deliverMaterials',
+  BUILD_SITE: 'buildSite',
   REST: 'rest',
 });
 
@@ -11,6 +13,8 @@ export const ACTION_META = Object.freeze({
   [ACTION_TYPES.GATHER_BERRIES]: { label: '采集浆果', workDuration: 2.1, phaseLabel: '采集中' },
   [ACTION_TYPES.CHOP_TREE]: { label: '砍树', workDuration: 3.6, phaseLabel: '砍伐中' },
   [ACTION_TYPES.HAUL_TO_CAMP]: { label: '搬运资源', workDuration: 0.7, phaseLabel: '归还物资' },
+  [ACTION_TYPES.DELIVER_MATERIALS]: { label: '运送建材', workDuration: 0.45, phaseLabel: '装载建材' },
+  [ACTION_TYPES.BUILD_SITE]: { label: '施工', workDuration: 1.8, phaseLabel: '搭建中' },
   [ACTION_TYPES.REST]: { label: '休息', workDuration: 4.2, phaseLabel: '休息中' },
 });
 
