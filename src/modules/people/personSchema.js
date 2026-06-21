@@ -1,6 +1,6 @@
 import { createSkillSet } from '../../data/constants/skills.js';
 
-export const PEOPLE_SCHEMA_VERSION = 2;
+export const PEOPLE_SCHEMA_VERSION = 3;
 
 export function createBlankPerson() {
   return {
@@ -36,6 +36,12 @@ export function createBlankPerson() {
       bodyTemperature: 36.8,
       injuries: [],
       statusTags: [],
+    },
+    activity: {
+      status: 'idle',
+      current: null,
+      lastCompleted: null,
+      completedCount: 0,
     },
     traits: [],
     family: {
