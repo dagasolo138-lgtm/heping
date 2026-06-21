@@ -6,6 +6,8 @@ import { createRuntimeTask, advanceRuntimeTask } from './actionExecutor.js';
 import { completeAction } from './actionEffects.js';
 import { collectConstructionMaterial, deliverConstructionMaterial, performConstructionWork } from './constructionEffects.js';
 import { ensureInitialShelter, planConstructionAction } from './constructionPlanner.js';
+import { completeFarmAction } from './farmEffects.js';
+import { planFarmAction } from './farmPlanner.js';
 import { completeTendFire, completeWarmByFire } from './fireEffects.js';
 import { planFireTask, planWarmingTask } from './weatherPlanner.js';
 import { planNightSleep } from './nightPlanner.js';
@@ -21,11 +23,16 @@ const WEATHER_SENSITIVE_ACTIONS = new Set([
   ACTION_TYPES.HAUL_TO_CAMP,
   ACTION_TYPES.DELIVER_MATERIALS,
   ACTION_TYPES.BUILD_SITE,
+  ACTION_TYPES.CLEAR_FIELD,
+  ACTION_TYPES.SOW_MILLET,
+  ACTION_TYPES.HARVEST_MILLET,
 ]);
+const FARM_ACTIONS = new Set([ACTION_TYPES.CLEAR_FIELD, ACTION_TYPES.SOW_MILLET, ACTION_TYPES.HARVEST_MILLET]);
 
 function copy(value) { return structuredClone(value); }
 function near(first, second) { return Math.hypot(first.x - second.x, first.y - second.y) <= 3; }
 function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination) }; }
+function currentFarmSystem() { return globalThis.shengling?.farmSystem ?? null; }
 
 export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, eventBus, gameTime }) {
   const agents = new Map();
@@ -143,7 +150,11 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const camp = campStore.get(CAMP_ID);
     if (!camp) return;
     const started = ensureInitialShelter({ buildingSystem, mapSystem, camp });
-    if (started) log('村民在营地旁划定了集体草棚的工地。', 'construction');
+    if (started) log(`村民在营地旁划定了${started.label}的工地。`, 'construction');
+
+    const farmSystem = currentFarmSystem();
+    const field = farmSystem?.ensureFirstField({ campAnchor: camp.anchor });
+    if (field) log('储物棚建成后，村民在营地附近选出第一块可开垦的草地。', 'farming');
 
     const phase = getDayPhase(gameTime.now());
     const weather = weatherSystem.get();
@@ -166,8 +177,11 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       const construction = !phase.isNight && !isEmergency(person)
         ? planConstructionAction({ person, camp, buildingSystem, actionCounts })
         : null;
+      const farming = farmSystem && !phase.isNight && !isEmergency(person)
+        ? planFarmAction({ person, farmSystem, actionCounts })
+        : null;
       const generic = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
-      const planned = fireTask ?? warmthTask ?? sleep ?? construction ?? generic;
+      const planned = fireTask ?? warmthTask ?? sleep ?? construction ?? farming ?? generic;
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
       if (planned.data.featureId) reservedFeatureIds.add(planned.data.featureId);
@@ -217,6 +231,13 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
 
     if (task.type === ACTION_TYPES.WARM_BY_FIRE) {
       const result = completeWarmByFire({ agent, task, peopleSystem, gameTime });
+      if (result) log(result.summary, task.type, result.personId);
+      agent.task = null;
+      return;
+    }
+
+    if (FARM_ACTIONS.has(task.type)) {
+      const result = completeFarmAction({ agent, task, peopleSystem, farmSystem: currentFarmSystem(), gameTime });
       if (result) log(result.summary, task.type, result.personId);
       agent.task = null;
       return;
@@ -290,7 +311,10 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
 
       if (near(agent, camp.anchor)) {
         if (patch.thirst >= 56 && campStore.take(CAMP_ID, 'water', 1, 'drink') > 0) patch.thirst -= 34;
-        if (patch.hunger >= 56 && campStore.take(CAMP_ID, 'berries', 1, 'eat') > 0) patch.hunger -= 26;
+        if (patch.hunger >= 56) {
+          if (campStore.take(CAMP_ID, 'berries', 1, 'eat') > 0) patch.hunger -= 26;
+          else if (campStore.take(CAMP_ID, 'millet', 1, 'eat') > 0) patch.hunger -= 32;
+        }
       }
       peopleSystem.patchState(person.id, patch);
     });
