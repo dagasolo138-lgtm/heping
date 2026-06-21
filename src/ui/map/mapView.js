@@ -1,5 +1,6 @@
 import { drawTerrain } from './terrainRenderer.js';
 import { drawRoads } from './roadRenderer.js';
+import { drawFarms } from './farmRenderer.js';
 import { drawDaylightOverlay } from './daylightRenderer.js';
 import { drawWeatherOverlay } from './weatherRenderer.js';
 import { drawFeatures } from './featureRenderer.js';
@@ -35,6 +36,10 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
 
   function renderRoads() {
     return globalThis.shengling?.roadSystem?.listRoads?.() ?? [];
+  }
+
+  function renderFarms() {
+    return globalThis.shengling?.farmSystem?.listFields?.() ?? [];
   }
 
   function clampCamera() {
@@ -94,6 +99,7 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
     context.fillRect(0, 0, viewport.width, viewport.height);
     drawTerrain(context, map, camera, viewport);
     drawRoads(context, renderRoads(), camera, viewport);
+    drawFarms(context, renderFarms(), camera, viewport);
     drawDaylightOverlay(context, viewport, phase);
     drawFeatures(context, map, camera, viewport, time, fire);
     drawBuildings(context, renderBuildings(), camera, viewport);
