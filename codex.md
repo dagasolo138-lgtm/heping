@@ -14,11 +14,11 @@
 
 - 世界先产生并保存客观事实。
 - 人物、传记、史书、关系和未来 AI 对话只能读取或解释事实，不能反向篡改事实。
-- 人物会在地图中生存、移动、采集、建造、居住、储存资源并形成聚落。
+- 人物会在地图中生存、移动、采集、建造、居住、储存资源、形成路径并逐步形成聚落。
 - 人物不知道“玩家”或“游戏”存在；相遇、印象、好奇等属于人物 `personal` 记忆。
 - 宗教、疾病、政治、经济、家族、战争、科技等都应作为独立模块接入。
 
-## 2. 当前版本：v0.8
+## 2. 当前版本：v0.9
 
 已完成：
 
@@ -29,10 +29,11 @@
 5. 建筑序列：集体草棚 → 简易储物棚；两者复用工地、预留材料、领料、运料、施工和完工流程。
 6. 营地库存：初始 24 单位露天容量；储物棚建成后增加 72 容量，并写入 0.6 储存保护值。
 7. 昼夜、天气、篝火与人物暴露：降雨、寒冷、潮湿、受寒、暖区、露宿。
-8. 资源再生：树被砍后留下树桩，3 个世界日后尝试恢复；浆果被采后留下恢复灌丛，1 个世界日后尝试恢复。恢复位置被建筑或其他物件占用时顺延 1 天。
-9. GitHub Pages 自动部署；部署前对 `src` 下全部 JS 执行 `node --check`。
+8. 自然资源恢复：树被砍后留下树桩，3 个世界日后尝试恢复；浆果被采后留下恢复灌丛，1 个世界日后尝试恢复。占用位置时顺延 1 天。
+9. 聚落路径：人物反复进入同一地块会积累踏行热度；4 次经过形成踩踏路径，10 次经过形成土路；土路使移动速度提高 16%。
+10. GitHub Pages 自动部署；部署前对 `src` 下全部 JS 执行 `node --check`。
 
-当前未完成：自动存档、道路、农田、食物腐败/雨损、建筑碰撞、正式人物立绘、AI 传记/史书/对话、浏览器端自动化测试。
+当前未完成：自动存档、农田、作物、生长季、食物腐败/雨损、建筑碰撞、正式人物立绘、AI 传记/史书/对话、浏览器端自动化测试。
 
 ## 3. 启动与运行链
 
@@ -46,8 +47,10 @@ index.html
        │    ├─ WeatherSystem / FireSystem
        │    ├─ ActionSystem / MapView / 页面 UI
        │    └─ actionSystem.start()
-       └─ src/bootstrap/attachEcologyRuntime.js
-            └─ ResourceRenewalSystem 监听地图资源移除与世界时间推进
+       ├─ src/bootstrap/attachEcologyRuntime.js
+       │    └─ ResourceRenewalSystem 监听地图资源移除与世界时间推进
+       └─ src/bootstrap/attachRoadRuntime.js
+            └─ RoadSystem 采样人物实际移动并累积踏行热度
 ```
 
 入口职责：
@@ -55,12 +58,13 @@ index.html
 | 文件 | 作用 |
 |---|---|
 | `index.html` | 页面骨架、Canvas、人物列表、资源栏、建造栏、天气栏、日志栏。 |
-| `src/app.js` | 引导主世界和生态启动器。 |
+| `src/app.js` | 先启动主世界，再挂接生态与路径运行时模块。 |
 | `src/app-v4.js` | 主装配器：创建世界系统、连接 UI、启动模拟。 |
-| `src/bootstrap/attachEcologyRuntime.js` | 在主世界启动后接入生态恢复系统与地图生态提示。 |
+| `src/bootstrap/attachEcologyRuntime.js` | 挂接资源恢复系统与生态提示。 |
+| `src/bootstrap/attachRoadRuntime.js` | 挂接踏行热度、路径提示与道路生成。 |
 | `src/styles/main.css` | 主界面样式。 |
 | `src/styles/construction.css` | 建造状态栏样式。 |
-| `src/styles/environment.css` | 天气、篝火、暴露、储存容量与生态提示样式。 |
+| `src/styles/environment.css` | 天气、篝火、暴露、生态和路径提示样式。 |
 
 **约束：** 新功能优先新增独立模块；不要把业务逻辑堆进 `index.html` 或 `app.js`。
 
@@ -78,14 +82,15 @@ src/
     buildings/   # 建筑目录、工地、选址、施工、居住与储物棚
     environment/ # 昼夜、天气、篝火、环境暴露
     ecology/     # 资源耗尽、恢复队列、树桩和灌丛标记
+    roads/       # 踏行热度、路径阶段、土路移动倍率
   bootstrap/     # 运行时挂接模块
-  ui/map/        # Canvas 地形、光照、天气、资源、建筑、人物与交互
+  ui/map/        # Canvas 地形、路径、光照、天气、资源、建筑、人物与交互
   styles/        # CSS
 ```
 
 ### 4.1 核心层
 
-- `core/events/eventBus.js`：系统间通信；创建时会将当前世界总线暴露为 `globalThis.__shenglingEventBus`，供启动器挂接独立运行时模块。
+- `core/events/eventBus.js`：系统间通信；创建时会将当前总线暴露为 `globalThis.__shenglingEventBus`，供启动器挂接独立运行时模块。
 - `core/time/gameTime.js`：年、日、分钟、tick 和时间戳。
 - `core/random/seededRandom.js`：确定性地图和天气选择。
 - `core/ids/createId.js`：系统唯一 ID。
@@ -120,7 +125,7 @@ extensions   后续模块扩展槽
 - `mapSchema.js`：地图结构。
 - `startingValleyGenerator.js`：固定种子生成起始河谷。
 - `mapQueries.js`：地形、资源、水源、通行和邻格查询。
-- `mapMutations.js`：添加/移除物件；`removeFeature()` 现在返回被移除物件数据。
+- `mapMutations.js`：添加/移除物件；`removeFeature()` 会返回被移除物件数据。
 - `mapSystem.js`：地图服务入口；资源移除时发出 `map:feature-removed`。
 - `placeStartingSettlers.js`：把十人放到营地周围。
 
@@ -155,8 +160,8 @@ extensions   后续模块扩展槽
 
 - `actionPlanner.js`：日常生存任务。
 - `pathfinding.js`：A*。
-- `actionExecutor.js`：移动和工作时长。
-- `actionEffects.js`：取水、采集、砍树、搬运和休息结果。资源移除会触发生态系统监听。
+- `actionExecutor.js`：移动和工作时长；读取 `globalThis.shengling.roadSystem`，在土路格上叠加 1.16 移动倍率。
+- `actionEffects.js`：取水、采集、砍树、搬运和休息结果。资源移除会触发生态监听。
 - `constructionPlanner.js` / `constructionEffects.js`：建筑序列、领料、运料、施工。
 - `nightPlanner.js` / `sleepEffects.js`：夜间睡眠与露宿。
 - `weatherPlanner.js` / `fireEffects.js`：添柴和取暖。
@@ -175,7 +180,7 @@ extensions   后续模块扩展槽
 
 ### 4.5 生态层：`modules/ecology/`
 
-`resourceRenewalSystem.js` 负责自然资源恢复。
+`resourceRenewalSystem.js`：
 
 ```text
 树 / 浆果丛被地图移除
@@ -187,12 +192,30 @@ extensions   后续模块扩展槽
 → 位置被建筑或物件占用则顺延 1 个世界日
 ```
 
-恢复参数：
-
 | 资源 | 标记 | 恢复时间 |
 |---|---|---|
 | 树 | `treeStump` | 3 个世界日 / 4320 分钟 |
 | 浆果丛 | `berryPatch` | 1 个世界日 / 1440 分钟 |
+
+### 4.6 路径层：`modules/roads/`
+
+`roadSystem.js` 保存踏行热度，不改变地图地形数组。
+
+```text
+人物实际移动坐标（每 240ms 采样）
+→ 人物跨入新的整格
+→ 记录该格交通次数
+→ 4 次经过：wornTrail（视觉踩踏路径）
+→ 10 次经过：dirtRoad（成型土路）
+→ actionExecutor 读取土路格，移动速度 × 1.16
+```
+
+关键约束：
+
+- 只记录跨入的新格，避免连续采样重复累计原地格。
+- 当前路径没有自然消退；存档接入后需一并持久化。
+- 路径图层仅负责视觉和移动倍率，不修改通行性、不改变 A* 寻路目标。
+- `roadRenderer.js` 在地貌之后、昼夜光照之前绘制，建筑和人物会盖在路径上方。
 
 ## 5. 当前决策与数据流
 
@@ -214,6 +237,7 @@ extensions   后续模块扩展槽
 ```text
 地图资源 → 人物背包 → 营地库存 → 工地 / 篝火 / 人物消耗
 自然资源被耗尽 → 树桩或恢复灌丛 → 定时恢复为地图资源
+人物实际移动 → 踏行热度 → 踩踏路径 / 土路 → 移动倍率
 ```
 
 环境效果：
@@ -234,33 +258,39 @@ extensions   后续模块扩展槽
 | `camp:changed` | CampStore | 更新资源、篝火和容量栏。 |
 | `actions:log` | ActionSystem | 更新即时动向。 |
 | `simulation:time` | ActionSystem | 更新世界时间、天气、篝火，并触发生态到期检查。 |
-| `ecology:changed` | ResourceRenewalSystem | 更新生态提示与地图。 |
-| `ecology:regrown` | ResourceRenewalSystem | 提示资源在原位置恢复。 |
+| `ecology:changed` / `ecology:regrown` | ResourceRenewalSystem | 更新生态提示与地图。 |
+| `roads:changed` | RoadSystem | 更新路径提示、地图和土路形成状态。 |
 | `environment:phase/weather/fire` | 环境系统 | 更新昼夜、天气、篝火视觉状态。 |
 | `buildings:completed` | BuildingSystem | 草棚分配住户；储物棚扩容。 |
 
 地图渲染顺序：
 
 ```text
-地貌 → 昼夜光照 → 资源物件/篝火/树桩/恢复灌丛 → 建筑/工地 → 人物令牌 → 雨层 → 页面覆盖层
+地貌 → 路径 → 昼夜光照 → 资源/篝火/树桩/恢复灌丛 → 建筑/工地 → 人物 → 雨层 → 页面覆盖层
 ```
 
 ## 7. 已知限制与风险
 
-1. 刷新页面会重新开局；生态恢复队列也不会持久化。
+1. 刷新页面会重新开局；生态恢复队列和路径热度也不会持久化。
 2. CI 只有 JS 语法检查，没有浏览器测试。
 3. 草棚和储物棚尚未作为寻路障碍。
 4. 极端情况下运输路径失效时，已领出的建材没有完整的落地或归还机制。
 5. 当前资源恢复只针对树和浆果；石料、水源和其他资源仍未建立循环。
-6. 资源恢复时长、天气和行动参数仍是原型参数，尚未做平衡测试。
-7. 生态启动器依赖 `globalThis.__shenglingEventBus` 与 `globalThis.shengling`；以后若更换主启动架构，需要同步调整启动器。
-8. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
+6. 当前路径没有衰退、雨天泥泞或人工铺设系统。
+7. 资源恢复时长、天气、路径阈值和移动倍率仍是原型参数，尚未做平衡测试。
+8. 生态与路径启动器依赖 `globalThis.__shenglingEventBus` 和 `globalThis.shengling`；重构主启动架构时需同步调整。
+9. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
 
 ## 8. 下一阶段
 
-下一阶段：**聚落路径。**
+下一阶段：**稳定食物来源。**
 
-先做村民反复行走形成土路：记录步行热度，跨过阈值后将格子标记为土路，土路提高移动速度。之后接入第一块农田和稳定食物来源。
+建议顺序：
+
+1. 选择营地附近的可耕地，建立第一块小农田。
+2. 引入一种基础作物：播种 → 生长 → 收获 → 存入营地。
+3. 农田产出接入天气、土路和储物棚容量。
+4. 再让储物棚保护值实际影响食物腐败与雨损。
 
 ## 9. 版本更新记录（只追加）
 
@@ -311,4 +341,10 @@ extensions   后续模块扩展槽
 - 树木和浆果丛被耗尽后，自动生成树桩或恢复灌丛标记。
 - 树 3 个世界日、浆果 1 个世界日后尝试在原位置恢复；建筑或物件占用时顺延 1 天。
 - 生态系统监听 `map:feature-removed` 与 `simulation:time`，不直接耦合进人物行动调度器。
-- 地图右上新增生态恢复提示，`README.md` 同步更新。
+
+### v0.9 · 聚落路径
+
+- 新增 `RoadSystem`：人物跨入新格时积累踏行热度，4 次经过形成踩踏路径，10 次经过形成土路。
+- 新增 `roadRenderer`、路径运行时提示和路径地图图层。
+- 成型土路通过 `actionExecutor` 提供 16% 移动速度加成。
+- 路径系统独立于地图地形与 A* 通行规则，当前不持久化也不衰退。
