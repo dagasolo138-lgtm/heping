@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "project": "生灵",
+  "version": "v0.13.1",
+  "buildId": "v0.13.1-pages-beacon-20260622-01",
+  "sourceCommit": "bdd3b32bc47f51ff88a48f2bf38815e506d6cc33",
+  "branch": "main",
+  "verificationPath": "/heping/version.json",
+  "verification": {
+    "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
+    "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter."
+  }
+}
