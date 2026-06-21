@@ -2,9 +2,11 @@
 .map-overlay--weather.is-rain { border-color:rgba(150,199,226,.35); background:rgba(16,35,52,.72); }
 .map-overlay--ecology { top:82px; right:13px; color:#c8e0b5; border-color:rgba(166,204,128,.28); background:rgba(21,40,27,.72); }
 .map-overlay--road { top:116px; right:13px; color:#e3c997; border-color:rgba(204,163,102,.28); background:rgba(53,39,24,.72); }
+.map-overlay--farm { top:150px; right:13px; color:#e8d784; border-color:rgba(218,191,100,.3); background:rgba(55,48,20,.74); }
 .resource-chip--fire strong { color:#efb45f; }
 .resource-chip--fire.is-out strong { color:#a5afb0; }
 .resource-chip--storage strong { color:#c5d79c; }
+.resource-chip--millet strong { color:#e7ce75; }
 .exposure-summary { display:flex; flex-wrap:wrap; gap:7px; margin-top:9px; }
 .exposure-summary span { padding:4px 7px; border:1px solid rgba(150,199,226,.24); border-radius:999px; color:#bcd5e5; background:rgba(83,124,148,.12); font-size:12px; }
-@media (max-width:420px) { .map-overlay--weather { top:45px; right:10px; font-size:11px; } .map-overlay--ecology { top:75px; right:10px; font-size:11px; } .map-overlay--road { top:105px; right:10px; font-size:11px; } }
+@media (max-width:420px) { .map-overlay--weather { top:45px; right:10px; font-size:11px; } .map-overlay--ecology { top:75px; right:10px; font-size:11px; } .map-overlay--road { top:105px; right:10px; font-size:11px; } .map-overlay--farm { top:135px; right:10px; font-size:11px; } }
