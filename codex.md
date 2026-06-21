@@ -8,59 +8,61 @@
 
 ## 1. 项目定位
 
-《生灵》是纯前端、无打包器、部署在 GitHub Pages 的动态世界模拟游戏。
+《生灵》是一个纯前端、无打包器、部署在 GitHub Pages 的动态世界模拟游戏。
 
 核心原则：
 
 - 世界先产生并保存客观事实。
 - 人物、传记、史书、关系和未来 AI 对话只能读取或解释事实，不能反向篡改事实。
 - 人物会在地图中生存、移动、采集、建造、居住、储存资源并形成聚落。
-- 未来宗教、疾病、政治、经济、家族、战争、科技等应以独立模块接入。
 - 人物不知道“玩家”或“游戏”存在；相遇、印象、好奇等属于人物 `personal` 记忆。
+- 宗教、疾病、政治、经济、家族、战争、科技等都应作为独立模块接入。
 
-## 2. 当前版本：v0.7
+## 2. 当前版本：v0.8
 
 已完成：
 
-1. 十位初始村民：年龄、职业、技能、性格、家庭关系、状态、库存、人生事实和个人记忆。
+1. 十位初始村民：年龄、职业、技能、性格、家庭关系、状态、库存、`lifeEvents` 与 `personal` 记忆。
 2. 起始河谷：160m × 120m；1 格 = 1m × 1m；16m × 16m 区块。
-3. 地图内容：河流、林地、石滩、营地、树、石头、浆果、篝火、物资箱。
-4. 自主行动：取水、采集、砍树、搬运资源、休息、运料、施工、睡眠、添柴、取暖。
-5. A* 网格寻路与人物平滑移动。
-6. 营地共享库存：清水、浆果、木材；初始露天容量为 24 单位。
-7. 建筑序列：集体草棚 → 简易储物棚；两者复用工地、预留材料、领料、运料、施工和完工流程。
-8. 集体草棚：12 个睡位，提供夜间遮蔽与恢复基础。
-9. 简易储物棚：木材 8、施工量 6；完工后增加 72 单位容量，并记录 0.6 储存保护效果，供后续损耗系统使用。
-10. 昼夜、天气、篝火和人物环境暴露：降雨、寒冷、潮湿、受寒、暖区、添柴、露宿。
-11. GitHub Pages 自动部署；部署前执行 JavaScript 语法检查。
+3. 地图资源：树、石头、浆果、河流、篝火、物资箱；人物采用 A* 网格寻路并有平滑运行时坐标。
+4. 行动：取水、采集、砍树、搬运、休息、运料、施工、睡眠、添柴、取暖。
+5. 建筑序列：集体草棚 → 简易储物棚；两者复用工地、预留材料、领料、运料、施工和完工流程。
+6. 营地库存：初始 24 单位露天容量；储物棚建成后增加 72 容量，并写入 0.6 储存保护值。
+7. 昼夜、天气、篝火与人物暴露：降雨、寒冷、潮湿、受寒、暖区、露宿。
+8. 资源再生：树被砍后留下树桩，3 个世界日后尝试恢复；浆果被采后留下恢复灌丛，1 个世界日后尝试恢复。恢复位置被建筑或其他物件占用时顺延 1 天。
+9. GitHub Pages 自动部署；部署前对 `src` 下全部 JS 执行 `node --check`。
 
-当前没有：自动存档、资源再生、道路、农田、食物腐败/雨损、建筑碰撞、正式人物立绘、AI 传记/史书/对话、浏览器端自动化测试。
+当前未完成：自动存档、道路、农田、食物腐败/雨损、建筑碰撞、正式人物立绘、AI 传记/史书/对话、浏览器端自动化测试。
 
-## 3. 启动与系统装配
+## 3. 启动与运行链
 
 ```text
 index.html
   └─ src/app.js
-       └─ src/app-v4.js
-            ├─ EventBus / GameTime
-            ├─ PeopleSystem / MapSystem
-            ├─ CampStore / BuildingSystem
-            ├─ WeatherSystem / FireSystem
-            ├─ ActionSystem
-            ├─ MapView 与页面 UI
-            └─ actionSystem.start()
+       ├─ src/app-v4.js
+       │    ├─ EventBus / GameTime
+       │    ├─ PeopleSystem / MapSystem
+       │    ├─ CampStore / BuildingSystem
+       │    ├─ WeatherSystem / FireSystem
+       │    ├─ ActionSystem / MapView / 页面 UI
+       │    └─ actionSystem.start()
+       └─ src/bootstrap/attachEcologyRuntime.js
+            └─ ResourceRenewalSystem 监听地图资源移除与世界时间推进
 ```
+
+入口职责：
 
 | 文件 | 作用 |
 |---|---|
-| `index.html` | 页面骨架、Canvas、人物列表、资源栏、工地栏、天气栏、日志栏。 |
-| `src/app.js` | 极薄入口，只导入 `app-v4.js`。 |
-| `src/app-v4.js` | 主装配器：初始化系统、连接事件、渲染 UI、启动模拟。 |
+| `index.html` | 页面骨架、Canvas、人物列表、资源栏、建造栏、天气栏、日志栏。 |
+| `src/app.js` | 引导主世界和生态启动器。 |
+| `src/app-v4.js` | 主装配器：创建世界系统、连接 UI、启动模拟。 |
+| `src/bootstrap/attachEcologyRuntime.js` | 在主世界启动后接入生态恢复系统与地图生态提示。 |
 | `src/styles/main.css` | 主界面样式。 |
 | `src/styles/construction.css` | 建造状态栏样式。 |
-| `src/styles/environment.css` | 天气、篝火、暴露和储存容量样式。 |
+| `src/styles/environment.css` | 天气、篝火、暴露、储存容量与生态提示样式。 |
 
-**约束：** 新功能应新增独立模块，再由 `app-v4.js` 组装；不要把业务逻辑堆进 `index.html` 或 `app.js`。
+**约束：** 新功能优先新增独立模块；不要把业务逻辑堆进 `index.html` 或 `app.js`。
 
 ## 4. 模块地图
 
@@ -72,31 +74,23 @@ src/
     people/      # 人物数据与人物系统
     map/         # 地图生成、查询、修改、服务入口
     settlements/ # 营地共享库存、容量与储存升级
-    actions/     # 任务规划、寻路、执行、睡眠、添柴、运行时调度
+    actions/     # 任务规划、寻路、执行、睡眠、添柴、总调度
     buildings/   # 建筑目录、工地、选址、施工、居住与储物棚
     environment/ # 昼夜、天气、篝火、环境暴露
-  ui/map/        # Canvas 地形、光照、天气、物件、建筑、人物与交互
+    ecology/     # 资源耗尽、恢复队列、树桩和灌丛标记
+  bootstrap/     # 运行时挂接模块
+  ui/map/        # Canvas 地形、光照、天气、资源、建筑、人物与交互
   styles/        # CSS
 ```
 
 ### 4.1 核心层
 
-- `core/events/eventBus.js`：系统间事件通信。
+- `core/events/eventBus.js`：系统间通信；创建时会将当前世界总线暴露为 `globalThis.__shenglingEventBus`，供启动器挂接独立运行时模块。
 - `core/time/gameTime.js`：年、日、分钟、tick 和时间戳。
 - `core/random/seededRandom.js`：确定性地图和天气选择。
 - `core/ids/createId.js`：系统唯一 ID。
 
 ### 4.2 人物层：`modules/people/`
-
-重点文件：
-
-- `personSchema.js`：人物结构，当前 `PEOPLE_SCHEMA_VERSION = 3`。
-- `personFactory.js`：创建人物。
-- `personValidation.js`：校验人物与状态范围。
-- `personMutations.js`：受控修改状态、位置、职业、行动、状态标签、扩展数据。
-- `personMemory.js`：写入人生事实与个人记忆。
-- `peopleSystem.js`：人物系统总入口。
-- `createFounders.js`：十位开局村民。
 
 人物关键字段：
 
@@ -115,17 +109,19 @@ extensions   后续模块扩展槽
 
 记忆规则：
 
-- `lifeEvents`：客观世界事实。行动、睡眠、添柴、取暖、建造等应写入这里。
+- `lifeEvents`：客观世界事实。行动、睡眠、添柴、取暖、建造等写入这里。
 - `personal`：人物主观记忆，如相遇、印象、对陌生人的好奇。
 - 不使用“玩家记忆”或 `player memory`。
+
+重点文件：`personSchema.js`、`personFactory.js`、`personValidation.js`、`personMutations.js`、`personMemory.js`、`peopleSystem.js`、`createFounders.js`。
 
 ### 4.3 地图层：`modules/map/`
 
 - `mapSchema.js`：地图结构。
 - `startingValleyGenerator.js`：固定种子生成起始河谷。
 - `mapQueries.js`：地形、资源、水源、通行和邻格查询。
-- `mapMutations.js`：修改地形、添加和移除物件。
-- `mapSystem.js`：地图服务入口。
+- `mapMutations.js`：添加/移除物件；`removeFeature()` 现在返回被移除物件数据。
+- `mapSystem.js`：地图服务入口；资源移除时发出 `map:feature-removed`。
 - `placeStartingSettlers.js`：把十人放到营地周围。
 
 关键参数：
@@ -139,135 +135,132 @@ extensions   后续模块扩展槽
 | 地图种子 | `shengling-starting-valley-v1` |
 | 营地中心 | 约 `(79, 74)` |
 
-### 4.4 营地、行动、建筑与环境
+### 4.4 营地、建筑、行动与环境
 
 `modules/settlements/campStore.js`
 
-- 管理共享营地库存、容量、剩余空间和储存升级。
-- 初始容量：24；初始标签：`营地露天堆放`。
-- `change()` 在增加资源时受容量限制；资源不足空间时只接收可容纳部分。
-- `applyStorageUpgrade()` 按建筑 ID 去重应用扩容和保护效果。
-- 资源流：地图资源 → 人物背包 → 营地库存 → 建筑工地 / 篝火 / 人物消耗。
-
-`modules/actions/`
-
-| 文件 | 作用 |
-|---|---|
-| `actionTypes.js` | 行动类型和中文信息。 |
-| `pathfinding.js` | A* 网格寻路。 |
-| `actionPlanner.js` | 日常生存任务规划。 |
-| `actionExecutor.js` | 移动与工作时长推进。 |
-| `actionEffects.js` | 取水、采集、砍树、搬运、休息结果。 |
-| `constructionPlanner.js` | 建筑顺序和建造任务规划。 |
-| `constructionEffects.js` | 领料、送料、施工结果。 |
-| `nightPlanner.js` | 夜间回草棚或营地睡眠。 |
-| `sleepEffects.js` | 睡眠/露宿的事实与状态结算。 |
-| `weatherPlanner.js` | 篝火添柴与人物取暖任务规划。 |
-| `fireEffects.js` | 添柴和取暖结果。 |
-| `actionSystem.js` | 行动、天气、篝火、暴露与时间的运行时总调度。 |
-
-当前行动：取水、采集浆果、砍树、搬回营地、休息、运送建材、施工、睡眠、添柴、取暖。
+- 管理共享库存、容量、剩余空间和储存升级。
+- 初始容量 24；储物棚升级后容量 +72。
+- `change()` 存入资源时会受剩余容量限制；满仓时只接收可容纳部分。
+- `applyStorageUpgrade()` 按建筑 ID 去重应用扩容和保护。
 
 `modules/buildings/`
 
-- `buildingCatalog.js`：建筑定义。
-- `buildingSchema.js`：工地结构；会复制建筑材料、容量与效果。
-- `buildingPlacement.js`：选址、建筑中心点、建筑间重叠检查。
-- `buildingSystem.js`：开工、预留材料、送达、施工、完工、入住、居所查询。
-
-当前建筑：
-
-| 类型 | 材料 | 施工量 | 效果 | 建造条件 |
+| 建筑 | 材料 | 施工量 | 效果 | 条件 |
 |---|---:|---:|---|---|
 | `communalShelter` 集体草棚 | 木材 12 | 10 | 12 睡位、夜间遮蔽 | 第一个自动目标。 |
-| `storageShed` 简易储物棚 | 木材 8 | 6 | 容量 +72、储存保护 +0.6 | 草棚完成后自动目标。 |
+| `storageShed` 简易储物棚 | 木材 8 | 6 | 容量 +72、保护 +0.6 | 草棚完成后自动目标。 |
 
-### 4.5 环境层：`modules/environment/`
+`modules/actions/`
 
-| 文件 | 作用 |
-|---|---|
-| `dayCycle.js` | 黎明、白昼、黄昏、夜晚。 |
-| `weatherSystem.js` | 每 4 小时世界时间更新天气；首日采用可观察固定序列，后续按种子确定。 |
-| `fireSystem.js` | 篝火燃料、燃烧、熄灭、暖区。 |
-| `exposureSystem.js` | 潮湿、受寒、草棚遮蔽、篝火温暖、状态与惩罚。 |
+- `actionPlanner.js`：日常生存任务。
+- `pathfinding.js`：A*。
+- `actionExecutor.js`：移动和工作时长。
+- `actionEffects.js`：取水、采集、砍树、搬运和休息结果。资源移除会触发生态系统监听。
+- `constructionPlanner.js` / `constructionEffects.js`：建筑序列、领料、运料、施工。
+- `nightPlanner.js` / `sleepEffects.js`：夜间睡眠与露宿。
+- `weatherPlanner.js` / `fireEffects.js`：添柴和取暖。
+- `actionSystem.js`：行动、天气、篝火、暴露与时间总调度。
 
-昼夜参数：黎明 05:00–07:00；白昼 07:00–17:00；黄昏 17:00–20:00；夜晚 20:00–05:00。
+当前行动：取水、采集浆果、砍树、搬回营地、休息、运送建材、施工、睡眠、添柴、取暖。
+
+`modules/environment/`
+
+- `dayCycle.js`：黎明 05:00–07:00；白昼 07:00–17:00；黄昏 17:00–20:00；夜晚 20:00–05:00。
+- `weatherSystem.js`：每 4 小时世界时间更新天气。
+- `fireSystem.js`：篝火燃料、燃烧、熄灭、7m 暖区。
+- `exposureSystem.js`：潮湿、受寒、草棚遮蔽、篝火温暖、状态与惩罚。
 
 当前模拟速度：约 1 秒现实时间 = 6 分钟世界时间。
 
-## 5. 当前运行逻辑
+### 4.5 生态层：`modules/ecology/`
+
+`resourceRenewalSystem.js` 负责自然资源恢复。
+
+```text
+树 / 浆果丛被地图移除
+→ MapSystem 发出 map:feature-removed
+→ ResourceRenewalSystem 登记恢复条目
+→ 添加 treeStump / berryPatch 标记
+→ simulation:time 推进时检查到期条目
+→ 原位置空闲则删除标记、恢复原资源
+→ 位置被建筑或物件占用则顺延 1 个世界日
+```
+
+恢复参数：
+
+| 资源 | 标记 | 恢复时间 |
+|---|---|---|
+| 树 | `treeStump` | 3 个世界日 / 4320 分钟 |
+| 浆果丛 | `berryPatch` | 1 个世界日 / 1440 分钟 |
+
+## 5. 当前决策与数据流
+
+决策优先级：
 
 ```text
 人物背包有资源 → 先搬回营地
 精力过低 → 休息
 口渴或饥饿严重 → 生存任务优先
-天气造成严重受寒/潮湿 → 优先篝火取暖
+严重受寒/潮湿 → 优先篝火取暖
 篝火燃料低且营地有木材 → 一人前去添柴
 非紧急、非夜晚 → 当前建筑工地的运料或施工
 其余情况 → 根据职业和营地缺口取水、采集或砍树
 夜晚 → 不派发新的生产或建造任务；村民回草棚睡眠或回营地露宿
 ```
 
-建筑规划：
+资源流：
 
 ```text
-没有草棚 → 建集体草棚
-草棚已完成、没有储物棚 → 建简易储物棚
-两者已完成 → 暂无自动建筑目标
+地图资源 → 人物背包 → 营地库存 → 工地 / 篝火 / 人物消耗
+自然资源被耗尽 → 树桩或恢复灌丛 → 定时恢复为地图资源
 ```
 
 环境效果：
 
-- 户外降雨增加潮湿；草棚内部和篝火暖区可降低潮湿。
+- 户外降雨增加潮湿；草棚内部和篝火暖区降低潮湿。
 - 寒冷、冷雨和潮湿会累积受寒。
 - 潮湿/受寒较高时，人物获得 `soaked`、`chilled` 状态，增加精力消耗和压力；重度受寒会损害健康。
-- 天气通过 `movementMultiplier` 和 `workMultiplier` 降低户外移动与工作效率。
-- 篝火有燃料时提供 7m 暖区；夜晚、降雨和低温会燃烧燃料。
-- 储物棚目前提供容量与保护数据；实际食物腐败、雨损和材料损耗将在后续资源循环阶段接入。
+- 天气通过移动/工作乘数降低户外效率。
+- 储物棚当前只记录保护值；食物腐败、雨损和材料损耗尚未结算。
 
 ## 6. 事件与渲染连接点
 
 | 事件 | 发出方 | 用途 |
 |---|---|---|
-| `people:changed` | PeopleSystem | 更新人物卡、人物列表和状态栏。 |
-| `map:changed` | MapSystem | 更新地图。 |
-| `camp:changed` | CampStore | 更新资源、篝火和储物容量栏。 |
+| `people:changed` | PeopleSystem | 刷新人物卡、人物列表和状态栏。 |
+| `map:changed` | MapSystem | 刷新地图。 |
+| `map:feature-removed` | MapSystem | 生态系统登记树或浆果恢复。 |
+| `camp:changed` | CampStore | 更新资源、篝火和容量栏。 |
 | `actions:log` | ActionSystem | 更新即时动向。 |
-| `simulation:time` | ActionSystem | 更新世界时间、天气和篝火读数。 |
-| `environment:phase` | ActionSystem | 更新昼夜状态和地图光照。 |
-| `environment:weather` | WeatherSystem | 更新天气文字与雨层。 |
-| `environment:fire` | FireSystem | 更新篝火读数和地图火焰。 |
-| `buildings:changed` | BuildingSystem | 更新工地进度和建筑地图层。 |
-| `buildings:completed` | BuildingSystem | 草棚分配住户；储物棚调用 `campStore.applyStorageUpgrade()`。 |
+| `simulation:time` | ActionSystem | 更新世界时间、天气、篝火，并触发生态到期检查。 |
+| `ecology:changed` | ResourceRenewalSystem | 更新生态提示与地图。 |
+| `ecology:regrown` | ResourceRenewalSystem | 提示资源在原位置恢复。 |
+| `environment:phase/weather/fire` | 环境系统 | 更新昼夜、天气、篝火视觉状态。 |
+| `buildings:completed` | BuildingSystem | 草棚分配住户；储物棚扩容。 |
 
 地图渲染顺序：
 
 ```text
-地貌 → 昼夜光照 → 资源物件/篝火 → 建筑/工地 → 人物令牌 → 雨层 → 页面覆盖层
+地貌 → 昼夜光照 → 资源物件/篝火/树桩/恢复灌丛 → 建筑/工地 → 人物令牌 → 雨层 → 页面覆盖层
 ```
 
 ## 7. 已知限制与风险
 
-1. 刷新页面会重新开局；自动存档尚未接入。
+1. 刷新页面会重新开局；生态恢复队列也不会持久化。
 2. CI 只有 JS 语法检查，没有浏览器测试。
 3. 草棚和储物棚尚未作为寻路障碍。
 4. 极端情况下运输路径失效时，已领出的建材没有完整的落地或归还机制。
-5. 树和浆果丛不会再生；这会阻塞长期资源循环。
-6. 储物棚保护效果只记录数据，尚未结算食物腐败、雨损或损耗。
-7. 天气和行动参数仍是原型参数，尚未做平衡测试。
-8. 人口扩大后，需要批量状态更新、分区更新和渲染节流。
-9. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
+5. 当前资源恢复只针对树和浆果；石料、水源和其他资源仍未建立循环。
+6. 资源恢复时长、天气和行动参数仍是原型参数，尚未做平衡测试。
+7. 生态启动器依赖 `globalThis.__shenglingEventBus` 与 `globalThis.shengling`；以后若更换主启动架构，需要同步调整启动器。
+8. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
 
 ## 8. 下一阶段
 
-下一阶段：**资源循环与聚落路径。**
+下一阶段：**聚落路径。**
 
-建议顺序：
-
-1. 树木与浆果的有限再生，避免地图资源永久耗尽。
-2. 村民反复行走的路线形成土路，土路提高移动效率。
-3. 加入小块农田和第一种可种植食物，形成稳定食物来源。
-4. 接入储物棚保护对食物腐败、雨损和材料损耗的实际影响。
+先做村民反复行走形成土路：记录步行热度，跨过阈值后将格子标记为土路，土路提高移动速度。之后接入第一块农田和稳定食物来源。
 
 ## 9. 版本更新记录（只追加）
 
@@ -310,7 +303,12 @@ extensions   后续模块扩展槽
 
 ### v0.7 · 储物棚与营地容量
 
-- 营地加入初始 24 单位露天容量；存入资源时受剩余空间限制。
-- 草棚完成后自动规划简易储物棚；储物棚复用现有运料与施工流程。
-- 储物棚建成后容量增加 72，营地存储标签切换为储物棚，并记录后续损耗系统可用的储存保护效果。
-- 地图、建造面板和营地资源栏可显示储物棚及其容量状态。
+- 营地加入初始 24 单位露天容量。
+- 草棚完成后自动规划储物棚；储物棚建成后容量 +72，并记录储存保护效果。
+
+### v0.8 · 自然资源恢复
+
+- 树木和浆果丛被耗尽后，自动生成树桩或恢复灌丛标记。
+- 树 3 个世界日、浆果 1 个世界日后尝试在原位置恢复；建筑或物件占用时顺延 1 天。
+- 生态系统监听 `map:feature-removed` 与 `simulation:time`，不直接耦合进人物行动调度器。
+- 地图右上新增生态恢复提示，`README.md` 同步更新。
