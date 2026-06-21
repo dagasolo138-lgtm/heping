@@ -1,0 +1,54 @@
+import { ACTION_TYPES } from './actionTypes.js';
+
+function record({ agent, person, task, peopleSystem, gameTime, summary, details = {} }) {
+  const stamp = gameTime.stamp();
+  peopleSystem.setLocation(person.id, { tileX: Math.round(agent.x), tileY: Math.round(agent.y) });
+  peopleSystem.addLifeEvent(person.id, {
+    type: `action:${task.type}`,
+    summary,
+    details: { taskId: task.id, action: task.type, ...details },
+    time: stamp,
+  });
+  const after = peopleSystem.get(person.id);
+  peopleSystem.setActivity(person.id, {
+    status: 'idle',
+    current: null,
+    lastCompleted: { type: task.type, label: task.label, time: stamp },
+    completedCount: Number(after.activity.completedCount ?? 0) + 1,
+  });
+}
+
+export function completeFarmAction({ agent, task, peopleSystem, farmSystem, gameTime }) {
+  const person = peopleSystem.get(agent.personId);
+  if (!person || !farmSystem) return null;
+
+  if (task.type === ACTION_TYPES.CLEAR_FIELD) {
+    const field = farmSystem.clearField(task.data.fieldId, task.data.workAmount);
+    if (!field) return null;
+    const completed = field.status === 'readyToSow';
+    const summary = completed
+      ? `${person.identity.name}完成了第一块粟田的开垦。`
+      : `${person.identity.name}正在翻整第一块粟田。`;
+    record({ agent, person, task, peopleSystem, gameTime, summary, details: { fieldId: field.id, clearing: field.clearing } });
+    return { summary, personId: person.id };
+  }
+
+  if (task.type === ACTION_TYPES.SOW_MILLET) {
+    const field = farmSystem.sow(task.data.fieldId);
+    if (!field) return null;
+    const summary = `${person.identity.name}把第一批粟种播进了田里。`;
+    record({ agent, person, task, peopleSystem, gameTime, summary, details: { fieldId: field.id, cropId: field.cropId } });
+    return { summary, personId: person.id };
+  }
+
+  if (task.type === ACTION_TYPES.HARVEST_MILLET) {
+    const harvest = farmSystem.harvest(task.data.fieldId);
+    if (!harvest) return null;
+    peopleSystem.changeItem(person.id, harvest.itemId, harvest.amount);
+    const summary = `${person.identity.name}收获了 ${harvest.amount} 份${harvest.label}，并留下了下一轮的种子。`;
+    record({ agent, person, task, peopleSystem, gameTime, summary, details: { fieldId: task.data.fieldId, harvest } });
+    return { summary, personId: person.id };
+  }
+
+  return null;
+}
