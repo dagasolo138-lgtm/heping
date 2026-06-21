@@ -26,7 +26,14 @@ const weather = createWeatherSystem({ eventBus: bus, gameTime: time });
 createFounders(people);
 const valley = map.createStartingValley();
 placeStartingSettlers({ peopleSystem: people, map: valley });
-camp.create({ id: 'starting-camp', label: '起始营地', anchor: valley.spawnPoint, items: { wood: 3, berries: 2, water: 1 } });
+camp.create({
+  id: 'starting-camp',
+  label: '起始营地',
+  anchor: valley.spawnPoint,
+  items: { wood: 3, berries: 2, water: 1 },
+  capacity: 24,
+  storageLabel: '营地露天堆放',
+});
 const fire = createFireSystem({ eventBus: bus, gameTime: time, mapSystem: map });
 const actions = createActionSystem({
   peopleSystem: people,
@@ -142,28 +149,37 @@ function renderDetail() {
 }
 
 function renderCamp() {
-  const items = camp.get('starting-camp')?.items ?? {};
+  const campState = camp.get('starting-camp');
+  const items = campState?.items ?? {};
+  const storage = camp.getStorage('starting-camp');
   const currentFire = actions.getFire();
   const stock = ['water', 'berries', 'wood'].map((name) => `<span class="resource-chip resource-chip--${name}"><b>${CAMP_ITEM_LABELS[name]}</b><strong>${Number(items[name] ?? 0)}</strong></span>`);
   stock.push(`<span class="resource-chip resource-chip--fire ${currentFire.lit ? '' : 'is-out'}"><b>篝火</b><strong>${currentFire.lit ? currentFire.fuel.toFixed(1) : '熄灭'}</strong></span>`);
+  if (storage) stock.push(`<span class="resource-chip resource-chip--storage"><b>${esc(storage.label)}</b><strong>${storage.used}/${storage.capacity}</strong></span>`);
   resources.innerHTML = stock.join('');
 }
 
 function renderConstruction() {
-  const building = buildings.activeByType('communalShelter') ?? buildings.completedByType('communalShelter');
+  const building = buildings.list({ includeCompleted: false })[0]
+    ?? buildings.completedByType('storageShed')
+    ?? buildings.completedByType('communalShelter');
   if (!building) {
-    construction.innerHTML = '<p class="muted">正在划定第一处工地。</p>';
+    construction.innerHTML = '<p class="muted">正在规划聚落的第一处工地。</p>';
     return;
   }
   const data = buildings.getConstructionSummary(building.id);
-  const wood = Number(data.materials.delivered.wood ?? 0);
-  const needed = Number(data.materials.required.wood ?? 0);
+  const materialRows = Object.entries(data.materials.required)
+    .map(([itemId, amount]) => `${CAMP_ITEM_LABELS[itemId] ?? itemId} <b>${Number(data.materials.delivered[itemId] ?? 0)}</b> / ${amount}`)
+    .join(' · ');
   const percent = Math.round(data.progress * 100);
   const label = data.status === 'complete' ? '已建成' : data.materialsReady ? '施工中' : '筹集材料';
+  const completedDetail = data.typeId === 'storageShed'
+    ? `储存容量 +${data.effects.storageCapacity} · 遮蔽保护 +${Math.round(data.effects.storageProtection * 100)}%`
+    : `已入住 ${data.occupants.length} 人 · 夜间提供睡位`;
   construction.innerHTML = `<div class="construction-line"><strong>${esc(data.label)}</strong><span>${label}</span></div>
-    <div class="construction-material">木材 <b>${wood}</b> / ${needed}</div>
+    <div class="construction-material">${materialRows}</div>
     <div class="progress-track"><i style="width:${percent}%"></i></div>
-    <div class="construction-footnote">施工进度 ${percent}% · ${data.status === 'complete' ? `已入住 ${data.occupants.length} 人 · 夜间提供睡位` : esc(data.description)}</div>`;
+    <div class="construction-footnote">施工进度 ${percent}% · ${data.status === 'complete' ? completedDetail : esc(data.description)}</div>`;
 }
 
 function renderLog() {
@@ -193,10 +209,21 @@ bus.on('people:changed', ({ person, reason }) => {
 bus.on('camp:changed', renderCamp);
 bus.on('buildings:changed', () => { renderConstruction(); view.redraw(); });
 bus.on('buildings:completed', ({ building }) => {
-  const residents = people.getAlive().map((person) => person.id);
-  buildings.assignOccupants(building.id, residents);
-  residents.forEach((id) => people.setLocation(id, { homeId: building.id }));
-  status.textContent = '集体草棚建成，十位村民第一次有了遮蔽之所。';
+  if (building.typeId === 'communalShelter') {
+    const residents = people.getAlive().map((person) => person.id);
+    buildings.assignOccupants(building.id, residents);
+    residents.forEach((id) => people.setLocation(id, { homeId: building.id }));
+    status.textContent = '集体草棚建成，十位村民第一次有了遮蔽之所。';
+  }
+  if (building.typeId === 'storageShed') {
+    camp.applyStorageUpgrade('starting-camp', {
+      sourceBuildingId: building.id,
+      label: building.label,
+      capacityDelta: building.effects.storageCapacity,
+      protectionDelta: building.effects.storageProtection,
+    });
+    status.textContent = '简易储物棚建成，营地物资有了更大的遮蔽空间。';
+  }
   render();
 });
 bus.on('actions:log', ({ entry }) => { status.textContent = entry.summary; renderLog(); });
