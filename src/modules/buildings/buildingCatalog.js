@@ -12,12 +12,12 @@ export const BUILDING_TYPES = Object.freeze({
   storageShed: {
     id: 'storageShed',
     label: '简易储物棚',
-    description: '让共享物资有明确的存放地点。',
+    description: '把物资从露天堆放转入有遮蔽的储存空间。',
     footprint: { width: 5, height: 4 },
     materials: { wood: 8 },
     workRequired: 6,
     capacity: 0,
-    effects: { storageProtection: 0.4 },
+    effects: { storageCapacity: 72, storageProtection: 0.6 },
   },
 });
 
