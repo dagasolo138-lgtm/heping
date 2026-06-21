@@ -6,9 +6,9 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function createMapView({ canvas, mapSystem, peopleSystem, controls = [], onPersonSelect, onReadout }) {
+export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople, controls = [], onPersonSelect, onReadout }) {
   const context = canvas.getContext('2d');
-  const map = mapSystem.get();
+  let map = mapSystem.get();
   const camera = {
     x: map.spawnPoint.x,
     y: map.spawnPoint.y,
@@ -20,6 +20,10 @@ export function createMapView({ canvas, mapSystem, peopleSystem, controls = [], 
   let frameId = null;
   let lastPaint = 0;
   let dirty = true;
+
+  function renderPeople() {
+    return getRenderPeople ? getRenderPeople() : peopleSystem.getAlive();
+  }
 
   function clampCamera() {
     const halfWidth = viewport.width / (2 * camera.zoom);
@@ -75,16 +79,16 @@ export function createMapView({ canvas, mapSystem, peopleSystem, controls = [], 
     context.fillRect(0, 0, viewport.width, viewport.height);
     drawTerrain(context, map, camera, viewport);
     drawFeatures(context, map, camera, viewport, time);
-    drawPeopleTokens(context, peopleSystem.getAlive(), camera, viewport, time, selectedId);
+    drawPeopleTokens(context, renderPeople(), camera, viewport, time, selectedId);
     onReadout?.({ x: Math.round(camera.x), y: Math.round(camera.y), zoom: camera.zoom });
   }
 
   function pickPerson(event) {
     const point = worldFromClient(event.clientX, event.clientY);
-    const candidate = peopleSystem.getAlive()
+    const candidate = renderPeople()
       .filter((person) => person.location.tileX !== null)
       .map((person) => ({ person, distance: Math.hypot(person.location.tileX + 0.5 - point.x, person.location.tileY + 0.5 - point.y) }))
-      .sort((a, b) => a.distance - b.distance)[0];
+      .sort((first, second) => first.distance - second.distance)[0];
     if (candidate && candidate.distance < Math.max(0.9, 11 / camera.zoom)) onPersonSelect?.(candidate.person.id);
   }
 
@@ -137,6 +141,7 @@ export function createMapView({ canvas, mapSystem, peopleSystem, controls = [], 
 
   return Object.freeze({
     setSelectedPerson(id) { selectedId = id; dirty = true; },
+    setMap(nextMap) { map = nextMap; clampCamera(); dirty = true; },
     focusPerson,
     redraw() { dirty = true; },
     destroy() { window.removeEventListener('resize', resize); cancelAnimationFrame(frameId); },
