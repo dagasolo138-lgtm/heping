@@ -60,7 +60,9 @@ export function createMapSystem({ eventBus, gameTime }) {
     addFeature: (feature) => { addFeature(requireMap(), feature); commit('feature:add'); return clone(feature); },
     removeFeature: (featureId) => {
       const removed = removeFeature(requireMap(), featureId);
-      if (removed) commit('feature:remove');
+      if (!removed) return null;
+      commit('feature:remove');
+      eventBus.emit('map:feature-removed', { feature: clone(removed), time: stamp() });
       return removed;
     },
   });
