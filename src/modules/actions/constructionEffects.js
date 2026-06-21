@@ -1,9 +1,8 @@
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 
-function finishRecord({ peopleSystem, personId, task, gameTime, summary, details = {} }) {
-  const person = peopleSystem.get(personId);
+function saveAction({ personId, task, gameTime, peopleSystem, agent, summary, details = {} }) {
   const stamp = gameTime.stamp();
-  peopleSystem.setLocation(personId, {});
+  peopleSystem.setLocation(personId, { tileX: Math.round(agent.x), tileY: Math.round(agent.y) });
   peopleSystem.addLifeEvent(personId, {
     type: `action:${task.type}`,
     summary,
@@ -47,10 +46,8 @@ export function deliverConstructionMaterial({ agent, task, peopleSystem, buildin
   const carried = Math.min(Number(task.data.carriedAmount ?? 0), Number(person.inventory.items[task.data.materialId] ?? 0));
   const delivered = buildingSystem.deliverReservation(task.data.siteId, task.data.reservationId, carried);
   if (carried > 0) peopleSystem.changeItem(person.id, task.data.materialId, -carried);
-  const summary = delivered?.amount
-    ? `${person.identity.name}把 ${delivered.amount} 份木材送到了集体草棚工地。`
-    : `${person.identity.name}抵达工地时，建材交接没有完成。`;
-  finishRecord({ peopleSystem, personId: person.id, task, gameTime, summary, details: { siteId: task.data.siteId, materialId: task.data.materialId, amount: delivered?.amount ?? 0 } });
+  const summary = delivered?.amount ? `${person.identity.name}把 ${delivered.amount} 份木材送到了集体草棚工地。` : `${person.identity.name}抵达工地时，建材交接没有完成。`;
+  saveAction({ agent, peopleSystem, personId: person.id, task, gameTime, summary, details: { siteId: task.data.siteId, materialId: task.data.materialId, amount: delivered?.amount ?? 0 } });
   return { summary, personId: person.id };
 }
 
@@ -58,9 +55,7 @@ export function performConstructionWork({ agent, task, peopleSystem, buildingSys
   const person = peopleSystem.get(agent.personId);
   if (!person) return null;
   const result = buildingSystem.addWork(task.data.siteId, task.data.workAmount);
-  const summary = result?.completed
-    ? `${person.identity.name}完成了集体草棚的最后施工，第一处住所建成。`
-    : `${person.identity.name}继续搭建集体草棚的骨架。`;
-  finishRecord({ peopleSystem, personId: person.id, task, gameTime, summary, details: { siteId: task.data.siteId, work: task.data.workAmount, completed: Boolean(result?.completed) } });
+  const summary = result?.completed ? `${person.identity.name}完成了集体草棚的最后施工，第一处住所建成。` : `${person.identity.name}继续搭建集体草棚的骨架。`;
+  saveAction({ agent, peopleSystem, personId: person.id, task, gameTime, summary, details: { siteId: task.data.siteId, work: task.data.workAmount, completed: Boolean(result?.completed) } });
   return { summary, personId: person.id, completedBuilding: result?.completed ? result.building : null };
 }
