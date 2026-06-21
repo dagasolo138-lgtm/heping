@@ -1,12 +1,13 @@
 import { drawTerrain } from './terrainRenderer.js';
 import { drawFeatures } from './featureRenderer.js';
+import { drawBuildings } from './buildingRenderer.js';
 import { drawPeopleTokens } from './personTokenRenderer.js';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople, controls = [], onPersonSelect, onReadout }) {
+export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople, getRenderBuildings, controls = [], onPersonSelect, onReadout }) {
   const context = canvas.getContext('2d');
   let map = mapSystem.get();
   const camera = {
@@ -23,6 +24,10 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
 
   function renderPeople() {
     return getRenderPeople ? getRenderPeople() : peopleSystem.getAlive();
+  }
+
+  function renderBuildings() {
+    return getRenderBuildings ? getRenderBuildings() : [];
   }
 
   function clampCamera() {
@@ -79,6 +84,7 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
     context.fillRect(0, 0, viewport.width, viewport.height);
     drawTerrain(context, map, camera, viewport);
     drawFeatures(context, map, camera, viewport, time);
+    drawBuildings(context, renderBuildings(), camera, viewport);
     drawPeopleTokens(context, renderPeople(), camera, viewport, time, selectedId);
     onReadout?.({ x: Math.round(camera.x), y: Math.round(camera.y), zoom: camera.zoom });
   }
