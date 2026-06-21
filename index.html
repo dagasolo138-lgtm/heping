@@ -11,19 +11,19 @@
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SHENGLING / FOUNDATION 02</p>
+        <p class="eyebrow">SHENGLING / FOUNDATION 03</p>
         <h1>生灵</h1>
-        <p class="subtitle">人物系统 · 起始河谷 · 空间原型</p>
+        <p class="subtitle">人物系统 · 起始河谷 · 自主行动原型</p>
       </div>
       <div class="topbar__status" aria-live="polite">
         <span class="status-dot"></span>
-        <span id="system-status">10 位村民已进入起始河谷</span>
+        <span id="system-status">村民正在分头寻找水源、食物与木材</span>
       </div>
     </header>
 
     <section class="phase-note">
-      <strong>第二阶段：</strong>
-      起始河谷为 160 米 × 120 米，每格 1 米 × 1 米，并按 16 米 × 16 米切分为区块。拖动地图查看地形；点击村民查看档案。
+      <strong>第三阶段：</strong>
+      村民会读取饥饿、口渴、精力、技能、背包和营地库存，自动取水、采集浆果、砍树、搬运资源与休息。每次完成行动都会写入该人物的人生事实。
     </section>
 
     <section class="map-panel panel">
@@ -40,7 +40,7 @@
       </div>
       <div class="map-canvas-wrap">
         <canvas id="map-canvas" aria-label="起始河谷地图"></canvas>
-        <div class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>营地附近 · 尚未建造</div>
+        <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
         <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
       </div>
       <div class="map-legend">
@@ -49,6 +49,16 @@
         <span><i class="legend-swatch legend-swatch--water"></i>河流</span>
         <span><i class="legend-swatch legend-swatch--camp"></i>营地</span>
         <span>拖动查看 · 滚轮或按钮缩放</span>
+      </div>
+      <div class="settlement-strip">
+        <section class="camp-stock">
+          <div class="strip-heading"><p class="panel__kicker">CAMP STOCK</p><h3>营地储备</h3></div>
+          <div id="camp-resources" class="resource-chips" aria-live="polite"></div>
+        </section>
+        <section class="action-feed">
+          <div class="strip-heading"><p class="panel__kicker">LIVING RECORD</p><h3>即时动向</h3></div>
+          <ol id="action-log" class="action-log" aria-live="polite"></ol>
+        </section>
       </div>
     </section>
 
@@ -71,19 +81,19 @@
 
     <section class="foundation-grid">
       <article class="foundation-card">
-        <p class="panel__kicker">SPACE</p>
-        <h3>1 米精度</h3>
-        <p>人物、树木、石块、篝火和未来的房屋都占据真实地块；人物坐标可在地块内平滑移动。</p>
+        <p class="panel__kicker">SURVIVAL LOOP</p>
+        <h3>需求驱动</h3>
+        <p>口渴和饥饿优先于生产；精力低时会返回营地休息。职业决定效率和默认偏好，不会把人锁死。</p>
       </article>
       <article class="foundation-card">
-        <p class="panel__kicker">CHUNKS</p>
-        <h3>区块化地图</h3>
-        <p>160 × 120 米地图被分为 10 × 8 个区块。后续扩大世界时，只渲染你正在看的区域。</p>
+        <p class="panel__kicker">COOPERATION</p>
+        <h3>共享库存</h3>
+        <p>木材、浆果与清水归还到同一营地。砍伐者、采集者与搬运者开始通过资源缺口产生协作。</p>
       </article>
       <article class="foundation-card">
         <p class="panel__kicker">NEXT</p>
-        <h3>行动逻辑</h3>
-        <p>下一步让人物根据饥饿、技能和地图资源选择砍树、采集、取水、建造与协作。</p>
+        <h3>建造与分工</h3>
+        <p>下一轮会加入篝火、棚屋、储物点和建造任务，让木材真正变成可居住的聚落。</p>
       </article>
     </section>
   </main>
