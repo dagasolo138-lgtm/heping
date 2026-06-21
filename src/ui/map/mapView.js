@@ -1,5 +1,6 @@
 import { drawTerrain } from './terrainRenderer.js';
 import { drawDaylightOverlay } from './daylightRenderer.js';
+import { drawWeatherOverlay } from './weatherRenderer.js';
 import { drawFeatures } from './featureRenderer.js';
 import { drawBuildings } from './buildingRenderer.js';
 import { drawPeopleTokens } from './personTokenRenderer.js';
@@ -8,7 +9,7 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople, getRenderBuildings, getDayPhase, controls = [], onPersonSelect, onReadout }) {
+export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople, getRenderBuildings, getDayPhase, getWeather, getFire, controls = [], onPersonSelect, onReadout }) {
   const context = canvas.getContext('2d');
   let map = mapSystem.get();
   const camera = {
@@ -80,14 +81,18 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
     if (!dirty && time - lastPaint < 110) return;
     lastPaint = time;
     dirty = false;
+    const phase = getDayPhase?.();
+    const weather = getWeather?.();
+    const fire = getFire?.();
     context.clearRect(0, 0, viewport.width, viewport.height);
     context.fillStyle = '#172b28';
     context.fillRect(0, 0, viewport.width, viewport.height);
     drawTerrain(context, map, camera, viewport);
-    drawDaylightOverlay(context, viewport, getDayPhase?.());
-    drawFeatures(context, map, camera, viewport, time);
+    drawDaylightOverlay(context, viewport, phase);
+    drawFeatures(context, map, camera, viewport, time, fire);
     drawBuildings(context, renderBuildings(), camera, viewport);
     drawPeopleTokens(context, renderPeople(), camera, viewport, time, selectedId);
+    drawWeatherOverlay(context, viewport, weather, time);
     onReadout?.({ x: Math.round(camera.x), y: Math.round(camera.y), zoom: camera.zoom });
   }
 
