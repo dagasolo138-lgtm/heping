@@ -34,7 +34,7 @@ function traceTiles(from, to) {
     if (doubleError > -dy) { error -= dy; x += stepX; }
     if (doubleError < dx) { error += dx; y += stepY; }
   }
-  return tiles;
+  return tiles.slice(1);
 }
 
 export function createRoadSystem({ eventBus, gameTime }) {
