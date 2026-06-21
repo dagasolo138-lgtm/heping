@@ -1,5 +1,6 @@
 import { TERRAIN } from '../../data/constants/terrain.js';
 import { cropGrowthMultiplier, getCropType } from './cropCatalog.js';
+import { SECOND_FIELD_EXPANSION, canPlanSecondField, findSecondFieldAnchor } from './fieldExpansionPlanner.js';
 
 const FIELD_FOOTPRINT = Object.freeze({ width: 6, height: 4 });
 const CLEARING_WORK_REQUIRED = 8;
@@ -79,6 +80,8 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
   function getSummary() {
     const list = [...fields.values()];
     const readyToSow = list.filter((field) => field.status === 'readyToSow');
+    const firstField = list.find((field) => field.id === 'first-millet-field') ?? null;
+    const secondField = list.find((field) => field.id === SECOND_FIELD_EXPANSION.id) ?? null;
     return {
       total: list.length,
       clearing: list.filter((field) => field.status === 'clearing' || field.status === 'planned').length,
@@ -87,6 +90,10 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
       readyToSow: readyToSow.length,
       sowable: readyToSow.filter((field) => getCropRule(field.cropId).canSow).length,
       waitingToSow: readyToSow.filter((field) => !getCropRule(field.cropId).canSow).length,
+      expanding: list.filter((field) => field.origin === 'manual-expansion' && (field.status === 'planned' || field.status === 'clearing')).length,
+      expansionUnlocked: Number(firstField?.harvestCount ?? 0) >= SECOND_FIELD_EXPANSION.requiredHarvests,
+      expansionAvailable: canPlanSecondField(list),
+      secondFieldStatus: secondField?.status ?? null,
       seedStock,
       season: getSeason(),
     };
@@ -123,27 +130,67 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     ];
   }
 
-  function ensureFirstField({ campAnchor }) {
-    if (fields.size || !buildingSystem.completedByType('storageShed')) return null;
-    const anchor = candidateAnchors(campAnchor).find((candidate) => !overlapsAny(candidate, FIELD_FOOTPRINT));
-    if (!anchor) return null;
-    const field = {
-      id: 'first-millet-field',
-      label: '第一块粟田',
+  function createField({ id, label, anchor, footprint, clearingWorkRequired, origin, expansion = null }) {
+    const stamp = gameTime.stamp();
+    return {
+      id,
+      label,
       anchor,
-      footprint: clone(FIELD_FOOTPRINT),
+      footprint: clone(footprint),
       cropId: 'millet',
+      origin,
+      expansion,
       status: 'planned',
-      clearing: { required: CLEARING_WORK_REQUIRED, completed: 0 },
+      clearing: { required: clearingWorkRequired, completed: 0 },
       growth: { progressed: 0, required: getCropType('millet').growthRequiredMinutes, lastTick: Number(gameTime.now().tick ?? 0) },
       plantedAt: null,
       matureAt: null,
       harvestCount: 0,
-      createdAt: gameTime.stamp(),
-      updatedAt: gameTime.stamp(),
+      createdAt: stamp,
+      updatedAt: stamp,
     };
+  }
+
+  function ensureFirstField({ campAnchor }) {
+    if (fields.size || !buildingSystem.completedByType('storageShed')) return null;
+    const anchor = candidateAnchors(campAnchor).find((candidate) => !overlapsAny(candidate, FIELD_FOOTPRINT));
+    if (!anchor) return null;
+    const field = createField({
+      id: 'first-millet-field',
+      label: '第一块粟田',
+      anchor,
+      footprint: FIELD_FOOTPRINT,
+      clearingWorkRequired: CLEARING_WORK_REQUIRED,
+      origin: 'initial',
+    });
     fields.set(field.id, field);
     emit('field:planned', field);
+    return get(field.id);
+  }
+
+  function ensureExpansionField({ campAnchor }) {
+    const list = [...fields.values()];
+    if (!buildingSystem.completedByType('storageShed') || !canPlanSecondField(list)) return null;
+    const anchor = findSecondFieldAnchor({
+      campAnchor,
+      isAvailable: (candidate) => !overlapsAny(candidate, SECOND_FIELD_EXPANSION.footprint),
+    });
+    if (!anchor) return null;
+    const firstField = fields.get('first-millet-field');
+    const field = createField({
+      id: SECOND_FIELD_EXPANSION.id,
+      label: SECOND_FIELD_EXPANSION.label,
+      anchor,
+      footprint: SECOND_FIELD_EXPANSION.footprint,
+      clearingWorkRequired: SECOND_FIELD_EXPANSION.clearingWorkRequired,
+      origin: 'manual-expansion',
+      expansion: {
+        unlockedByFieldId: firstField.id,
+        unlockedAtHarvest: firstField.harvestCount,
+      },
+    });
+    fields.set(field.id, field);
+    emit('field:expansion-planned', field);
     return get(field.id);
   }
 
@@ -235,6 +282,7 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
 
   return Object.freeze({
     ensureFirstField,
+    ensureExpansionField,
     nextWorkField,
     clearField,
     sow,
