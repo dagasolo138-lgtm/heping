@@ -1,6 +1,6 @@
 import { createSkillSet } from '../../data/constants/skills.js';
 
-export const PEOPLE_SCHEMA_VERSION = 1;
+export const PEOPLE_SCHEMA_VERSION = 2;
 
 export function createBlankPerson() {
   return {
@@ -47,8 +47,8 @@ export function createBlankPerson() {
     relations: {},
     memories: {
       lifeEvents: [],
+      personal: [],
       recent: [],
-      player: [],
     },
     inventory: {
       items: {},
