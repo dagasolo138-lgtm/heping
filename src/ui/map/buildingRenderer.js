@@ -36,16 +36,12 @@ function drawSite(context, building, camera, viewport) {
     context.lineTo(origin.x + x * camera.zoom, origin.y + height * 0.32);
     context.stroke();
   }
-  context.beginPath();
-  context.moveTo(origin.x + camera.zoom * 0.6, origin.y + height * 0.35);
-  context.lineTo(origin.x + width - camera.zoom * 0.6, origin.y + height * 0.35);
-  context.stroke();
 
   context.fillStyle = 'rgba(7, 14, 12, 0.58)';
   context.fillRect(origin.x, origin.y - Math.max(15, camera.zoom * 0.85), width, Math.max(12, camera.zoom * 0.65));
   context.fillStyle = '#ecd59d';
   context.font = `${Math.max(10, camera.zoom * 0.48)}px sans-serif`;
-  context.fillText(`草棚工地 ${Math.round(progress * 100)}%`, origin.x + Math.max(4, camera.zoom * 0.28), origin.y - Math.max(4, camera.zoom * 0.2));
+  context.fillText(`${building.label}工地 ${Math.round(progress * 100)}%`, origin.x + Math.max(4, camera.zoom * 0.28), origin.y - Math.max(4, camera.zoom * 0.2));
   context.restore();
 }
 
@@ -92,10 +88,45 @@ function drawShelter(context, building, camera, viewport) {
   context.restore();
 }
 
+function drawStorageShed(context, building, camera, viewport) {
+  const origin = toScreen(building.anchor.x, building.anchor.y, camera, viewport);
+  const width = building.footprint.width * camera.zoom;
+  const height = building.footprint.height * camera.zoom;
+  context.save();
+  context.fillStyle = 'rgba(7, 12, 10, 0.24)';
+  context.beginPath();
+  context.ellipse(origin.x + width * 0.52, origin.y + height * 0.9, width * 0.54, height * 0.17, 0, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = '#735137';
+  context.fillRect(origin.x + width * 0.1, origin.y + height * 0.34, width * 0.8, height * 0.52);
+  context.strokeStyle = '#4d3321';
+  context.lineWidth = Math.max(1, camera.zoom * 0.075);
+  context.strokeRect(origin.x + width * 0.1, origin.y + height * 0.34, width * 0.8, height * 0.52);
+
+  context.fillStyle = '#6b5739';
+  context.beginPath();
+  context.moveTo(origin.x, origin.y + height * 0.36);
+  context.lineTo(origin.x + width * 0.5, origin.y + height * 0.05);
+  context.lineTo(origin.x + width, origin.y + height * 0.36);
+  context.closePath();
+  context.fill();
+  context.strokeStyle = '#443521';
+  context.stroke();
+
+  context.fillStyle = '#33281c';
+  context.fillRect(origin.x + width * 0.42, origin.y + height * 0.52, width * 0.2, height * 0.34);
+  context.fillStyle = 'rgba(235, 205, 143, 0.95)';
+  context.font = `${Math.max(9, camera.zoom * 0.38)}px sans-serif`;
+  context.fillText('储', origin.x + width * 0.43, origin.y + height * 0.46);
+  context.restore();
+}
+
 export function drawBuildings(context, buildings, camera, viewport) {
   buildings.forEach((building) => {
     if (!visible(building, camera, viewport)) return;
-    if (building.status === 'complete') drawShelter(context, building, camera, viewport);
-    else drawSite(context, building, camera, viewport);
+    if (building.status !== 'complete') drawSite(context, building, camera, viewport);
+    else if (building.typeId === 'storageShed') drawStorageShed(context, building, camera, viewport);
+    else drawShelter(context, building, camera, viewport);
   });
 }
