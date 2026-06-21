@@ -17,7 +17,7 @@ export function createFounders(peopleSystem) {
       name: spec.name,
       gender: spec.gender,
       portraitSeed: `founder-${index + 1}-${spec.name}`,
-      birth: { year: 1 - spec.age, day: 1 + ((index * 31) % 300) },
+      birth: { year: 1 - spec.age, day: 1 },
     },
     work: { occupation: spec.occupation, skills: spec.skills, preferences: spec.preferences },
     traits: spec.traits,
