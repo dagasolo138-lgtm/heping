@@ -1,0 +1,19 @@
+export const ACTION_TYPES = Object.freeze({
+  FETCH_WATER: 'fetchWater',
+  GATHER_BERRIES: 'gatherBerries',
+  CHOP_TREE: 'chopTree',
+  HAUL_TO_CAMP: 'haulToCamp',
+  REST: 'rest',
+});
+
+export const ACTION_META = Object.freeze({
+  [ACTION_TYPES.FETCH_WATER]: { label: '取水', workDuration: 1.4, phaseLabel: '汲水中' },
+  [ACTION_TYPES.GATHER_BERRIES]: { label: '采集浆果', workDuration: 2.1, phaseLabel: '采集中' },
+  [ACTION_TYPES.CHOP_TREE]: { label: '砍树', workDuration: 3.6, phaseLabel: '砍伐中' },
+  [ACTION_TYPES.HAUL_TO_CAMP]: { label: '搬运资源', workDuration: 0.7, phaseLabel: '归还物资' },
+  [ACTION_TYPES.REST]: { label: '休息', workDuration: 4.2, phaseLabel: '休息中' },
+});
+
+export function actionLabel(type) {
+  return ACTION_META[type]?.label ?? '待命';
+}
