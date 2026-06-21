@@ -18,7 +18,7 @@
 - 人物不知道“玩家”或“游戏”存在；相遇、印象、好奇等属于人物 `personal` 记忆。
 - 宗教、疾病、政治、经济、家族、战争、科技等都应作为独立模块接入。
 
-## 2. 当前版本：v0.10
+## 2. 当前版本：v0.11
 
 已完成：
 
@@ -32,9 +32,11 @@
 8. 自然资源恢复：树被砍后留下树桩，3 个世界日后尝试恢复；浆果被采后留下恢复灌丛，1 个世界日后尝试恢复；占用位置时顺延 1 天。
 9. 聚落路径：人物跨入新地块积累踏行热度；4 次经过形成踩踏路径，10 次经过形成土路；土路使移动速度提高 16%。
 10. 第一块粟田：储物棚完成后自动选地；开垦后转为农地；粟种播下后按天气生长；成熟后收获 8 份粟米并返还 2 份种子；粟米可搬入营地并在浆果不足时补充饥饿。
-11. GitHub Pages 自动部署；部署前对 `src` 下全部 JS 执行 `node --check`。
+11. 食物批次与储存损耗：浆果、粟米按批次保存，新批次初始新鲜度 100；村民优先吃新鲜度最低的批次；食物完全腐败后从库存移除并计入累计损耗。
+12. 天气保护：每 30 个世界分钟结算食物新鲜度；降雨、冷雨加速损耗；储物棚 `protection` 直接降低损耗倍率。
+13. GitHub Pages 自动部署；部署前对 `src` 下全部 JS 执行 `node --check`。
 
-当前未完成：自动存档、季节、土壤肥力、食物腐败/雨损、建筑碰撞、正式人物立绘、AI 传记/史书/对话、浏览器端自动化测试。
+当前未完成：自动存档、季节、土壤肥力、灌溉、更多农田、更多作物、建筑碰撞、正式人物立绘、AI 传记/史书/对话、浏览器端自动化测试。
 
 ## 3. 启动与运行链
 
@@ -48,27 +50,26 @@ index.html
        │    ├─ WeatherSystem / FireSystem
        │    ├─ ActionSystem / MapView / 页面 UI
        │    └─ actionSystem.start()
-       ├─ src/bootstrap/attachEcologyRuntime.js
-       │    └─ ResourceRenewalSystem 监听地图资源移除与世界时间推进
-       ├─ src/bootstrap/attachRoadRuntime.js
-       │    └─ RoadSystem 采样人物实际移动并累积踏行热度
-       └─ src/bootstrap/attachFarmRuntime.js
-            └─ FarmSystem 管理粟田、种子、生长与收获
+       ├─ attachEcologyRuntime.js
+       │    └─ ResourceRenewalSystem
+       ├─ attachRoadRuntime.js
+       │    └─ RoadSystem
+       ├─ attachFarmRuntime.js
+       │    └─ FarmSystem
+       └─ attachFoodStorageRuntime.js
+            └─ FoodStorageSystem
 ```
 
 | 文件 | 作用 |
 |---|---|
 | `index.html` | 页面骨架、Canvas、人物列表、资源栏、建造栏、天气栏、日志栏。 |
-| `src/app.js` | 启动主世界，再挂接生态、路径与农田运行时模块。 |
+| `src/app.js` | 启动主世界，再顺序挂接生态、路径、农田、食物储存运行时模块。 |
 | `src/app-v4.js` | 主装配器：创建世界系统、连接 UI、启动模拟。 |
 | `src/bootstrap/attachEcologyRuntime.js` | 挂接资源恢复系统与生态提示。 |
 | `src/bootstrap/attachRoadRuntime.js` | 挂接踏行热度、路径提示与道路生成。 |
 | `src/bootstrap/attachFarmRuntime.js` | 挂接农田系统、农事提示和粟米资源芯片。 |
-| `src/styles/main.css` | 主界面样式。 |
-| `src/styles/construction.css` | 建造状态栏样式。 |
-| `src/styles/environment.css` | 天气、篝火、暴露、生态、路径和农事提示样式。 |
-
-**约束：** 新功能优先新增独立模块；不要把业务逻辑堆进 `index.html` 或 `app.js`。
+| `src/bootstrap/attachFoodStorageRuntime.js` | 挂接食物批次、新鲜度、雨损和储物棚防护提示。 |
+| `src/styles/environment.css` | 天气、篝火、暴露、生态、路径、农事和食物保存提示样式。 |
 
 ## 4. 模块地图
 
@@ -79,13 +80,14 @@ src/
   modules/
     people/      # 人物数据与人物系统
     map/         # 地图生成、查询、修改、服务入口
-    settlements/ # 营地共享库存、容量与储存升级
+    settlements/ # 营地库存、容量、食物批次与储存升级
     actions/     # 任务规划、寻路、执行、睡眠、添柴、农事、总调度
     buildings/   # 建筑目录、工地、选址、施工、居住与储物棚
     environment/ # 昼夜、天气、篝火、环境暴露
     ecology/     # 资源耗尽、恢复队列、树桩和灌丛标记
     roads/       # 踏行热度、路径阶段、土路移动倍率
     farming/     # 粟米目录、农田选址、开垦、生长、收获
+    storage/     # 食物批次、新鲜度、天气损耗、储物保护
   bootstrap/     # 运行时挂接模块
   ui/map/        # Canvas 地形、农田、路径、光照、天气、资源、建筑、人物
   styles/        # CSS
@@ -121,15 +123,13 @@ extensions   后续模块扩展槽
 - `personal`：人物主观记忆，如相遇、印象、对陌生人的好奇。
 - 不使用“玩家记忆”或 `player memory`。
 
-重点文件：`personSchema.js`、`personFactory.js`、`personValidation.js`、`personMutations.js`、`personMemory.js`、`peopleSystem.js`、`createFounders.js`。
-
 ### 4.3 地图层：`modules/map/`
 
 - `mapSchema.js`：地图结构。
 - `startingValleyGenerator.js`：固定种子生成起始河谷。
 - `mapQueries.js`：地形、资源、水源、通行和邻格查询。
 - `mapMutations.js`：添加/移除物件；`removeFeature()` 会返回被移除物件数据。
-- `mapSystem.js`：地图服务入口；资源移除时发出 `map:feature-removed`；新增 `setTerrainBatch()` 供农田一次性转为农地。
+- `mapSystem.js`：地图服务入口；资源移除时发出 `map:feature-removed`；`setTerrainBatch()` 供农田批量转为农地。
 - `placeStartingSettlers.js`：把十人放到营地周围。
 
 关键参数：
@@ -149,9 +149,11 @@ extensions   后续模块扩展槽
 
 - 管理共享库存、容量、剩余空间和储存升级。
 - 初始容量 24；储物棚升级后容量 +72。
-- 当前重点物资：`water`、`berries`、`millet`、`wood`。
-- `change()` 存入资源时会受剩余容量限制；满仓时只接收可容纳部分。
+- 重点物资：`water`、`berries`、`millet`、`wood`。
+- `change()` 存入资源时受剩余容量限制；满仓时只接收可容纳部分。
 - `applyStorageUpgrade()` 按建筑 ID 去重应用扩容和保护。
+- 食物使用 `camp.food.batches` 保存批次：`id`、`itemId`、`amount`、`freshness`、`acquiredAt`、`updatedAt`。
+- `take()` 对食物优先扣除最低新鲜度批次；`ageFood()` 使批次变质，腐败批次自动从 `items` 扣除并累计到 `food.spoiled`。
 
 `modules/buildings/`
 
@@ -172,8 +174,6 @@ extensions   后续模块扩展槽
 - `weatherPlanner.js` / `fireEffects.js`：添柴和取暖。
 - `actionSystem.js`：行动、天气、篝火、暴露、农事与时间总调度。
 
-当前行动：取水、采集浆果、砍树、搬回营地、休息、运送建材、施工、睡眠、添柴、取暖、开垦农田、播种粟米、收获粟米。
-
 `modules/environment/`
 
 - `dayCycle.js`：黎明 05:00–07:00；白昼 07:00–17:00；黄昏 17:00–20:00；夜晚 20:00–05:00。
@@ -183,16 +183,17 @@ extensions   后续模块扩展槽
 
 当前模拟速度：约 1 秒现实时间 = 6 分钟世界时间。
 
-### 4.5 生态层：`modules/ecology/`
+### 4.5 生态与路径
+
+资源恢复：
 
 ```text
-树 / 浆果丛被地图移除
+树 / 浆果丛被移除
 → MapSystem 发出 map:feature-removed
 → ResourceRenewalSystem 登记恢复条目
 → 添加 treeStump / berryPatch 标记
-→ simulation:time 推进时检查到期条目
-→ 原位置空闲则删除标记、恢复原资源
-→ 位置被建筑或物件占用则顺延 1 个世界日
+→ simulation:time 检查到期条目
+→ 原位置空闲则恢复资源；被占用则顺延 1 个世界日
 ```
 
 | 资源 | 标记 | 恢复时间 |
@@ -200,22 +201,9 @@ extensions   后续模块扩展槽
 | 树 | `treeStump` | 3 个世界日 / 4320 分钟 |
 | 浆果丛 | `berryPatch` | 1 个世界日 / 1440 分钟 |
 
-### 4.6 路径层：`modules/roads/`
+路径：人物实际移动每 240ms 采样一次；跨入新格才累计热度；4 次经过形成 `wornTrail`，10 次经过形成 `dirtRoad`；土路移动速度 ×1.16。路径不改变 A* 通行性，当前不衰退、不持久化。
 
-```text
-人物实际移动坐标（每 240ms 采样）
-→ 人物跨入新的整格
-→ 记录该格交通次数
-→ 4 次经过：wornTrail（视觉踩踏路径）
-→ 10 次经过：dirtRoad（成型土路）
-→ actionExecutor 读取土路格，移动速度 × 1.16
-```
-
-约束：只记录跨入的新格；路径只负责视觉和移动倍率，不改变 A* 通行性；目前不衰退、不持久化。
-
-### 4.7 农业层：`modules/farming/`
-
-`cropCatalog.js`
+### 4.6 农业层：`modules/farming/`
 
 | 作物 | 初始种子 | 播种消耗 | 生长要求 | 收获 | 返种 |
 |---|---:|---:|---:|---:|---:|
@@ -223,23 +211,38 @@ extensions   后续模块扩展槽
 
 天气生长倍率：晴朗 1.00；阴天 0.86；降雨 1.28；寒冷 0.54；冷雨 0.70。
 
-`farmSystem.js`
-
 ```text
 储物棚完成
-→ 找到营地附近 6×4 的草地或高草地，不能与物件、建筑、已有农田重叠
-→ 创建第一块粟田（planned）
-→ 村民开垦，累计 8 工作量
-→ MapSystem.setTerrainBatch() 把地块转为 FARMLAND（readyToSow）
-→ 消耗 1 粟种播种（growing）
+→ 找到营地附近 6×4 的草地或高草地
+→ 开垦累计 8 工作量
+→ 批量转为 FARMLAND
+→ 播种粟米
 → simulation:time 按天气推进成长
-→ 成熟（mature）
-→ 收获 8 粟米、返还 2 粟种，地块回到 readyToSow
+→ 成熟、收获、粟米入背包、搬回营地
 ```
 
-- 粟米进入人物背包；下一次规划会优先搬回营地。
-- `updateNeeds()` 在浆果不足时会消耗粟米，降低饥饿。
-- 田地不改变通行性；`farmRenderer.js` 负责待开垦、开垦、播种、生长和成熟的视觉状态。
+### 4.7 食物储存层：`modules/storage/`
+
+`foodStorageSystem.js` 监听 `simulation:time`，每 30 个世界分钟结算一次食物新鲜度。
+
+基础损耗率（新鲜度 / 世界分钟）：
+
+| 食物 | 基础率 |
+|---|---:|
+| 浆果 | 0.022 |
+| 粟米 | 0.0065 |
+
+天气倍率：晴朗 0.8；阴天 1.0；降雨 2.1；寒冷 0.7；冷雨 2.5。
+
+储物保护倍率：`1 - protection × 0.72`，最低为 0.28。当前储物棚保护 0.6，意味着天气损耗约降至原来的 56.8%。
+
+```text
+食物进入营地
+→ CampStore 创建新鲜度 100 的批次
+→ 每 30 分钟按 食物基础率 × 天气倍率 × 储物保护倍率 结算
+→ 新鲜度归零：整批食物腐败，库存扣减并累计损耗
+→ UI 显示浆果/粟米新鲜度、累计损耗、储物防护和当前风险
+```
 
 ## 5. 当前决策与数据流
 
@@ -261,17 +264,11 @@ extensions   后续模块扩展槽
 
 ```text
 地图资源 → 人物背包 → 营地库存 → 工地 / 篝火 / 人物消耗
-自然资源被耗尽 → 树桩或恢复灌丛 → 定时恢复为地图资源
-人物实际移动 → 踏行热度 → 踩踏路径 / 土路 → 移动倍率
-储物棚完成 → 粟田 → 粟种 → 生长 → 粟米 → 人物背包 → 营地 → 食物消耗
+自然资源耗尽 → 树桩或恢复灌丛 → 定时恢复为地图资源
+人物移动 → 踏行热度 → 踩踏路径 / 土路 → 移动倍率
+储物棚完成 → 粟田 → 粟种 → 生长 → 粟米 → 人物背包 → 营地
+食物批次 → 天气与储物保护结算 → 食用或腐败损耗
 ```
-
-环境效果：
-
-- 户外降雨增加潮湿；草棚内部和篝火暖区降低潮湿。
-- 寒冷、冷雨和潮湿会累积受寒。
-- 天气通过移动/工作乘数降低户外效率，也通过作物倍率影响粟米生长。
-- 储物棚当前只记录保护值；食物腐败、雨损和材料损耗尚未结算。
 
 ## 6. 事件与渲染连接点
 
@@ -280,9 +277,10 @@ extensions   后续模块扩展槽
 | `people:changed` | PeopleSystem | 刷新人物卡、人物列表和状态栏。 |
 | `map:changed` | MapSystem | 刷新地图。 |
 | `map:feature-removed` | MapSystem | 生态系统登记树或浆果恢复。 |
-| `camp:changed` | CampStore | 更新资源、篝火、容量和粟米资源芯片。 |
-| `actions:log` | ActionSystem | 更新即时动向。 |
-| `simulation:time` | ActionSystem | 更新世界时间、天气、篝火、生态到期检查与农作物成长。 |
+| `camp:changed` | CampStore | 更新资源、篝火、容量、粟米资源芯片和食物状态。 |
+| `camp:food-changed` | CampStore | 食物批次新鲜度/腐败变化。 |
+| `simulation:time` | ActionSystem | 更新时间、天气、篝火、生态、农作物成长和食物损耗检查。 |
+| `storage:food-aged` / `storage:food-spoiled` | FoodStorageSystem | 更新食物保存提示，并在腐败时显示状态消息。 |
 | `ecology:changed` / `ecology:regrown` | ResourceRenewalSystem | 更新生态提示与地图。 |
 | `roads:changed` | RoadSystem | 更新路径提示、地图和土路形成状态。 |
 | `farms:changed` / `farms:matured` | FarmSystem | 更新农事提示、田地渲染和成熟提示。 |
@@ -297,25 +295,27 @@ extensions   后续模块扩展槽
 
 ## 7. 已知限制与风险
 
-1. 刷新页面会重新开局；生态、路径、农田、种子和作物成长都不会持久化。
+1. 刷新页面会重新开局；生态、路径、农田、种子、作物成长和食物批次都不会持久化。
 2. CI 只有 JS 语法检查，没有浏览器测试。
 3. 草棚、储物棚和农田尚未作为寻路障碍。
 4. 极端情况下运输路径失效时，已领出的建材没有完整的落地或归还机制。
 5. 当前农业只有一块田和一种粟米，没有季节、土壤肥力、灌溉、虫害、轮作或人工扩田。
-6. 资源恢复时长、天气、路径阈值、作物倍率和食物数值仍是原型参数，尚未做平衡测试。
-7. 生态、路径与农田启动器依赖 `globalThis.__shenglingEventBus` 和 `globalThis.shengling`；重构主启动架构时需同步调整。
-8. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
+6. 食物损耗以整批食物腐败为单位；没有拆分为更细粒度的逐份损耗。
+7. 资源恢复、天气、路径阈值、作物倍率、食物损耗率和保护倍率仍是原型参数，尚未做平衡测试。
+8. 生态、路径、农田和食物储存启动器依赖 `globalThis.__shenglingEventBus` 和 `globalThis.shengling`；重构主启动架构时需同步调整。
+9. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
 
 ## 8. 下一阶段
 
-下一阶段：**储存损耗与天气保护。**
+下一阶段：**农业深化与季节。**
 
 建议顺序：
 
-1. 让露天存放的浆果和粟米在降雨、潮湿环境中产生损耗。
-2. 让储物棚的 `protection` 值降低食物腐败和雨损。
-3. 在资源栏显示食物新鲜度或总损耗。
-4. 再接季节、更多田块和人工扩田。
+1. 加入春、夏、秋、冬四季与全局温度趋势。
+2. 让粟米播种、生长、成熟受到季节窗口限制。
+3. 加入第二块可人工扩建的农田。
+4. 引入土壤肥力、休耕和更多作物。
+5. 再接灌溉、虫害、洪涝、干旱与粮食储备策略。
 
 ## 9. 版本更新记录（只追加）
 
@@ -379,4 +379,10 @@ extensions   后续模块扩展槽
 - 新增 `FarmSystem`、粟米作物目录、农田渲染、农事运行时和开垦/播种/收获行动。
 - 储物棚建成后自动选择营地附近 6×4 的草地或高草地，开垦完成后批量转为农地。
 - 粟米按天气生长；成熟后收获 8 份粟米、返还 2 份种子，粟米可搬入营地并在浆果不足时作为食物消耗。
-- 新增农事地图提示与粟米库存芯片；下一阶段转向储物损耗和天气保护。
+
+### v0.11 · 食物批次、储存损耗与天气保护
+
+- 营地食物改为按批次保存；浆果和粟米批次记录数量、新鲜度、进入时间与更新时间。
+- 每 30 个世界分钟按食物基础率、天气倍率和储物保护倍率结算新鲜度；食物完全腐败后从库存移除并累计损耗。
+- 降雨和冷雨显著加快损耗；储物棚 protection 直接降低损耗倍率。
+- 页面新增食物保存提示：浆果/粟米新鲜度、累计损耗、当前储物防护和雨损风险。
