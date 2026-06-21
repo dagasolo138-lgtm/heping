@@ -1,6 +1,7 @@
 export const CAMP_ITEM_LABELS = Object.freeze({
   wood: '木材',
   berries: '浆果',
+  millet: '粟米',
   water: '清水',
   stone: '石料',
 });
