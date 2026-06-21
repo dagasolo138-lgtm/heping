@@ -21,6 +21,8 @@ export function validatePerson(person) {
     const value = person.state?.[key];
     if (!Number.isFinite(value) || value < 0 || value > 100) fail(`${person.identity.name} 的状态 ${key} 应为 0–100。`);
   });
+  if (!person.activity || typeof person.activity !== 'object') fail(`${person.identity.name} 缺少行动状态。`);
+  if (!['idle', 'moving', 'working', 'resting'].includes(person.activity.status)) fail(`${person.identity.name} 的行动状态无效。`);
   if (!Array.isArray(person.memories?.lifeEvents)) fail(`${person.identity.name} 的人生事实必须是数组。`);
   if (!Array.isArray(person.memories?.personal)) fail(`${person.identity.name} 的个人记忆必须是数组。`);
   if (!Array.isArray(person.memories?.recent)) fail(`${person.identity.name} 的近期记忆索引必须是数组。`);
