@@ -27,10 +27,12 @@ export function setLocation(person, patch) {
   person.location = { ...person.location, ...patch };
 }
 
+export function setActivity(person, activity = {}) {
+  person.activity = { ...person.activity, ...structuredClone(activity) };
+}
+
 export function setExtension(person, key, value) {
-  if (!key || !key.includes('.')) {
-    throw new Error('Extension keys must use a dot-separated namespace.');
-  }
+  if (!key || !key.includes('.')) throw new Error('Invalid extension key.');
   person.extensions[key] = structuredClone(value);
 }
 
