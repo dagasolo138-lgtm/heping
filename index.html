@@ -4,26 +4,52 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#14221e" />
-  <title>生灵 · 人物系统</title>
+  <title>生灵 · 起始河谷</title>
   <link rel="stylesheet" href="./src/styles/main.css" />
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SHENGLING / FOUNDATION 01</p>
+        <p class="eyebrow">SHENGLING / FOUNDATION 02</p>
         <h1>生灵</h1>
-        <p class="subtitle">人物系统 · 事实层原型</p>
+        <p class="subtitle">人物系统 · 起始河谷 · 空间原型</p>
       </div>
       <div class="topbar__status" aria-live="polite">
         <span class="status-dot"></span>
-        <span id="system-status">已生成 10 位初始村民</span>
+        <span id="system-status">10 位村民已进入起始河谷</span>
       </div>
     </header>
 
     <section class="phase-note">
-      <strong>第一阶段已启动：</strong>
-      人物的身份、状态、关系、库存与人生事实独立保存；地图、行动、AI 对话将在后续模块接入。
+      <strong>第二阶段：</strong>
+      起始河谷为 160 米 × 120 米，每格 1 米 × 1 米，并按 16 米 × 16 米切分为区块。拖动地图查看地形；点击村民查看档案。
+    </section>
+
+    <section class="map-panel panel">
+      <div class="panel__header map-panel__header">
+        <div>
+          <p class="panel__kicker">STARTING VALLEY / 160 × 120 METERS</p>
+          <h2>起始河谷</h2>
+        </div>
+        <div class="map-panel__tools" aria-label="地图控制">
+          <button type="button" data-map-control="zoom-out" aria-label="缩小地图">−</button>
+          <button type="button" data-map-control="center" aria-label="回到营地">◎</button>
+          <button type="button" data-map-control="zoom-in" aria-label="放大地图">＋</button>
+        </div>
+      </div>
+      <div class="map-canvas-wrap">
+        <canvas id="map-canvas" aria-label="起始河谷地图"></canvas>
+        <div class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>营地附近 · 尚未建造</div>
+        <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
+      </div>
+      <div class="map-legend">
+        <span><i class="legend-swatch legend-swatch--forest"></i>林地</span>
+        <span><i class="legend-swatch legend-swatch--stone"></i>石滩</span>
+        <span><i class="legend-swatch legend-swatch--water"></i>河流</span>
+        <span><i class="legend-swatch legend-swatch--camp"></i>营地</span>
+        <span>拖动查看 · 滚轮或按钮缩放</span>
+      </div>
     </section>
 
     <section class="workspace">
@@ -45,19 +71,19 @@
 
     <section class="foundation-grid">
       <article class="foundation-card">
-        <p class="panel__kicker">FACT LAYER</p>
-        <h3>人生事实</h3>
-        <p>出生、家庭关系、物品与人生事件可追加保存。传记、史书和 AI 对话只能读取这些事实。</p>
+        <p class="panel__kicker">SPACE</p>
+        <h3>1 米精度</h3>
+        <p>人物、树木、石块、篝火和未来的房屋都占据真实地块；人物坐标可在地块内平滑移动。</p>
       </article>
       <article class="foundation-card">
-        <p class="panel__kicker">EXTENSIONS</p>
-        <h3>补丁接口</h3>
-        <p>每个人保留命名空间扩展槽位，后续的宗教、疾病、王朝、职业等模块无需改写人物核心。</p>
+        <p class="panel__kicker">CHUNKS</p>
+        <h3>区块化地图</h3>
+        <p>160 × 120 米地图被分为 10 × 8 个区块。后续扩大世界时，只渲染你正在看的区域。</p>
       </article>
       <article class="foundation-card">
         <p class="panel__kicker">NEXT</p>
-        <h3>下一阶段</h3>
-        <p>地图系统会为这些人分配真实坐标；行动系统再根据需求、技能与关系决定他们下一步做什么。</p>
+        <h3>行动逻辑</h3>
+        <p>下一步让人物根据饥饿、技能和地图资源选择砍树、采集、取水、建造与协作。</p>
       </article>
     </section>
   </main>
