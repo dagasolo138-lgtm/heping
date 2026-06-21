@@ -53,6 +53,12 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     return list().find((building) => building.typeId === typeId && building.status === 'complete') ?? null;
   }
 
+  function getResidenceFor(personId) {
+    return list().find((building) => building.status === 'complete'
+      && building.capacity > 0
+      && building.occupants.includes(personId)) ?? null;
+  }
+
   function reserveMaterial(buildingId, itemId, desiredAmount) {
     const building = buildings.get(buildingId);
     if (!building || building.status === 'complete') return null;
@@ -156,6 +162,7 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     startConstruction,
     activeByType,
     completedByType,
+    getResidenceFor,
     reserveMaterial,
     beginDelivery,
     cancelReservation,
