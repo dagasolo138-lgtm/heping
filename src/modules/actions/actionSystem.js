@@ -1,22 +1,33 @@
 import { createId } from '../../core/ids/createId.js';
 import { getDayPhase } from '../environment/dayCycle.js';
+import { EXPOSURE_KEY, evaluateExposure, getExposure } from '../environment/exposureSystem.js';
 import { ACTION_TYPES } from './actionTypes.js';
 import { createRuntimeTask, advanceRuntimeTask } from './actionExecutor.js';
 import { completeAction } from './actionEffects.js';
 import { collectConstructionMaterial, deliverConstructionMaterial, performConstructionWork } from './constructionEffects.js';
 import { ensureInitialShelter, planConstructionAction } from './constructionPlanner.js';
+import { completeTendFire, completeWarmByFire } from './fireEffects.js';
+import { planFireTask, planWarmingTask } from './weatherPlanner.js';
 import { planNightSleep } from './nightPlanner.js';
 import { completeSleep } from './sleepEffects.js';
 import { planNextAction } from './actionPlanner.js';
 
 const CAMP_ID = 'starting-camp';
 const WORLD_MINUTES_PER_REAL_SECOND = 6;
+const WEATHER_SENSITIVE_ACTIONS = new Set([
+  ACTION_TYPES.FETCH_WATER,
+  ACTION_TYPES.GATHER_BERRIES,
+  ACTION_TYPES.CHOP_TREE,
+  ACTION_TYPES.HAUL_TO_CAMP,
+  ACTION_TYPES.DELIVER_MATERIALS,
+  ACTION_TYPES.BUILD_SITE,
+]);
 
 function copy(value) { return structuredClone(value); }
 function near(first, second) { return Math.hypot(first.x - second.x, first.y - second.y) <= 3; }
 function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination) }; }
 
-export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, eventBus, gameTime }) {
+export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, eventBus, gameTime }) {
   const agents = new Map();
   const logs = [];
   let running = false;
@@ -64,11 +75,24 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function setActivity(person, task, phase) {
-    const restful = task.type === ACTION_TYPES.REST || task.type === ACTION_TYPES.SLEEP;
+    const restful = task.type === ACTION_TYPES.REST || task.type === ACTION_TYPES.SLEEP || task.type === ACTION_TYPES.WARM_BY_FIRE;
     peopleSystem.setActivity(person.id, {
       status: task.phase === 'moving' ? 'moving' : restful ? 'resting' : 'working',
       current: taskView(task, phase ?? (task.phase === 'moving' ? '前往目标' : task.phaseLabel)),
     });
+  }
+
+  function syncTag(person, tag, enabled) {
+    const exists = person.state.statusTags.includes(tag);
+    if (enabled && !exists) peopleSystem.addStatusTag(person.id, tag);
+    if (!enabled && exists) peopleSystem.removeStatusTag(person.id, tag);
+  }
+
+  function syncExposureTags(person, evaluation) {
+    syncTag(person, 'soaked', evaluation.tags.soaked);
+    syncTag(person, 'chilled', evaluation.tags.chilled);
+    syncTag(person, 'warm', evaluation.tags.warm);
+    syncTag(person, 'dry', evaluation.tags.dry);
   }
 
   function applySleepTags(personId, task) {
@@ -82,8 +106,18 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     }
   }
 
+  function weatherAdjustedTask(planned) {
+    const weather = weatherSystem.get();
+    if (!WEATHER_SENSITIVE_ACTIONS.has(planned.type)) return planned;
+    return {
+      ...planned,
+      workDuration: planned.workDuration / Math.max(0.45, Number(weather.workMultiplier ?? 1)),
+      data: { ...planned.data, weatherKey: weather.key },
+    };
+  }
+
   function assign(person, agent, planned) {
-    const task = createRuntimeTask(planned, agent, mapSystem);
+    const task = createRuntimeTask(weatherAdjustedTask(planned), agent, mapSystem);
     if (!task) return false;
     agent.task = task;
     applySleepTags(person.id, task);
@@ -112,6 +146,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     if (started) log('村民在营地旁划定了集体草棚的工地。', 'construction');
 
     const phase = getDayPhase(gameTime.now());
+    const weather = weatherSystem.get();
     const actionCounts = counts();
     const reservedFeatureIds = reservations();
     const people = peopleSystem.getAlive();
@@ -119,14 +154,20 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       const agent = agents.get(person.id);
       if (!agent || agent.task) return;
 
-      const generic = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
+      const fireTask = !isEmergency(person)
+        ? planFireTask({ camp, fireSystem, weather, phase, actionCounts })
+        : null;
+      const warmthTask = !hasCargo(person)
+        ? planWarmingTask({ person, fireSystem, actionCounts })
+        : null;
       const sleep = phase.isNight && !mustStayAwake(person)
         ? planNightSleep({ person, camp, buildingSystem, time: gameTime.now(), worldMinutesPerSecond: WORLD_MINUTES_PER_REAL_SECOND })
         : null;
       const construction = !phase.isNight && !isEmergency(person)
         ? planConstructionAction({ person, camp, buildingSystem, actionCounts })
         : null;
-      const planned = sleep ?? construction ?? generic;
+      const generic = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
+      const planned = fireTask ?? warmthTask ?? sleep ?? construction ?? generic;
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
       if (planned.data.featureId) reservedFeatureIds.add(planned.data.featureId);
@@ -146,7 +187,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       if (transition.summary) log(transition.summary, task.type, agent.personId);
       return;
     }
-    const nextTask = createRuntimeTask(transition.nextTask, agent, mapSystem);
+    const nextTask = createRuntimeTask(weatherAdjustedTask(transition.nextTask), agent, mapSystem);
     if (!nextTask) {
       buildingSystem.cancelReservation(task.data.siteId, task.data.reservationId);
       clearTask(agent, agent.personId);
@@ -162,6 +203,20 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   function finish(agent, task) {
     if (task.type === ACTION_TYPES.SLEEP) {
       const result = completeSleep({ agent, task, peopleSystem, gameTime });
+      if (result) log(result.summary, task.type, result.personId);
+      agent.task = null;
+      return;
+    }
+
+    if (task.type === ACTION_TYPES.TEND_FIRE) {
+      const result = completeTendFire({ agent, task, peopleSystem, campStore, fireSystem, gameTime, campId: CAMP_ID });
+      if (result) log(result.summary, task.type, result.personId);
+      agent.task = null;
+      return;
+    }
+
+    if (task.type === ACTION_TYPES.WARM_BY_FIRE) {
+      const result = completeWarmByFire({ agent, task, peopleSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
       agent.task = null;
       return;
@@ -188,11 +243,12 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function updateAgents(delta) {
+    const weather = weatherSystem.get();
     agents.forEach((agent) => {
       if (!agent.task) return;
       const person = peopleSystem.get(agent.personId);
       if (!person?.identity.alive) { agent.task = null; return; }
-      const speed = Math.max(0.7, 1.34 * (0.55 + person.state.energy / 180));
+      const speed = Math.max(0.45, 1.34 * (0.55 + person.state.energy / 180) * Number(weather.movementMultiplier ?? 1));
       const update = advanceRuntimeTask(agent, delta, speed);
       if (!update) return;
       if (update.kind === 'arrived') setActivity(person, update.task, update.task.phaseLabel);
@@ -203,23 +259,33 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   function updateNeeds(seconds) {
     const camp = campStore.get(CAMP_ID);
     if (!camp) return;
+    const weather = weatherSystem.get();
     peopleSystem.getAlive().forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent) return;
       const sleeping = agent.task?.type === ACTION_TYPES.SLEEP;
-      const resting = agent.task?.type === ACTION_TYPES.REST || sleeping;
+      const resting = agent.task?.type === ACTION_TYPES.REST || sleeping || agent.task?.type === ACTION_TYPES.WARM_BY_FIRE;
       const working = Boolean(agent.task) && !resting;
-      const sheltered = Boolean(agent.task?.data?.sheltered);
+      const shelteredSleep = Boolean(agent.task?.data?.sheltered);
+      const evaluation = evaluateExposure({ person, agent, weather, fireSystem, buildingSystem, seconds });
+      const previousExposure = getExposure(person);
+      if (previousExposure.wetness !== evaluation.exposure.wetness || previousExposure.cold !== evaluation.exposure.cold) {
+        peopleSystem.setExtension(person.id, EXPOSURE_KEY, evaluation.exposure);
+      }
+      syncExposureTags(person, evaluation);
+
       const patch = {
         hunger: person.state.hunger + seconds * 0.075,
         thirst: person.state.thirst + seconds * 0.12,
-        energy: person.state.energy - seconds * (working ? 0.12 : 0.045),
+        energy: person.state.energy - seconds * (working ? 0.12 : 0.045) + evaluation.stateDelta.energy,
+        stress: person.state.stress + evaluation.stateDelta.stress,
+        health: person.state.health + evaluation.stateDelta.health,
       };
 
       if (sleeping) {
-        patch.energy = person.state.energy + seconds * (sheltered ? 0.78 : 0.25);
-        patch.stress = person.state.stress + seconds * (sheltered ? -0.24 : 0.16);
-        if (!sheltered) patch.health = person.state.health - seconds * 0.018;
+        patch.energy = person.state.energy + seconds * (shelteredSleep ? 0.78 : 0.25) + evaluation.stateDelta.energy;
+        patch.stress = person.state.stress + seconds * (shelteredSleep ? -0.24 : 0.16) + evaluation.stateDelta.stress;
+        if (!shelteredSleep) patch.health = person.state.health - seconds * 0.018 + evaluation.stateDelta.health;
       }
 
       if (near(agent, camp.anchor)) {
@@ -240,6 +306,13 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     if (phase.id === 'dusk') log('黄昏降临，营地的生产活动正在收尾。', 'environment');
   }
 
+  function updateEnvironment() {
+    const phase = getDayPhase(gameTime.now());
+    const weather = weatherSystem.sync();
+    const fire = fireSystem.sync({ weather, phase });
+    eventBus.emit('environment:updated', { weather, fire, phase, time: gameTime.stamp() });
+  }
+
   function tick(now) {
     if (!running) return;
     const delta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
@@ -250,7 +323,13 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       gameTime.advanceMinutes(minutes);
       clockTimer -= minutes;
       reportPhaseChange();
-      eventBus.emit('simulation:time', { time: gameTime.stamp(), phase: getDayPhase(gameTime.now()) });
+      updateEnvironment();
+      eventBus.emit('simulation:time', {
+        time: gameTime.stamp(),
+        phase: getDayPhase(gameTime.now()),
+        weather: weatherSystem.get(),
+        fire: fireSystem.get(),
+      });
     }
     updateAgents(delta);
     plannerTimer += delta;
@@ -265,7 +344,12 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     ensureAgents();
     running = true;
     previous = performance.now();
-    eventBus.emit('environment:phase', { phase: getDayPhase(gameTime.now()), time: gameTime.stamp() });
+    const phase = getDayPhase(gameTime.now());
+    const weather = weatherSystem.get();
+    const fire = fireSystem.get();
+    eventBus.emit('environment:phase', { phase, time: gameTime.stamp() });
+    eventBus.emit('environment:weather', { weather, time: gameTime.stamp() });
+    eventBus.emit('environment:fire', { reason: 'initial', fire, time: gameTime.stamp() });
     plan();
     log('十位村民开始在起始河谷寻找水源、食物和木材。', 'system');
     frameId = requestAnimationFrame(tick);
@@ -283,6 +367,8 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     getRenderPeople: renderPeople,
     getRecentLogs: recentLogs,
     getDayPhase: () => getDayPhase(gameTime.now()),
+    getWeather: () => weatherSystem.get(),
+    getFire: () => fireSystem.get(),
     isRunning: () => running,
   });
 }
