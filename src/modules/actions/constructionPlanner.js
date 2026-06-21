@@ -1,5 +1,7 @@
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
-import { buildingCenter, findInitialShelterPlacement } from '../buildings/buildingPlacement.js';
+import { buildingCenter, findInitialShelterPlacement, findStorageShedPlacement } from '../buildings/buildingPlacement.js';
+
+const BUILD_ORDER = Object.freeze(['communalShelter', 'storageShed']);
 
 function createTask(type, destination, data, workDuration) {
   const meta = ACTION_META[type];
@@ -18,22 +20,35 @@ function hasActiveTask(actionCounts, type, limit) {
   return Number(actionCounts[type] ?? 0) >= limit;
 }
 
-export function ensureInitialShelter({ buildingSystem, mapSystem, camp }) {
-  if (buildingSystem.completedByType('communalShelter') || buildingSystem.activeByType('communalShelter')) return null;
-  const anchor = findInitialShelterPlacement({ mapSystem, campAnchor: camp.anchor });
-  if (!anchor) return null;
-  return buildingSystem.startConstruction({ typeId: 'communalShelter', anchor });
+function findPlacement(typeId, context) {
+  const shared = { mapSystem: context.mapSystem, campAnchor: context.camp.anchor, buildings: context.buildingSystem.list() };
+  if (typeId === 'communalShelter') return findInitialShelterPlacement(shared);
+  if (typeId === 'storageShed') return findStorageShedPlacement(shared);
+  return null;
+}
+
+export function ensureSettlementConstruction(context) {
+  for (const typeId of BUILD_ORDER) {
+    if (context.buildingSystem.completedByType(typeId)) continue;
+    if (context.buildingSystem.activeByType(typeId)) return null;
+    const anchor = findPlacement(typeId, context);
+    if (!anchor) return null;
+    return context.buildingSystem.startConstruction({ typeId, anchor });
+  }
+  return null;
 }
 
 export function planConstructionAction({ person, camp, buildingSystem, actionCounts }) {
-  const site = buildingSystem.activeByType('communalShelter');
+  const site = buildingSystem.list({ includeCompleted: false })[0] ?? null;
   if (!site) return null;
   const summary = buildingSystem.getConstructionSummary(site.id);
   if (!summary || summary.status === 'complete') return null;
 
-  const woodNeed = Number(summary.materialNeed.wood ?? 0);
-  if (woodNeed > 0 && Number(camp.items.wood ?? 0) > 0 && !hasActiveTask(actionCounts, ACTION_TYPES.DELIVER_MATERIALS, 1)) {
-    const reservation = buildingSystem.reserveMaterial(site.id, 'wood', Math.min(3, woodNeed, Number(camp.items.wood ?? 0)));
+  const materialId = Object.keys(summary.materialNeed)
+    .find((itemId) => Number(summary.materialNeed[itemId] ?? 0) > 0 && Number(camp.items[itemId] ?? 0) > 0);
+  if (materialId && !hasActiveTask(actionCounts, ACTION_TYPES.DELIVER_MATERIALS, 1)) {
+    const amount = Math.min(3, Number(summary.materialNeed[materialId]), Number(camp.items[materialId]));
+    const reservation = buildingSystem.reserveMaterial(site.id, materialId, amount);
     if (!reservation) return null;
     return createTask(ACTION_TYPES.DELIVER_MATERIALS, camp.anchor, {
       stage: 'collect',
