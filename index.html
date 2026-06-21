@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#14221e" />
+  <title>生灵 · 人物系统</title>
+  <link rel="stylesheet" href="./src/styles/main.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SHENGLING / FOUNDATION 01</p>
+        <h1>生灵</h1>
+        <p class="subtitle">人物系统 · 事实层原型</p>
+      </div>
+      <div class="topbar__status" aria-live="polite">
+        <span class="status-dot"></span>
+        <span id="system-status">已生成 10 位初始村民</span>
+      </div>
+    </header>
+
+    <section class="phase-note">
+      <strong>第一阶段已启动：</strong>
+      人物的身份、状态、关系、库存与人生事实独立保存；地图、行动、AI 对话将在后续模块接入。
+    </section>
+
+    <section class="workspace">
+      <aside class="people-panel panel">
+        <div class="panel__header">
+          <div>
+            <p class="panel__kicker">INITIAL SETTLEMENT</p>
+            <h2>初始村民</h2>
+          </div>
+          <span id="people-count" class="count-pill">10</span>
+        </div>
+        <div id="people-list" class="people-list" aria-label="初始村民列表"></div>
+      </aside>
+
+      <section class="detail-panel panel">
+        <div id="person-detail" class="person-detail"></div>
+      </section>
+    </section>
+
+    <section class="foundation-grid">
+      <article class="foundation-card">
+        <p class="panel__kicker">FACT LAYER</p>
+        <h3>人生事实</h3>
+        <p>出生、家庭关系、物品与人生事件可追加保存。传记、史书和 AI 对话只能读取这些事实。</p>
+      </article>
+      <article class="foundation-card">
+        <p class="panel__kicker">EXTENSIONS</p>
+        <h3>补丁接口</h3>
+        <p>每个人保留命名空间扩展槽位，后续的宗教、疾病、王朝、职业等模块无需改写人物核心。</p>
+      </article>
+      <article class="foundation-card">
+        <p class="panel__kicker">NEXT</p>
+        <h3>下一阶段</h3>
+        <p>地图系统会为这些人分配真实坐标；行动系统再根据需求、技能与关系决定他们下一步做什么。</p>
+      </article>
+    </section>
+  </main>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
