@@ -1,12 +1,16 @@
 import { createId } from '../../core/ids/createId.js';
+import { getDayPhase } from '../environment/dayCycle.js';
 import { ACTION_TYPES } from './actionTypes.js';
 import { createRuntimeTask, advanceRuntimeTask } from './actionExecutor.js';
 import { completeAction } from './actionEffects.js';
 import { collectConstructionMaterial, deliverConstructionMaterial, performConstructionWork } from './constructionEffects.js';
 import { ensureInitialShelter, planConstructionAction } from './constructionPlanner.js';
+import { planNightSleep } from './nightPlanner.js';
+import { completeSleep } from './sleepEffects.js';
 import { planNextAction } from './actionPlanner.js';
 
 const CAMP_ID = 'starting-camp';
+const WORLD_MINUTES_PER_REAL_SECOND = 6;
 
 function copy(value) { return structuredClone(value); }
 function near(first, second) { return Math.hypot(first.x - second.x, first.y - second.y) <= 3; }
@@ -21,6 +25,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   let plannerTimer = 0;
   let clockTimer = 0;
   let needsTimer = 0;
+  let phaseId = getDayPhase(gameTime.now()).id;
 
   function log(summary, type = 'world', personId = null) {
     const entry = { id: createId('log'), summary, type, personId, time: gameTime.stamp() };
@@ -59,24 +64,44 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function setActivity(person, task, phase) {
+    const restful = task.type === ACTION_TYPES.REST || task.type === ACTION_TYPES.SLEEP;
     peopleSystem.setActivity(person.id, {
-      status: task.phase === 'moving' ? 'moving' : task.type === ACTION_TYPES.REST ? 'resting' : 'working',
+      status: task.phase === 'moving' ? 'moving' : restful ? 'resting' : 'working',
       current: taskView(task, phase ?? (task.phase === 'moving' ? '前往目标' : task.phaseLabel)),
     });
+  }
+
+  function applySleepTags(personId, task) {
+    if (task.type !== ACTION_TYPES.SLEEP) return;
+    peopleSystem.addStatusTag(personId, 'sleeping');
+    if (task.data?.sheltered) {
+      peopleSystem.addStatusTag(personId, 'sheltered');
+      peopleSystem.removeStatusTag(personId, 'exposed');
+    } else {
+      peopleSystem.addStatusTag(personId, 'exposed');
+    }
   }
 
   function assign(person, agent, planned) {
     const task = createRuntimeTask(planned, agent, mapSystem);
     if (!task) return false;
     agent.task = task;
+    applySleepTags(person.id, task);
     setActivity(person, task);
     eventBus.emit('actions:assigned', { personId: person.id, task: copy(task) });
     return true;
   }
 
+  function hasCargo(person) {
+    return Object.values(person.inventory.items).some((value) => Number(value) > 0);
+  }
+
   function isEmergency(person) {
-    return person.state.thirst >= 62 || person.state.hunger >= 62 || person.state.energy <= 28
-      || Object.values(person.inventory.items).some((value) => Number(value) > 0);
+    return person.state.thirst >= 62 || person.state.hunger >= 62 || person.state.energy <= 28 || hasCargo(person);
+  }
+
+  function mustStayAwake(person) {
+    return person.state.thirst >= 86 || person.state.hunger >= 86 || hasCargo(person);
   }
 
   function plan() {
@@ -86,15 +111,22 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const started = ensureInitialShelter({ buildingSystem, mapSystem, camp });
     if (started) log('村民在营地旁划定了集体草棚的工地。', 'construction');
 
+    const phase = getDayPhase(gameTime.now());
     const actionCounts = counts();
     const reservedFeatureIds = reservations();
     const people = peopleSystem.getAlive();
     people.forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent || agent.task) return;
+
       const generic = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
-      const construction = isEmergency(person) ? null : planConstructionAction({ person, camp, buildingSystem, actionCounts });
-      const planned = construction ?? generic;
+      const sleep = phase.isNight && !mustStayAwake(person)
+        ? planNightSleep({ person, camp, buildingSystem, time: gameTime.now(), worldMinutesPerSecond: WORLD_MINUTES_PER_REAL_SECOND })
+        : null;
+      const construction = !phase.isNight && !isEmergency(person)
+        ? planConstructionAction({ person, camp, buildingSystem, actionCounts })
+        : null;
+      const planned = sleep ?? construction ?? generic;
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
       if (planned.data.featureId) reservedFeatureIds.add(planned.data.featureId);
@@ -102,6 +134,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function clearTask(agent, personId) {
+    if (agent.task?.type === ACTION_TYPES.SLEEP) peopleSystem.removeStatusTag(personId, 'sleeping');
     agent.task = null;
     peopleSystem.setActivity(personId, { status: 'idle', current: null });
   }
@@ -127,6 +160,13 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function finish(agent, task) {
+    if (task.type === ACTION_TYPES.SLEEP) {
+      const result = completeSleep({ agent, task, peopleSystem, gameTime });
+      if (result) log(result.summary, task.type, result.personId);
+      agent.task = null;
+      return;
+    }
+
     if (task.type === ACTION_TYPES.DELIVER_MATERIALS) {
       if (task.data.stage === 'collect') return continueMaterialDelivery(agent, task);
       const result = deliverConstructionMaterial({ agent, task, peopleSystem, buildingSystem, gameTime });
@@ -166,13 +206,22 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     peopleSystem.getAlive().forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent) return;
-      const resting = agent.task?.type === ACTION_TYPES.REST;
+      const sleeping = agent.task?.type === ACTION_TYPES.SLEEP;
+      const resting = agent.task?.type === ACTION_TYPES.REST || sleeping;
       const working = Boolean(agent.task) && !resting;
+      const sheltered = Boolean(agent.task?.data?.sheltered);
       const patch = {
         hunger: person.state.hunger + seconds * 0.075,
         thirst: person.state.thirst + seconds * 0.12,
         energy: person.state.energy - seconds * (working ? 0.12 : 0.045),
       };
+
+      if (sleeping) {
+        patch.energy = person.state.energy + seconds * (sheltered ? 0.78 : 0.25);
+        patch.stress = person.state.stress + seconds * (sheltered ? -0.24 : 0.16);
+        if (!sheltered) patch.health = person.state.health - seconds * 0.018;
+      }
+
       if (near(agent, camp.anchor)) {
         if (patch.thirst >= 56 && campStore.take(CAMP_ID, 'water', 1, 'drink') > 0) patch.thirst -= 34;
         if (patch.hunger >= 56 && campStore.take(CAMP_ID, 'berries', 1, 'eat') > 0) patch.hunger -= 26;
@@ -181,16 +230,27 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     });
   }
 
+  function reportPhaseChange() {
+    const phase = getDayPhase(gameTime.now());
+    if (phase.id === phaseId) return;
+    phaseId = phase.id;
+    eventBus.emit('environment:phase', { phase, time: gameTime.stamp() });
+    if (phase.id === 'night') log('夜幕降临，村民开始结束生产，返回营地与住所。', 'environment');
+    if (phase.id === 'dawn') log('天色渐亮，村民从休息中苏醒，重新开始一天。', 'environment');
+    if (phase.id === 'dusk') log('黄昏降临，营地的生产活动正在收尾。', 'environment');
+  }
+
   function tick(now) {
     if (!running) return;
     const delta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
     previous = now;
-    clockTimer += delta * 6;
+    clockTimer += delta * WORLD_MINUTES_PER_REAL_SECOND;
     const minutes = Math.floor(clockTimer);
     if (minutes > 0) {
       gameTime.advanceMinutes(minutes);
       clockTimer -= minutes;
-      eventBus.emit('simulation:time', { time: gameTime.stamp() });
+      reportPhaseChange();
+      eventBus.emit('simulation:time', { time: gameTime.stamp(), phase: getDayPhase(gameTime.now()) });
     }
     updateAgents(delta);
     plannerTimer += delta;
@@ -205,6 +265,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     ensureAgents();
     running = true;
     previous = performance.now();
+    eventBus.emit('environment:phase', { phase: getDayPhase(gameTime.now()), time: gameTime.stamp() });
     plan();
     log('十位村民开始在起始河谷寻找水源、食物和木材。', 'system');
     frameId = requestAnimationFrame(tick);
@@ -216,5 +277,12 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     frameId = null;
   }
 
-  return Object.freeze({ start, stop, getRenderPeople: renderPeople, getRecentLogs: recentLogs, isRunning: () => running });
+  return Object.freeze({
+    start,
+    stop,
+    getRenderPeople: renderPeople,
+    getRecentLogs: recentLogs,
+    getDayPhase: () => getDayPhase(gameTime.now()),
+    isRunning: () => running,
+  });
 }
