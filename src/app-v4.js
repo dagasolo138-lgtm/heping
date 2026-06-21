@@ -42,6 +42,7 @@ const view = createMapView({
   peopleSystem: people,
   getRenderPeople: () => actions.getRenderPeople(),
   getRenderBuildings: () => buildings.list(),
+  getDayPhase: () => actions.getDayPhase(),
   controls: [...document.querySelectorAll('[data-map-control]')],
   onPersonSelect: (id) => select(id, false),
   onReadout: ({ x, y, zoom }) => { $('#map-readout').textContent = `坐标 ${x}, ${y} · ${Math.round(zoom)} px/m`; },
@@ -49,6 +50,10 @@ const view = createMapView({
 
 function esc(value = '') {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+}
+
+function conditionLabel(tag) {
+  return ({ sleeping: '睡眠中', sheltered: '有住所', exposed: '露宿' }[tag] ?? tag);
 }
 
 function select(id, focus = true) {
@@ -84,11 +89,12 @@ function renderDetail() {
     .map(([name, value]) => `<div><span>${esc(name)}</span><b>${value}</b></div>`).join('');
   const events = person.memories.lifeEvents.slice(-4).reverse().map((event) => `<li><time>${esc(event.time.label)}</time><p>${esc(event.summary)}</p></li>`).join('');
   const items = Object.entries(person.inventory.items).map(([name, value]) => `${CAMP_ITEM_LABELS[name] ?? name} ×${value}`).join('、') || '空';
+  const conditions = person.state.statusTags.map((tag) => `<span class="tag">${esc(conditionLabel(tag))}</span>`).join('');
   detail.innerHTML = `
     <div class="person-hero"><div class="portrait portrait--large">${esc(person.identity.name.slice(-1))}</div><div>
       <p class="panel__kicker">PERSON RECORD / REV ${person.revision}</p><h2>${esc(person.identity.name)}</h2>
       <p class="person-hero__meta">${getAge(person, time.now())} 岁 · ${occupationLabel(person.work.occupation)} · ${home ? esc(home.label) : '露宿营地'}</p>
-      <div class="tag-row">${person.traits.map((trait) => `<span class="tag">${traitLabel(trait)}</span>`).join('')}</div>
+      <div class="tag-row">${person.traits.map((trait) => `<span class="tag">${traitLabel(trait)}</span>`).join('')}${conditions}</div>
     </div></div>
     <div class="activity-banner ${current ? '' : 'activity-banner--idle'}"><span class="activity-banner__dot"></span><div><small>当前行动</small><strong>${current ? `${esc(current.label)} · ${esc(current.phase)}` : '待命'}</strong></div></div>
     <div class="metrics-grid">
@@ -100,7 +106,7 @@ function renderDetail() {
       <div class="metric"><span>行动</span><strong>${person.activity.completedCount ?? 0}</strong></div>
     </div>
     <div class="detail-columns"><section class="detail-card"><h3>技能倾向</h3><div class="skill-list">${skillRows}</div><p class="muted">${esc(person.work.preferences.join('、') || '暂无偏好')}</p></section>
-      <section class="detail-card"><h3>生活状态</h3><p>居所：${home ? esc(home.label) : '露宿营地'}</p><p>物品：${esc(items)}</p><p>个人记忆：${person.memories.personal.length} 条</p></section>
+      <section class="detail-card"><h3>生活状态</h3><p>居所：${home ? esc(home.label) : '露宿营地'}</p><p>夜间条件：${person.state.statusTags.includes('exposed') ? '露宿，恢复较慢且压力增加' : home ? '有草棚遮蔽，睡眠恢复加成' : '尚未结算'}</p><p>物品：${esc(items)}</p></section>
       <section class="detail-card"><h3>人物关系</h3><p>伴侣：${person.family.spouseId ? '已有伴侣' : '无'}</p><p>手足：${person.family.siblingIds.length} 人</p><p>子女：${person.family.childIds.length} 人</p></section></div>
     <section class="history-card"><div class="history-card__header"><h3>人生事实</h3><span>${person.memories.lifeEvents.length} 条</span></div><ol>${events}</ol></section>`;
 }
@@ -124,7 +130,7 @@ function renderConstruction() {
   construction.innerHTML = `<div class="construction-line"><strong>${esc(data.label)}</strong><span>${label}</span></div>
     <div class="construction-material">木材 <b>${wood}</b> / ${needed}</div>
     <div class="progress-track"><i style="width:${percent}%"></i></div>
-    <div class="construction-footnote">施工进度 ${percent}% · ${data.status === 'complete' ? `已入住 ${data.occupants.length} 人` : esc(data.description)}</div>`;
+    <div class="construction-footnote">施工进度 ${percent}% · ${data.status === 'complete' ? `已入住 ${data.occupants.length} 人 · 夜间提供睡位` : esc(data.description)}</div>`;
 }
 
 function renderLog() {
@@ -160,7 +166,14 @@ bus.on('buildings:completed', ({ building }) => {
   render();
 });
 bus.on('actions:log', ({ entry }) => { status.textContent = entry.summary; renderLog(); });
-bus.on('simulation:time', ({ time: stamp }) => { clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(stamp.label)}`; });
+bus.on('environment:phase', ({ phase }) => {
+  status.textContent = phase.isNight ? '夜幕降临，村民正回到营地与住所。' : `${phase.label}，起始河谷正在苏醒。`;
+  view.redraw();
+});
+bus.on('simulation:time', ({ time: stamp, phase }) => {
+  clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(phase?.label ?? '')} · ${esc(stamp.label)}`;
+  view.redraw();
+});
 bus.on('map:changed', ({ map: nextMap }) => { view.setMap(nextMap); view.redraw(); });
 
 window.shengling = Object.freeze({ peopleSystem: people, mapSystem: map, campStore: camp, buildingSystem: buildings, actionSystem: actions, gameTime: time, mapView: view });
