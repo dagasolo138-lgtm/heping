@@ -119,5 +119,8 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
     return getSummary();
   }
 
+  eventBus.on('map:feature-removed', ({ feature }) => { registerDepletion(feature); });
+  eventBus.on('simulation:time', () => { sync(); });
+
   return Object.freeze({ registerDepletion, sync, list, getSummary });
 }
