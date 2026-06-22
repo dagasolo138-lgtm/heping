@@ -41,6 +41,19 @@
           <button type="button" data-map-control="zoom-in" aria-label="放大地图" title="放大地图">＋</button>
         </div>
       </div>
+      <div class="world-speed-control" role="group" aria-label="世界运行速度">
+        <div class="world-speed-control__copy">
+          <span class="world-speed-control__kicker">WORLD SPEED</span>
+          <strong id="world-speed-status">世界速度 1×</strong>
+        </div>
+        <div class="world-speed-control__buttons">
+          <button type="button" data-world-speed="0.5" aria-pressed="false">0.5×</button>
+          <button type="button" data-world-speed="1" aria-pressed="true">1×</button>
+          <button type="button" data-world-speed="2" aria-pressed="false">2×</button>
+          <button type="button" data-world-speed="5" aria-pressed="false">5×</button>
+          <button type="button" data-world-speed="10" aria-pressed="false">10×</button>
+        </div>
+      </div>
       <div class="map-canvas-wrap">
         <canvas id="map-canvas" aria-label="起始河谷地图" aria-describedby="map-gesture-help"></canvas>
         <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
