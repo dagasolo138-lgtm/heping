@@ -13,6 +13,15 @@ function ensureStylesheet() {
   return stylesheet;
 }
 
+function updatePhaseCopy() {
+  const eyebrow = document.querySelector('.eyebrow');
+  const subtitle = document.querySelector('.subtitle');
+  const note = document.querySelector('.phase-note');
+  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 15';
+  if (subtitle) subtitle.textContent = '起始河谷 · 可调速的动态聚落原型';
+  if (note) note.innerHTML = '<strong>第十五阶段：</strong>世界可以按 0.5、1、2、5、10 倍速度推进。时间、村民行动、需求、天气、季节、农作物和食物损耗使用同一模拟速度。';
+}
+
 function render({ buttons, status }, speed) {
   buttons.forEach((button) => {
     const active = Number(button.dataset.worldSpeed) === speed.value;
@@ -29,6 +38,7 @@ export function attachWorldSpeedRuntime() {
   if (runtime.worldSpeedRuntime) return runtime.worldSpeedRuntime;
 
   ensureStylesheet();
+  updatePhaseCopy();
   const worldSpeedSystem = runtime.worldSpeedSystem ?? createWorldSpeedSystem({
     eventBus,
     gameTime: runtime.gameTime,
