@@ -4,9 +4,9 @@ function updatePhaseCopy() {
   const eyebrow = document.querySelector('.eyebrow');
   const subtitle = document.querySelector('.subtitle');
   const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 13';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造与逐步扩大的农业原型';
-  if (note) note.innerHTML = '<strong>第十三阶段：</strong>第一块粟田完成首次收获后，村民会在营地附近人工开垦第二块田。扩田沿用原有开垦、春播、季节成长和收获规则。';
+  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 14';
+  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造、农业与土地恢复原型';
+  if (note) note.innerHTML = '<strong>第十四阶段：</strong>每块田都保存独立肥力。休耕会慢慢恢复，作物成长与收获会受土壤影响；连续耕作会让同一块土地逐渐减产。';
 }
 
 function ensureReadout() {
@@ -30,7 +30,7 @@ function renderReadout(readout, farmSystem) {
   }
   const secondField = farmSystem.get(SECOND_FIELD_ID);
   if (secondField) {
-    readout.textContent = `扩田 · ${secondField.label} · ${secondField.seasonal.label}`;
+    readout.textContent = `扩田 · ${secondField.label} · ${secondField.seasonal.label} · 土壤 ${secondField.soil.fertility}`;
     return;
   }
   if (summary.expansionAvailable) {
