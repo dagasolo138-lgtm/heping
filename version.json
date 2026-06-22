@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.15",
-  "buildId": "v0.15-world-speed-20260622-01",
-  "sourceCommit": "d94f7fe1253b9ebf4e6797d5925bfd8422299378",
+  "version": "v0.15.1",
+  "buildId": "v0.15.1-audit-fixes-20260622-01",
+  "sourceCommit": "905a863d917d79a91126ba512ec4330c2d1bd7a9",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
