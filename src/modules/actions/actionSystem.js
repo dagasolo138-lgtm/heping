@@ -45,12 +45,16 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   let needsTimer = 0;
   let phaseId = getDayPhase(gameTime.now()).id;
 
+  function activeWorldSpeedSystem() {
+    return worldSpeedSystem ?? globalThis.shengling?.worldSpeedSystem ?? null;
+  }
+
   function getWorldSpeed() {
-    return Math.max(0.5, Math.min(10, Number(worldSpeedSystem?.get?.().value ?? 1)));
+    return Math.max(0.5, Math.min(10, Number(activeWorldSpeedSystem()?.get?.().value ?? 1)));
   }
 
   function getWorldSpeedView() {
-    return worldSpeedSystem?.get?.() ?? Object.freeze({
+    return activeWorldSpeedSystem()?.get?.() ?? Object.freeze({
       value: getWorldSpeed(),
       label: `${getWorldSpeed()}×`,
       worldMinutesPerRealSecond: WORLD_MINUTES_PER_REAL_SECOND * getWorldSpeed(),
