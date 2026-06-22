@@ -8,6 +8,7 @@ export const CROP_TYPES = Object.freeze({
     seedReturn: 2,
     harvestYield: 8,
     growthRequiredMinutes: 1440,
+    soilDepletion: 18,
   },
 });
 
