@@ -4,9 +4,9 @@ function updatePhaseCopy() {
   const eyebrow = document.querySelector('.eyebrow');
   const subtitle = document.querySelector('.subtitle');
   const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 12';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造、农业与四季原型';
-  if (note) note.innerHTML = '<strong>第十二阶段：</strong>一年固定为 360 天，春夏秋冬各 90 天。粟米只在春季播种，夏季加速生长，秋季减慢，冬季暂停；成熟作物全年可收获。';
+  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 14';
+  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造、农业与土地恢复原型';
+  if (note) note.innerHTML = '<strong>第十四阶段：</strong>每块田都保存独立肥力。休耕会慢慢恢复，作物成长与收获会受土壤影响；连续耕作会让同一块土地逐渐减产。';
 }
 
 function ensureReadout() {
@@ -21,6 +21,13 @@ function ensureReadout() {
   return readout;
 }
 
+function soilText(summary) {
+  const fertility = summary.soil?.averageFertility;
+  if (fertility === null || fertility === undefined) return '';
+  const warning = Number(summary.soil?.thinFields ?? 0) ? ' · 有瘠薄田' : Number(summary.soil?.poorFields ?? 0) ? ' · 有贫瘠田' : '';
+  return ` · 土壤 ${fertility}${warning}`;
+}
+
 function renderReadout(readout, farmSystem) {
   if (!readout) return;
   const summary = farmSystem.getSummary();
@@ -28,23 +35,24 @@ function renderReadout(readout, farmSystem) {
     readout.textContent = '农事准备 · 等待储物棚完成';
     return;
   }
+  const soil = soilText(summary);
   if (summary.mature) {
-    readout.textContent = `农事 · ${summary.mature} 块粟田成熟待收 · 种子 ${summary.seedStock}`;
+    readout.textContent = `农事 · ${summary.mature} 块粟田成熟待收 · 种子 ${summary.seedStock}${soil}`;
     return;
   }
   if (summary.growing) {
-    readout.textContent = `农事 · ${summary.growing} 块粟田生长中 · 种子 ${summary.seedStock}`;
+    readout.textContent = `农事 · ${summary.growing} 块粟田生长中 · 种子 ${summary.seedStock}${soil}`;
     return;
   }
   if (summary.waitingToSow) {
-    readout.textContent = `农事 · ${summary.waitingToSow} 块粟田等待春播 · 种子 ${summary.seedStock}`;
+    readout.textContent = `农事 · ${summary.waitingToSow} 块粟田等待春播 · 种子 ${summary.seedStock}${soil}`;
     return;
   }
   if (summary.sowable) {
-    readout.textContent = `农事 · ${summary.sowable} 块粟田可播种 · 种子 ${summary.seedStock}`;
+    readout.textContent = `农事 · ${summary.sowable} 块粟田可播种 · 种子 ${summary.seedStock}${soil}`;
     return;
   }
-  readout.textContent = `农事 · 待开垦 ${summary.clearing} 块 · 种子 ${summary.seedStock}`;
+  readout.textContent = `农事 · 待开垦 ${summary.clearing} 块 · 种子 ${summary.seedStock}${soil}`;
 }
 
 function patchMilletChip(runtime) {
