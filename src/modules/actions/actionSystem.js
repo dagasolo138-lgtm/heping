@@ -34,7 +34,7 @@ function near(first, second) { return Math.hypot(first.x - second.x, first.y - s
 function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination) }; }
 function currentFarmSystem() { return globalThis.shengling?.farmSystem ?? null; }
 
-export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, eventBus, gameTime }) {
+export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, eventBus, gameTime, worldSpeedSystem = null }) {
   const agents = new Map();
   const logs = [];
   let running = false;
@@ -44,6 +44,18 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   let clockTimer = 0;
   let needsTimer = 0;
   let phaseId = getDayPhase(gameTime.now()).id;
+
+  function getWorldSpeed() {
+    return Math.max(0.5, Math.min(10, Number(worldSpeedSystem?.get?.().value ?? 1)));
+  }
+
+  function getWorldSpeedView() {
+    return worldSpeedSystem?.get?.() ?? Object.freeze({
+      value: getWorldSpeed(),
+      label: `${getWorldSpeed()}×`,
+      worldMinutesPerRealSecond: WORLD_MINUTES_PER_REAL_SECOND * getWorldSpeed(),
+    });
+  }
 
   function log(summary, type = 'world', personId = null) {
     const entry = { id: createId('log'), summary, type, personId, time: gameTime.stamp() };
@@ -339,9 +351,11 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
 
   function tick(now) {
     if (!running) return;
-    const delta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
+    const realDelta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
     previous = now;
-    clockTimer += delta * WORLD_MINUTES_PER_REAL_SECOND;
+    const worldSpeed = getWorldSpeed();
+    const simulationDelta = realDelta * worldSpeed;
+    clockTimer += simulationDelta * WORLD_MINUTES_PER_REAL_SECOND;
     const minutes = Math.floor(clockTimer);
     if (minutes > 0) {
       gameTime.advanceMinutes(minutes);
@@ -353,12 +367,13 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
         phase: getDayPhase(gameTime.now()),
         weather: weatherSystem.get(),
         fire: fireSystem.get(),
+        speed: getWorldSpeedView(),
       });
     }
-    updateAgents(delta);
-    plannerTimer += delta;
+    updateAgents(simulationDelta);
+    plannerTimer += simulationDelta;
     if (plannerTimer >= 0.75) { plannerTimer = 0; plan(); }
-    needsTimer += delta;
+    needsTimer += simulationDelta;
     if (needsTimer >= 5) { updateNeeds(needsTimer); needsTimer = 0; }
     frameId = requestAnimationFrame(tick);
   }
@@ -393,6 +408,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     getDayPhase: () => getDayPhase(gameTime.now()),
     getWeather: () => weatherSystem.get(),
     getFire: () => fireSystem.get(),
+    getWorldSpeed: getWorldSpeedView,
     isRunning: () => running,
   });
 }
