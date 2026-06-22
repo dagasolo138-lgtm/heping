@@ -43,9 +43,14 @@ function createTask(type, destination, data = {}, duration = ACTION_META[type].w
   };
 }
 
-function makeHaulTask(person, camp) {
-  const carried = Object.fromEntries(ITEM_TYPES.map((itemId) => [itemId, amount(person.inventory.items, itemId)]).filter(([, value]) => value > 0));
+function carriedItems(person) {
+  return Object.fromEntries(ITEM_TYPES.map((itemId) => [itemId, amount(person.inventory.items, itemId)]).filter(([, value]) => value > 0));
+}
+
+function makeHaulTask(person, camp, storage) {
+  const carried = carriedItems(person);
   if (!Object.keys(carried).length) return null;
+  if (Number(storage?.available ?? Infinity) <= 0) return null;
   return createTask(ACTION_TYPES.HAUL_TO_CAMP, camp.anchor, { campId: camp.id, carried }, 0.65);
 }
 
@@ -100,11 +105,11 @@ function makeByType(type, context) {
 }
 
 export function planNextAction(context) {
-  const { person, camp, population } = context;
+  const { person, camp, population, storage } = context;
   if (!person.identity.alive) return null;
 
-  const carriedTask = makeHaulTask(person, camp);
-  if (carriedTask) return carriedTask;
+  const carried = carriedItems(person);
+  if (Object.keys(carried).length) return makeHaulTask(person, camp, storage);
 
   if (person.state.energy <= 28) return makeRestTask(camp);
 
