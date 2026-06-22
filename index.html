@@ -8,24 +8,25 @@
   <link rel="stylesheet" href="./src/styles/main.css" />
   <link rel="stylesheet" href="./src/styles/construction.css" />
   <link rel="stylesheet" href="./src/styles/environment.css" />
+  <link rel="stylesheet" href="./src/styles/experience.css" />
 </head>
 <body>
   <main class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">SHENGLING / FOUNDATION 07</p>
+        <p class="eyebrow">SHENGLING / FOUNDATION 13</p>
         <h1>生灵</h1>
-        <p class="subtitle">起始河谷 · 生存、建造与聚落扩张原型</p>
+        <p class="subtitle">起始河谷 · 生存、建造与逐步扩大的农业原型</p>
       </div>
       <div class="topbar__status" aria-live="polite">
         <span class="status-dot"></span>
-        <span id="system-status">村民正在为第一座储物棚积累木材</span>
+        <span id="system-status">村民正在建立起始营地的生存循环</span>
       </div>
     </header>
 
     <section class="phase-note">
-      <strong>第七阶段：</strong>
-      草棚完成后，村民会自动规划简易储物棚。营地初期只有有限的露天容量；储物棚建成后会扩大物资容量，并留下防潮与储存损耗系统的基础。
+      <strong>第十三阶段：</strong>
+      第一块粟田完成首次收获后，村民会在营地附近人工开垦第二块田。扩田沿用原有开垦、春播、季节成长和收获规则。
     </section>
 
     <section class="map-panel panel">
@@ -35,23 +36,24 @@
           <h2>起始河谷</h2>
         </div>
         <div class="map-panel__tools" aria-label="地图控制">
-          <button type="button" data-map-control="zoom-out" aria-label="缩小地图">−</button>
-          <button type="button" data-map-control="center" aria-label="回到营地">◎</button>
-          <button type="button" data-map-control="zoom-in" aria-label="放大地图">＋</button>
+          <button type="button" data-map-control="zoom-out" aria-label="缩小地图" title="缩小地图">−</button>
+          <button type="button" data-map-control="center" aria-label="回到营地" title="回到营地">◎</button>
+          <button type="button" data-map-control="zoom-in" aria-label="放大地图" title="放大地图">＋</button>
         </div>
       </div>
       <div class="map-canvas-wrap">
-        <canvas id="map-canvas" aria-label="起始河谷地图"></canvas>
+        <canvas id="map-canvas" aria-label="起始河谷地图" aria-describedby="map-gesture-help"></canvas>
         <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
         <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
         <div id="weather-readout" class="map-overlay map-overlay--weather">晴朗 · 18℃ · 篝火燃料 4.0</div>
+        <p id="map-gesture-help" class="map-gesture-hint">拖动浏览 · 双指缩放 · 点村民查看</p>
       </div>
       <div class="map-legend">
         <span><i class="legend-swatch legend-swatch--forest"></i>林地</span>
         <span><i class="legend-swatch legend-swatch--stone"></i>石滩</span>
         <span><i class="legend-swatch legend-swatch--water"></i>河流</span>
         <span><i class="legend-swatch legend-swatch--camp"></i>营地</span>
-        <span>拖动查看 · 滚轮或按钮缩放</span>
+        <span class="map-legend__hint">拖动浏览 · 双指/滚轮缩放 · 点村民查看 · <kbd>Home</kbd> 回营地</span>
       </div>
       <div class="settlement-strip">
         <section class="camp-stock">
@@ -88,19 +90,19 @@
 
     <section class="foundation-grid">
       <article class="foundation-card">
-        <p class="panel__kicker">CAPACITY</p>
-        <h3>露天储备有限</h3>
-        <p>营地初期只能存放有限资源。容量已满时，村民无法再把新采集的物资全部卸入营地。</p>
+        <p class="panel__kicker">MAP CONTROL</p>
+        <h3>把地图当作观察窗口</h3>
+        <p>拖动查看河谷；手机双指缩放，电脑可用滚轮、按钮或键盘。轻点村民会直接展开其个人状态与近期事实。</p>
       </article>
       <article class="foundation-card">
-        <p class="panel__kicker">STORAGE SHED</p>
-        <h3>储物棚成为下一目标</h3>
-        <p>草棚建成后，运料和施工流程会自动复用到储物棚。它提供更大的物资容量与后续防潮基础。</p>
+        <p class="panel__kicker">LIVING SYSTEM</p>
+        <h3>世界会先留下事实</h3>
+        <p>村民的行动、建造、播种和收获会进入客观生活记录。人物面板用于观察这些已发生的事，不直接改写世界。</p>
       </article>
       <article class="foundation-card">
         <p class="panel__kicker">NEXT</p>
-        <h3>资源循环</h3>
-        <p>接下来加入树木与浆果的有限再生、行走形成土路，以及第一块能稳定供给食物的小农田。</p>
+        <h3>让农业进入长期循环</h3>
+        <p>下一步将加入土壤肥力或更多作物，让第二块田之后的扩张真正面对土地、季节与粮食储备的约束。</p>
       </article>
     </section>
   </main>
