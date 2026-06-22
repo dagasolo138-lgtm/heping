@@ -18,7 +18,7 @@
 - 相遇、印象、好奇属于人物 `personal` 记忆；行动、建造、睡眠、农事与收获结果写入 `lifeEvents`。
 - `globalThis.shengling` 与 `globalThis.__shenglingEventBus` 是独立运行时模块的扩展机制。异步运行时更新全局对象时必须以当时的 `globalThis.shengling` 为准，不能覆盖后挂接模块。
 
-## 2. 当前版本：v0.13.1
+## 2. 当前版本：v0.14
 
 已完成：
 
@@ -30,11 +30,13 @@
 6. 经过地块积累踏行热度：4 次形成踩踏路径、10 次形成土路；土路速度 ×1.16。
 7. 食物批次、储存损耗与天气保护：浆果、粟米按批次保存；每 30 世界分钟结算新鲜度；储物棚降低损耗。
 8. 四季：春 1–90 日、夏 91–180 日、秋 181–270 日、冬 271–360 日；温度修正依次 +2℃、+7℃、-1℃、-8℃。
-9. 粟米：春季可播种；夏季成长 ×1.25；秋季 ×0.62；冬季 ×0；成熟作物全年可收。基础生长要求 1440 有效世界分钟，收获 8 粟米，返种 2。
+9. 粟米：春季可播种；夏季成长 ×1.25；秋季 ×0.62；冬季 ×0；成熟作物全年可收。基础生长要求 1440 有效世界分钟，基础收获 8 粟米，返种 2。
 10. 第一块粟田：储物棚完成后自动选择 6×4 草地，开垦需 8 工作量。
-11. 第二块人工扩田：第一块田首次收获后解锁，在营地周边候选草地中选址；尺寸 6×4，开垦需 10 工作量；随后完全复用原有播种、成长、收获、搬运和食物保存链路。
-12. 页面与地图：天气、季节、生态、路径、农事、扩田、食物保存读数。
-13. 可验证部署：页面右下角显示构建版本、构建编号与源码短提交号；点击“部署清单”可读取根目录 `version.json`。请求使用 `cache: 'no-store'` 与 `cacheBust` 参数穿透缓存。
+11. 第二块人工扩田：第一块田首次收获后解锁，在营地周边候选草地中选址；尺寸 6×4，开垦需 10 工作量；随后完全复用既有播种、成长、收获、搬运和食物保存链路。
+12. **土壤肥力：** 每块田有独立肥力；新田 78；休耕缓慢恢复；肥力影响成长速度和收获量；每次粟米收获消耗 18。地图土色、田地状态点、农事读数和人物事实均显示相关结果。
+13. **地图体验：** 鼠标/单指拖动，双指缩放并可缩放时平移，滚轮缩放，地图按钮，键盘方向键平移、`+/-` 缩放、Home 回营地。点按村民可查看人物详情；移动端村民列表改为横向卡片滚动。
+14. 页面与地图显示天气、季节、生态、路径、农事、扩田、食物保存和部署构建读数。
+15. 可验证部署：页面右下角显示版本、构建编号和源码短提交；“部署清单”读取根目录 `version.json`，请求使用 `cache: no-store` 和 `cacheBust` 参数。
 
 ## 3. 启动与运行链
 
@@ -55,16 +57,16 @@ index.html
        ├─ attachSeasonRuntime.js
        │    └─ SeasonSystem
        ├─ attachFarmRuntime.js
-       │    └─ FarmSystem
+       │    └─ FarmSystem + 农事、土壤读数
        ├─ attachFarmExpansionRuntime.js
-       │    └─ 第二块人工扩田解锁、扩田读数和状态提示
+       │    └─ 第二块人工扩田解锁、扩田读数
        ├─ attachFoodStorageRuntime.js
        │    └─ FoodStorageSystem
        └─ attachBuildInfoRuntime.js
             └─ 读取 version.json，显示部署构建标记
 ```
 
-启动顺序：主世界 → 生态 → 路径 → 季节 → 农田 → 扩田 → 食物储存 → 构建信息。`attachBuildInfoRuntime` 必须放在最后，避免其异步读取过程基于过期 runtime 覆盖后来挂接的系统。
+启动顺序：主世界 → 生态 → 路径 → 季节 → 农田 → 扩田 → 食物储存 → 构建信息。`attachBuildInfoRuntime` 必须最后挂接。
 
 ## 4. 模块地图与连接点
 
@@ -83,29 +85,29 @@ src/
     ecology/                  # 资源耗尽与恢复
     roads/                    # 踏行热度与土路
     seasons/                  # 四季日历、温度趋势、农业窗口
-    farming/                  # 粟米、农田、扩田规划、生长、收获
+    farming/                  # 粟米、农田、扩田规划、土壤、生长、收获
     storage/                  # 食物批次、新鲜度、天气损耗、储物保护
   bootstrap/                  # 独立运行时挂接
   ui/map/                     # Canvas 图层与地图交互
-  styles/                     # 样式
+  styles/                     # 样式与体验层
 ```
 
 | 文件 | 职责 |
 |---|---|
-| `src/app.js` | 只负责编排启动器；不要把规则堆进这里。 |
+| `src/app.js` | 只负责编排启动器；不要堆叠业务规则。 |
 | `src/app-v4.js` | 主装配器：创建基础世界系统与 UI，启动行动循环。 |
-| `src/modules/farming/farmSystem.js` | 农田状态、开垦、播种、生长、收获、种子、第一块田和扩田创建接口。 |
+| `src/ui/map/mapView.js` | 相机、画布绘制、单指/鼠标拖动、双指缩放、滚轮、键盘地图导航、人物点选。 |
+| `src/styles/experience.css` | 地图触控目标、手势提示、焦点样式、移动端卡片列表等体验层。 |
+| `src/modules/farming/farmSystem.js` | 农田状态、开垦、播种、生长、收获、种子、扩田创建和土壤结算。 |
+| `src/modules/farming/soilModel.js` | 肥力初始值、分级、恢复、成长倍率、产量倍率、收获消耗。 |
 | `src/modules/farming/fieldExpansionPlanner.js` | 第二块田的 ID、候选偏移、解锁条件、尺寸与开垦工作量。 |
-| `src/bootstrap/attachFarmRuntime.js` | 农事读数、粟米资源芯片、挂接 `farmSystem`。 |
+| `src/bootstrap/attachFarmRuntime.js` | 农事/肥力读数、粟米资源芯片、挂接 `farmSystem`。 |
 | `src/bootstrap/attachFarmExpansionRuntime.js` | 监听第一块田收获，调用 `farmSystem.ensureExpansionField()`。 |
-| `src/modules/actions/farmPlanner.js` | 按优先级从 `FarmSystem.nextWorkField()` 取得农事任务。 |
-| `src/modules/actions/farmEffects.js` | 农事完成后写入人物事实；必须使用具体田名。 |
+| `src/modules/actions/farmEffects.js` | 农事完成后写入人物事实，包含具体田名与收获前后肥力。 |
 | `src/modules/seasons/seasonSystem.js` | 四季、季内日数、进度、温度修正、作物规则。 |
-| `src/modules/environment/weatherSystem.js` | 保留天气种类，叠加季节温度趋势。 |
 | `src/bootstrap/attachBuildInfoRuntime.js` | 读取 `version.json`，右下角显示部署构建读数。 |
-| `src/styles/environment.css` | 地图覆盖层、扩田读数与构建读数样式。 |
 
-## 5. 农业、季节与扩田
+## 5. 农业、季节、土壤与扩田
 
 ### 粟米基础
 
@@ -114,16 +116,13 @@ src/
 | 初始种子 | 2 |
 | 每次播种消耗 | 1 |
 | 生长要求 | 1440 有效世界分钟 |
-| 收获 | 8 粟米 |
+| 基础收获 | 8 粟米 |
 | 返种 | 2 |
+| 收获肥力消耗 | 18 |
 
 天气成长倍率：晴朗 1.00；阴天 0.86；降雨 1.28；寒冷 0.54；冷雨 0.70。
 
-```text
-有效成长 = 经过世界分钟 × 天气成长倍率 × 季节成长倍率
-```
-
-### 季节农业规则
+季节规则：
 
 | 季节 | 天数 | 温度修正 | 播种 | 粟米成长倍率 |
 |---|---:|---:|---|---:|
@@ -132,7 +131,38 @@ src/
 | 秋 | 181–270 | -1℃ | 不可 | 0.62 |
 | 冬 | 271–360 | -8℃ | 不可 | 0 |
 
-农田状态：
+### 土壤肥力模型
+
+字段 `field.soil`：
+
+```text
+fertility   0–100，初始 78
+lastTick    上次结算世界 tick
+harvests    已发生的收获次数
+```
+
+肥力分级：
+
+| 范围 | ID | 标签 | 成长倍率 | 产量倍率 |
+|---:|---|---|---:|---:|
+| 80–100 | `rich` | 肥沃 | 1.06 | 1.12 |
+| 55–79 | `steady` | 尚可 | 0.96 | 1.00 |
+| 30–54 | `poor` | 贫瘠 | 0.78 | 0.80 |
+| 0–29 | `thin` | 瘠薄 | 0.60 | 0.62 |
+
+公式：
+
+```text
+有效成长 = 经过世界分钟 × 天气成长倍率 × 季节成长倍率 × 土壤成长倍率
+收获数量 = max(3, round(基础产量 × 土壤产量倍率))
+```
+
+- `planned`、`clearing`、`readyToSow` 视为休耕状态，每个世界分钟恢复 0.0015 点肥力。
+- `growing`、`mature` 不恢复肥力。
+- 收获后扣 18 点并增加 `soil.harvests`。
+- 土壤整数变化会通过 `farms:changed` 刷新读数与地图。
+
+### 农田状态与任务优先级
 
 ```text
 planned → clearing → readyToSow → growing → mature → readyToSow
@@ -140,7 +170,7 @@ planned → clearing → readyToSow → growing → mature → readyToSow
 
 展示状态：`待开垦`、`开垦中`、`可播种`、`等待春播`、`生长中`、`冬季停长`、`成熟待收`。
 
-农事任务优先级：
+农事候选优先级：
 
 ```text
 成熟待收 → 当前季节可播种的田 → 待开垦 / 开垦中的田
@@ -159,31 +189,29 @@ planned → clearing → readyToSow → growing → mature → readyToSow
 → 进入既有春播、成长、收获循环
 ```
 
-`SECOND_FIELD_EXPANSION`：
+`SECOND_FIELD_EXPANSION`：ID 为 `second-millet-field`，标签为“第二块粟田”，尺寸 6×4，首次收获解锁，候选位置是营地周边 8 个固定偏移点。
 
-| 字段 | 值 |
-|---|---|
-| ID | `second-millet-field` |
-| 标签 | 第二块粟田 |
-| 尺寸 | 6×4 格 |
-| 解锁条件 | 第一块田收获次数 ≥ 1 |
-| 开垦工作量 | 10 |
-| 候选位置 | 营地周边 8 个固定偏移点，按顺序选择可用点 |
+## 6. 地图交互与 UI 约定
 
-候选地块条件：未与农田或建筑重叠、地块存在、地形为草地或高草地、没有地图物件。
+`mapView.js` 使用 Pointer Events：
 
-## 6. 事件与渲染连接点
+```text
+单指 / 左键拖动     平移相机
+双指缩放            缩放并跟随双指中心平移
+轻点                选中附近村民
+滚轮                以指针位置为锚点缩放
+方向键              平移
++ / -               缩放
+Home                回到营地与默认缩放
+```
 
-| 事件 | 发出方 | 用途 |
-|---|---|---|
-| `simulation:time` | ActionSystem | 时间、天气、季节、生态、作物成长与食物损耗共同入口。 |
-| `seasons:changed` | SeasonSystem | 跨季刷新季节、天气趋势与农田状态。 |
-| `farms:changed` | FarmSystem | 农田创建、开垦、播种、成长、收获、扩田计划。 |
-| `farms:matured` | FarmSystem | 提醒成熟作物可收获。 |
-| `environment:weather` | WeatherSystem | 刷新天气、温度和环境影响。 |
-| `camp:changed` | CampStore | 刷新资源栏与粟米芯片。 |
-| `storage:food-aged` / `storage:food-spoiled` | FoodStorageSystem | 刷新食物保存状态。 |
-| `ecology:changed` / `roads:changed` | 对应模块 | 刷新地图覆盖层。 |
+交互约束：
+
+- 双指操作必须抑制人物点选，避免缩放结束误选人物。
+- 相机每次平移和缩放后都调用 `clampCamera()`。
+- 画布设置 `touch-action: none`，避免系统滚动接管地图手势。
+- 画布可聚焦，保留键盘访问；`:focus-visible` 必须可见。
+- 移动端村民列表采用横向滚动卡片，避免纵向页面被十人列表占满。
 
 地图绘制顺序：
 
@@ -191,65 +219,63 @@ planned → clearing → readyToSow → growing → mature → readyToSow
 地貌 → 路径 → 农田 → 昼夜光照 → 资源/篝火/树桩/恢复灌丛 → 建筑/工地 → 人物 → 雨层 → 页面覆盖层
 ```
 
-## 7. Pages 部署验证机制
+## 7. 事件与渲染连接点
 
-### 发布清单
+| 事件 | 发出方 | 用途 |
+|---|---|---|
+| `simulation:time` | ActionSystem | 时间、天气、季节、生态、作物成长、土壤恢复和食物损耗共同入口。 |
+| `seasons:changed` | SeasonSystem | 跨季刷新季节、天气趋势与农田状态。 |
+| `farms:changed` | FarmSystem | 农田创建、开垦、播种、成长、收获、扩田、土壤恢复。 |
+| `farms:matured` | FarmSystem | 提醒成熟作物可收获。 |
+| `environment:weather` | WeatherSystem | 刷新天气、温度和环境影响。 |
+| `camp:changed` | CampStore | 刷新资源栏与粟米芯片。 |
+| `storage:food-aged` / `storage:food-spoiled` | FoodStorageSystem | 刷新食物保存状态。 |
+| `ecology:changed` / `roads:changed` | 对应模块 | 刷新地图覆盖层。 |
 
-根目录 `version.json` 是静态部署信标，当前字段：
+## 8. Pages 部署验证机制
+
+根目录 `version.json` 是静态部署信标，关键字段：
 
 ```text
-schemaVersion  清单格式版本
-project        项目名
-version        产品版本
-buildId        人工可比对的构建编号
-sourceCommit   与本轮页面代码对应的 Git 提交
-branch         发布分支
-verificationPath  Pages 上清单路径
+schemaVersion      清单格式版本
+project            项目名
+version            产品版本
+buildId            人工可比对的构建编号
+sourceCommit       与页面代码对应的 Git 提交
+branch             发布分支
+verificationPath   Pages 上清单路径
 ```
 
-### 页面行为
-
-`attachBuildInfoRuntime` 在最后挂接，执行：
+页面最后挂接 `attachBuildInfoRuntime`：
 
 ```text
 GET version.json?cacheBust=<Date.now()>
 cache: no-store
-→ 校验 JSON 对象
-→ 页面右下角显示 version / buildId / sourceCommit 前 7 位
+→ 校验 JSON
+→ 右下角显示 version / buildId / sourceCommit 前 7 位
 → 提供“部署清单”链接
 ```
 
-### 以后如何确认部署
+确认部署：打开 Pages 页面，核对右下角构建读数；再打开 `https://dagasolo138-lgtm.github.io/heping/version.json?cacheBust=<任意新数字>`，两处 `buildId` 与 `sourceCommit` 一致即可。
 
-1. 每次发布前，先完成页面代码改动并记录其提交 SHA。
-2. 最后更新 `version.json`：写入新 `version`、唯一 `buildId` 与页面代码提交的 `sourceCommit`。
-3. 在 Pages 打开页面，确认右下角读数。
-4. 点击“部署清单”，或访问：
-   ```text
-   https://dagasolo138-lgtm.github.io/heping/version.json?cacheBust=<任意新数字>
-   ```
-5. 页面读数与清单的 `buildId`、`sourceCommit` 一致，即可确认线上页面已读到对应构建。
+## 9. 已知限制
 
-注意：`version.json` 的提交本身通常会晚于 `sourceCommit`，这是设计结果。`sourceCommit` 用来指向该清单所验证的页面代码提交；清单文件自身作为“该版本已进入 Pages 发布内容”的证据。
-
-## 8. 已知限制
-
-1. 刷新页面会重新开局；农田、种子、扩田、路径、生态和食物批次不持久化。
+1. 刷新页面会重新开局；农田、种子、肥力、扩田、路径、生态和食物批次不会持久化。
 2. 当前没有浏览器端自动化测试。
 3. 草棚、储物棚与农田没有作为寻路障碍。
 4. 当前农业只有两块田和一种粟米。
 5. 第二块田使用固定候选点，未包含玩家点选、地形评分、劳动力预算或长期土地规划。
-6. 四季温度、作物倍率、扩田门槛、食物损耗和天气倍率仍是原型数值，尚未完成平衡测试。
+6. 土壤恢复、肥力倍率、作物成长、扩田门槛、食物损耗和天气倍率仍是原型数值，尚未平衡测试。
 7. 当前部署验证能证明静态页面已读到预期构建清单，但不替代浏览器端交互回归测试。
 8. 未来 AI 只能读取 `lifeEvents`，不得直接修改世界状态。
 
-## 9. 下一阶段建议
+## 10. 下一阶段建议
 
-1. **土壤肥力**：每块农田记录肥力，收获消耗、休耕恢复，成长或产量受影响。
-2. **更多作物**：不同播种季、成长周期、产量和耐寒性。
+1. **施肥/堆肥与休耕策略**：让肥力恢复拥有主动决策与资源代价。
+2. **更多作物**：不同播种季、成长周期、肥力消耗、产量和耐寒性。
 3. 灌溉、虫害、洪涝、干旱与粮食储备策略。
 
-## 10. 版本更新记录（只追加）
+## 11. 版本更新记录（只追加）
 
 ### v0.1 · 人物系统基础
 - 十位村民、状态、技能、关系、库存、人生事实和个人记忆。
@@ -319,5 +345,12 @@ cache: no-store
 - 新增根目录 `version.json`，记录版本、构建编号、源码提交、分支与清单路径。
 - 新增 `src/bootstrap/attachBuildInfoRuntime.js`，页面右下角显示构建读数并提供部署清单链接。
 - 读取清单使用 `cache: 'no-store'` 与 `cacheBust` 参数，降低旧缓存导致误判的风险。
-- `src/app.js` 在食物储存运行时之后挂接构建信息运行时；`environment.css` 新增构建读数样式。
 - README 增加部署确认步骤；今后每次 Pages 发布必须同步更新 `version.json`。
+
+### v0.14 · 地图交互优化与土壤肥力
+- 地图支持鼠标/单指拖动、双指缩放并可平移、滚轮、键盘导航、Home 回营地；移动端控件和人物卡片布局重做。
+- 新增 `src/styles/experience.css`，提供地图手势提示、触控目标、焦点态和移动端体验层；`index.html` 更新地图操作说明与当前阶段文案。
+- 新增 `src/modules/farming/soilModel.js`；田地记录肥力、休耕恢复、肥力分级、成长/产量倍率和收获消耗。
+- `FarmSystem` 将肥力纳入生长和收获；农事读数、扩田读数、地图土色/状态点、人物 `lifeEvents` 都显示肥力结果。
+- 当前参数：新田 78，休耕每世界分钟 +0.0015，单次粟米收获 -18；参数尚未平衡测试。
+- 下一步建议：施肥/堆肥与休耕策略，或更多作物。
