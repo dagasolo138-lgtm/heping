@@ -1,14 +1,5 @@
 import { createFoodStorageSystem } from '../modules/storage/foodStorageSystem.js';
 
-function updatePhaseCopy() {
-  const eyebrow = document.querySelector('.eyebrow');
-  const subtitle = document.querySelector('.subtitle');
-  const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 11';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、耕作与储存损耗原型';
-  if (note) note.innerHTML = '<strong>第十一阶段：</strong>浆果和粟米会按进入营地的批次保存。雨天与冷雨会加速食物损耗；储物棚的保护值会降低损耗，让生产、储存和消耗成为完整循环。';
-}
-
 function ensureElements() {
   const mapWrap = document.querySelector('.map-canvas-wrap');
   const campStock = document.querySelector('.camp-stock');
@@ -72,7 +63,6 @@ export function attachFoodStorageRuntime() {
     gameTime: runtime.gameTime,
     campStore: runtime.campStore,
   });
-  updatePhaseCopy();
   const elements = ensureElements();
   render(elements, foodStorageSystem);
 
