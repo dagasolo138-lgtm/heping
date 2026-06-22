@@ -1,5 +1,6 @@
 import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
+import { availableCampStorage } from './storageGuard.js';
 
 const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
 const ACTION_CAPS = Object.freeze({
@@ -49,8 +50,7 @@ function carriedItems(person) {
 
 function makeHaulTask(person, camp, storage) {
   const carried = carriedItems(person);
-  if (!Object.keys(carried).length) return null;
-  if (Number(storage?.available ?? Infinity) <= 0) return null;
+  if (!Object.keys(carried).length || availableCampStorage(camp, storage) <= 0) return null;
   return createTask(ACTION_TYPES.HAUL_TO_CAMP, camp.anchor, { campId: camp.id, carried }, 0.65);
 }
 
