@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.14",
-  "buildId": "v0.14-soil-and-map-experience-20260622-01",
-  "sourceCommit": "d54c161087526e00b6c01d76015e38d9982cc1e3",
+  "version": "v0.14.1",
+  "buildId": "v0.14.1-mobile-ui-repair-20260622-01",
+  "sourceCommit": "cd6fca8807d72c179b1cb945ff1da1beb823b702",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
