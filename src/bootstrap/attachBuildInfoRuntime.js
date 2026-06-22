@@ -7,7 +7,8 @@ function ensureReadout() {
   readout.id = 'build-info-readout';
   readout.className = 'build-info-readout';
   readout.setAttribute('aria-live', 'polite');
-  document.body.append(readout);
+  const shell = document.querySelector('.app-shell');
+  (shell ?? document.body).append(readout);
   return readout;
 }
 
