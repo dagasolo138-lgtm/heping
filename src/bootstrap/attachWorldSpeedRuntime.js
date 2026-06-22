@@ -1,5 +1,18 @@
 import { createWorldSpeedSystem } from '../modules/time/worldSpeedSystem.js';
 
+const STYLESHEET_URL = new URL('../styles/worldSpeed.css', import.meta.url);
+
+function ensureStylesheet() {
+  let stylesheet = document.querySelector('link[data-shengling-world-speed]');
+  if (stylesheet) return stylesheet;
+  stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = STYLESHEET_URL.href;
+  stylesheet.dataset.shenglingWorldSpeed = 'true';
+  document.head.append(stylesheet);
+  return stylesheet;
+}
+
 function render({ buttons, status }, speed) {
   buttons.forEach((button) => {
     const active = Number(button.dataset.worldSpeed) === speed.value;
@@ -15,6 +28,7 @@ export function attachWorldSpeedRuntime() {
   if (!runtime || !eventBus) throw new Error('世界速度模块启动失败：世界运行时尚未初始化。');
   if (runtime.worldSpeedRuntime) return runtime.worldSpeedRuntime;
 
+  ensureStylesheet();
   const worldSpeedSystem = runtime.worldSpeedSystem ?? createWorldSpeedSystem({
     eventBus,
     gameTime: runtime.gameTime,
