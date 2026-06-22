@@ -1,6 +1,7 @@
 import { TERRAIN } from '../../data/constants/terrain.js';
 import { cropGrowthMultiplier, getCropType } from './cropCatalog.js';
 import { SECOND_FIELD_EXPANSION, canPlanSecondField, findSecondFieldAnchor } from './fieldExpansionPlanner.js';
+import { SOIL_LIMITS, createSoil, depleteSoil, describeSoil, recoverSoil, soilGrowthMultiplier, soilYieldMultiplier } from './soilModel.js';
 
 const FIELD_FOOTPRINT = Object.freeze({ width: 6, height: 4 });
 const CLEARING_WORK_REQUIRED = 8;
@@ -35,6 +36,10 @@ function eligibleTerrain(terrain) {
   return terrain === TERRAIN.GRASS || terrain === TERRAIN.TALL_GRASS;
 }
 
+function isResting(field) {
+  return field.status === 'planned' || field.status === 'clearing' || field.status === 'readyToSow';
+}
+
 export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem, seasonSystem = null }) {
   const fields = new Map();
   let seedStock = 2;
@@ -65,7 +70,7 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
   }
 
   function viewField(field) {
-    return clone({ ...field, seasonal: fieldSeasonalState(field) });
+    return clone({ ...field, soil: describeSoil(field.soil), seasonal: fieldSeasonalState(field) });
   }
 
   function listFields() {
@@ -82,6 +87,8 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     const readyToSow = list.filter((field) => field.status === 'readyToSow');
     const firstField = list.find((field) => field.id === 'first-millet-field') ?? null;
     const secondField = list.find((field) => field.id === SECOND_FIELD_EXPANSION.id) ?? null;
+    const soilValues = list.map((field) => Number(field.soil?.fertility ?? SOIL_LIMITS.initialFertility));
+    const averageFertility = soilValues.length ? Math.round(soilValues.reduce((total, value) => total + value, 0) / soilValues.length) : null;
     return {
       total: list.length,
       clearing: list.filter((field) => field.status === 'clearing' || field.status === 'planned').length,
@@ -94,6 +101,11 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
       expansionUnlocked: Number(firstField?.harvestCount ?? 0) >= SECOND_FIELD_EXPANSION.requiredHarvests,
       expansionAvailable: canPlanSecondField(list),
       secondFieldStatus: secondField?.status ?? null,
+      soil: {
+        averageFertility,
+        poorFields: list.filter((field) => Number(field.soil?.fertility ?? SOIL_LIMITS.initialFertility) < 55).length,
+        thinFields: list.filter((field) => Number(field.soil?.fertility ?? SOIL_LIMITS.initialFertility) < 30).length,
+      },
       seedStock,
       season: getSeason(),
     };
@@ -132,6 +144,7 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
 
   function createField({ id, label, anchor, footprint, clearingWorkRequired, origin, expansion = null }) {
     const stamp = gameTime.stamp();
+    const tick = Number(gameTime.now().tick ?? 0);
     return {
       id,
       label,
@@ -142,7 +155,8 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
       expansion,
       status: 'planned',
       clearing: { required: clearingWorkRequired, completed: 0 },
-      growth: { progressed: 0, required: getCropType('millet').growthRequiredMinutes, lastTick: Number(gameTime.now().tick ?? 0) },
+      soil: createSoil(tick),
+      growth: { progressed: 0, required: getCropType('millet').growthRequiredMinutes, lastTick: tick },
       plantedAt: null,
       matureAt: null,
       harvestCount: 0,
@@ -238,11 +252,16 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     const field = fields.get(fieldId);
     if (!field || field.status !== 'mature') return null;
     const crop = getCropType(field.cropId);
+    const soilBefore = describeSoil(field.soil);
+    const amount = Math.max(3, Math.round(crop.harvestYield * soilYieldMultiplier(field.soil)));
+    const soil = depleteSoil(field.soil, crop.soilDepletion ?? SOIL_LIMITS.harvestDepletion);
     const result = {
       itemId: crop.itemId,
-      amount: crop.harvestYield,
+      amount,
       seedReturn: crop.seedReturn,
       label: crop.label,
+      soilBefore,
+      soil,
     };
     seedStock += crop.seedReturn;
     field.status = 'readyToSow';
@@ -254,15 +273,33 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     return result;
   }
 
+  function syncSoil(nowTick) {
+    let changed = false;
+    fields.forEach((field) => {
+      if (!field.soil) field.soil = createSoil(nowTick);
+      const lastTick = Number(field.soil.lastTick ?? nowTick);
+      const elapsed = Math.max(0, nowTick - lastTick);
+      if (elapsed && recoverSoil(field.soil, elapsed, isResting(field))) {
+        field.updatedAt = gameTime.stamp();
+        changed = true;
+      }
+      field.soil.lastTick = nowTick;
+    });
+    return changed;
+  }
+
   function syncGrowth(weather) {
     const nowTick = Number(gameTime.now().tick ?? 0);
-    let changed = false;
+    const soilChanged = syncSoil(nowTick);
+    let growthChanged = false;
     fields.forEach((field) => {
       if (field.status !== 'growing') return;
       const elapsed = Math.max(0, nowTick - Number(field.growth.lastTick ?? nowTick));
       if (!elapsed) return;
       const rule = getCropRule(field.cropId);
-      const multiplier = cropGrowthMultiplier(weather) * Math.max(0, Number(rule.growthMultiplier ?? 1));
+      const multiplier = cropGrowthMultiplier(weather)
+        * Math.max(0, Number(rule.growthMultiplier ?? 1))
+        * soilGrowthMultiplier(field.soil);
       field.growth.progressed = Math.min(field.growth.required, field.growth.progressed + elapsed * multiplier);
       field.growth.lastTick = nowTick;
       field.updatedAt = gameTime.stamp();
@@ -271,9 +308,9 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
         field.matureAt = gameTime.stamp();
         eventBus.emit('farms:matured', { field: viewField(field), time: gameTime.stamp() });
       }
-      changed = true;
+      growthChanged = true;
     });
-    if (changed) emit('field:growing');
+    if (growthChanged || soilChanged) emit(growthChanged ? 'field:growing' : 'soil:recovered');
     return getSummary();
   }
 
