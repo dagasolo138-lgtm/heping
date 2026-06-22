@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.13.1",
-  "buildId": "v0.13.1-pages-beacon-20260622-01",
-  "sourceCommit": "bdd3b32bc47f51ff88a48f2bf38815e506d6cc33",
+  "version": "v0.14",
+  "buildId": "v0.14-soil-and-map-experience-20260622-01",
+  "sourceCommit": "d54c161087526e00b6c01d76015e38d9982cc1e3",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
