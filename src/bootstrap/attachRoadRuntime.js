@@ -1,6 +1,7 @@
 import { createRoadSystem } from '../modules/roads/roadSystem.js';
 
-const SAMPLE_INTERVAL_MS = 240;
+const BASE_SAMPLE_INTERVAL_MS = 240;
+const MIN_SAMPLE_INTERVAL_MS = 16;
 
 function updatePhaseCopy() {
   const eyebrow = document.querySelector('.eyebrow');
@@ -44,6 +45,11 @@ function sameTile(first, second) {
   return first?.x === second?.x && first?.y === second?.y;
 }
 
+function currentSampleInterval() {
+  const speed = Number(globalThis.shengling?.worldSpeedSystem?.get?.().value ?? 1);
+  return Math.max(MIN_SAMPLE_INTERVAL_MS, BASE_SAMPLE_INTERVAL_MS / Math.max(0.5, speed));
+}
+
 export function attachRoadRuntime() {
   const runtime = globalThis.shengling;
   const eventBus = globalThis.__shenglingEventBus;
@@ -58,7 +64,7 @@ export function attachRoadRuntime() {
 
   function sample(now) {
     frameId = requestAnimationFrame(sample);
-    if (now - lastSample < SAMPLE_INTERVAL_MS) return;
+    if (now - lastSample < currentSampleInterval()) return;
     lastSample = now;
     runtime.actionSystem.getRenderPeople().forEach((person) => {
       if (person.location.tileX === null || person.location.tileY === null) return;
