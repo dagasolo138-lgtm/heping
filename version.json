@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.23.1",
-  "buildId": "v0.23.1-stabilization-20260709-01",
-  "sourceCommit": "will-be-filled-by-release-commit",
+  "version": "v0.24.0",
+  "buildId": "v0.24.0-ui-observer-20260709-01",
+  "sourceCommit": "release-commit-sha-must-be-filled-after-commit",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
-    "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter."
+    "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
+    "sourceCommitPolicy": "This development commit cannot know its own final SHA before it exists; replace sourceCommit with the actual release commit SHA after commit/deploy verification. Current pre-change HEAD was c320f527ea6fecf3b8644f8fc7f7e8cc0aeab3d6."
   }
 }

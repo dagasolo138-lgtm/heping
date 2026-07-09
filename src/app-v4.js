@@ -58,6 +58,7 @@ const detail = $('#person-detail');
 const count = $('#people-count');
 const status = $('#system-status');
 const clock = $('#world-time');
+const topbarTime = $('#topbar-time');
 const weatherReadout = $('#weather-readout');
 const resources = $('#camp-resources');
 const construction = $('#construction-status');
@@ -125,8 +126,10 @@ function renderUtilityDebug(utility) {
     .join('');
   return `<section class="utility-card"><div class="utility-card__header"><h3>行动原因</h3><span>${esc(utility.planner ?? 'utility')} · ${esc(utility.score ?? 0)} 分</span></div>
     <p>${esc(utility.reason ?? '暂无原因')}</p>
-    ${factorRows ? `<ul class="utility-factors">${factorRows}</ul>` : ''}
-    ${candidateRows ? `<div class="utility-candidates"><h4>候选评分</h4><ol>${candidateRows}</ol></div>` : ''}
+    <details><summary>展开评分细节</summary>
+      ${factorRows ? `<ul class="utility-factors">${factorRows}</ul>` : '<p class="muted">暂无 utility factors。</p>'}
+      ${candidateRows ? `<div class="utility-candidates"><h4>候选评分</h4><ol>${candidateRows}</ol></div>` : ''}
+    </details>
   </section>`;
 }
 
@@ -136,6 +139,7 @@ function renderEnvironment() {
   const fireLabel = currentFire.lit ? `篝火燃料 ${currentFire.fuel.toFixed(1)}` : '篝火已熄灭';
   weatherReadout.textContent = `${currentWeather.label} · ${currentWeather.temperature}℃ · ${fireLabel}`;
   weatherReadout.classList.toggle('is-rain', currentWeather.isRain);
+  weatherReadout.setAttribute('aria-label', `天气与篝火：${weatherReadout.textContent}`);
 }
 
 function select(id, focus = true) {
@@ -189,6 +193,7 @@ function renderDetail() {
       <div class="metric"><span>饥饿</span><strong>${Math.round(person.state.hunger)}</strong></div>
       <div class="metric"><span>口渴</span><strong>${Math.round(person.state.thirst)}</strong></div>
       <div class="metric"><span>精力</span><strong>${Math.round(person.state.energy)}</strong></div>
+      <div class="metric"><span>健康</span><strong>${Math.round(person.state.health)}</strong></div>
       <div class="metric"><span>位置</span><strong>${runtime.location.tileX.toFixed(1)}, ${runtime.location.tileY.toFixed(1)}</strong></div>
       <div class="metric"><span>库存</span><strong>${Object.keys(person.inventory.items).length}</strong></div>
       <div class="metric"><span>行动</span><strong>${person.activity.completedCount ?? 0}</strong></div>
@@ -205,9 +210,17 @@ function renderCamp() {
   const items = campState?.items ?? {};
   const storage = camp.getStorage('starting-camp');
   const currentFire = actions.getFire();
-  const stock = ['water', 'berries', 'wood'].map((name) => `<span class="resource-chip resource-chip--${name}"><b>${CAMP_ITEM_LABELS[name]}</b><strong>${Number(items[name] ?? 0)}</strong></span>`);
+  const berries = Number(items.berries ?? 0);
+  const millet = Number(items.millet ?? 0);
+  const foodTotal = berries + millet;
+  const stock = [
+    `<span class="resource-chip resource-chip--water"><b>水</b><strong>${Number(items.water ?? 0)}</strong></span>`,
+    `<span class="resource-chip resource-chip--food"><b>食物</b><strong>${foodTotal}</strong><small>浆果 ${berries} · 粟米 ${millet}</small></span>`,
+    `<span class="resource-chip resource-chip--wood"><b>木材</b><strong>${Number(items.wood ?? 0)}</strong></span>`,
+  ];
   stock.push(`<span class="resource-chip resource-chip--fire ${currentFire.lit ? '' : 'is-out'}"><b>篝火</b><strong>${currentFire.lit ? currentFire.fuel.toFixed(1) : '熄灭'}</strong></span>`);
-  if (storage) stock.push(`<span class="resource-chip resource-chip--storage"><b>${esc(storage.label)}</b><strong>${storage.used}/${storage.capacity}</strong></span>`);
+  if (storage) stock.push(`<span class="resource-chip resource-chip--storage"><b>储存容量</b><strong>${storage.used}/${storage.capacity}</strong><small>${esc(storage.label)}</small></span>`);
+  stock.push('<span class="resource-chip resource-chip--rule"><b>食物规则</b><strong>先到先得</strong><small>其他规则仅解释记录，暂未参与排序</small></span>');
   resources.innerHTML = stock.join('');
 }
 
@@ -245,7 +258,14 @@ function ensureChroniclePanel() {
   chroniclePanel = document.createElement('section');
   chroniclePanel.id = 'chronicle-panel';
   chroniclePanel.className = 'chronicle-panel panel';
-  chroniclePanel.innerHTML = '<div class="panel__header"><div><p class="panel__kicker">SETTLEMENT CHRONICLE</p><h2>聚落纪事</h2></div><span class="count-pill" data-chronicle-count>0</span></div><ol class="chronicle-list" data-chronicle-list></ol>';
+  chroniclePanel.innerHTML = '<div class="panel__header"><div><p class="panel__kicker">SETTLEMENT CHRONICLE</p><h2>聚落纪事</h2></div><span class="count-pill" data-chronicle-count>0</span></div><ol class="chronicle-list is-collapsed" data-chronicle-list></ol><button type="button" class="chronicle-toggle" data-chronicle-toggle>展开全部纪事</button>';
+  chroniclePanel.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-chronicle-toggle]');
+    if (!button) return;
+    const list = chroniclePanel.querySelector('[data-chronicle-list]');
+    const collapsed = list?.classList.toggle('is-collapsed');
+    button.textContent = collapsed ? '展开全部纪事' : '收起纪事';
+  });
   document.querySelector('.workspace')?.insertAdjacentElement('afterend', chroniclePanel);
   return chroniclePanel;
 }
@@ -254,7 +274,7 @@ function renderChronicles() {
   const panel = ensureChroniclePanel();
   const list = panel.querySelector('[data-chronicle-list]');
   const countNode = panel.querySelector('[data-chronicle-count]');
-  const items = chronicles.listChronicles().slice(0, 5);
+  const items = chronicles.listChronicles();
   if (countNode) countNode.textContent = chronicles.listChronicles().length;
   if (!list) return;
   list.innerHTML = items.length ? items.map((entry) => {
@@ -320,6 +340,7 @@ bus.on('environment:fire', () => { renderEnvironment(); renderCamp(); view.redra
 bus.on('environment:updated', () => { renderEnvironment(); view.redraw(); });
 bus.on('simulation:time', ({ time: stamp, phase }) => {
   clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(phase?.label ?? '')} · ${esc(stamp.label)}`;
+  if (topbarTime) topbarTime.textContent = stamp.label.replace(/^生灵历\s*/, '');
   renderEnvironment();
   view.redraw();
 });

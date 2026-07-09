@@ -9,18 +9,36 @@
   <link rel="stylesheet" href="./src/styles/construction.css" />
   <link rel="stylesheet" href="./src/styles/environment.css" />
   <link rel="stylesheet" href="./src/styles/experience.css" />
+  <link rel="stylesheet" href="./src/styles/observer.css" />
 </head>
 <body>
   <main class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">SHENGLING / FOUNDATION 13</p>
+    <header class="topbar observer-topbar">
+      <div class="observer-title">
+        <p class="eyebrow">SHENGLING / FOUNDATION 16</p>
         <h1>生灵</h1>
-        <p class="subtitle">起始河谷 · 生存、建造与逐步扩大的农业原型</p>
+        <p class="subtitle">起始河谷 · 荒野手账与聚落观察器</p>
       </div>
-      <div class="topbar__status" aria-live="polite">
-        <span class="status-dot"></span>
-        <span id="system-status">村民正在建立起始营地的生存循环</span>
+      <div class="observer-statusbar" aria-label="聚落状态栏">
+        <div class="observer-statusbar__item"><span>生灵历</span><strong id="topbar-time">1 年第 1 日 08:00</strong></div>
+        <div id="weather-readout" class="observer-statusbar__item observer-weather">晴朗 · 18℃ · 篝火燃料 4.0</div>
+        <div class="world-speed-control" role="group" aria-label="世界运行速度">
+          <div class="world-speed-control__copy">
+            <span class="world-speed-control__kicker">WORLD SPEED</span>
+            <strong id="world-speed-status">世界速度 1×</strong>
+          </div>
+          <div class="world-speed-control__buttons">
+            <button type="button" data-world-speed="0.5" aria-pressed="false">0.5×</button>
+            <button type="button" data-world-speed="1" aria-pressed="true">1×</button>
+            <button type="button" data-world-speed="2" aria-pressed="false">2×</button>
+            <button type="button" data-world-speed="5" aria-pressed="false">5×</button>
+            <button type="button" data-world-speed="10" aria-pressed="false">10×</button>
+          </div>
+        </div>
+        <div class="topbar__status" aria-live="polite">
+          <span class="status-dot"></span>
+          <span id="system-status">村民正在建立起始营地的生存循环</span>
+        </div>
       </div>
     </header>
 
@@ -29,6 +47,7 @@
       第一块粟田完成首次收获后，村民会在营地附近人工开垦第二块田。扩田沿用原有开垦、春播、季节成长和收获规则。
     </section>
 
+    <div class="observer-layout">
     <section class="map-panel panel">
       <div class="panel__header map-panel__header">
         <div>
@@ -41,24 +60,10 @@
           <button type="button" data-map-control="zoom-in" aria-label="放大地图" title="放大地图">＋</button>
         </div>
       </div>
-      <div class="world-speed-control" role="group" aria-label="世界运行速度">
-        <div class="world-speed-control__copy">
-          <span class="world-speed-control__kicker">WORLD SPEED</span>
-          <strong id="world-speed-status">世界速度 1×</strong>
-        </div>
-        <div class="world-speed-control__buttons">
-          <button type="button" data-world-speed="0.5" aria-pressed="false">0.5×</button>
-          <button type="button" data-world-speed="1" aria-pressed="true">1×</button>
-          <button type="button" data-world-speed="2" aria-pressed="false">2×</button>
-          <button type="button" data-world-speed="5" aria-pressed="false">5×</button>
-          <button type="button" data-world-speed="10" aria-pressed="false">10×</button>
-        </div>
-      </div>
       <div class="map-canvas-wrap">
         <canvas id="map-canvas" aria-label="起始河谷地图" aria-describedby="map-gesture-help"></canvas>
         <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
         <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
-        <div id="weather-readout" class="map-overlay map-overlay--weather">晴朗 · 18℃ · 篝火燃料 4.0</div>
         <p id="map-gesture-help" class="map-gesture-hint">拖动浏览 · 双指缩放 · 点村民查看</p>
       </div>
       <div class="map-legend">
@@ -84,7 +89,8 @@
       </div>
     </section>
 
-    <section class="workspace">
+    <aside class="observer-sidebar">
+      <section class="workspace">
       <aside class="people-panel panel">
         <div class="panel__header">
           <div>
@@ -99,7 +105,9 @@
       <section class="detail-panel panel">
         <div id="person-detail" class="person-detail"></div>
       </section>
-    </section>
+      </section>
+    </aside>
+    </div>
 
     <section class="foundation-grid">
       <article class="foundation-card">
