@@ -1,14 +1,5 @@
 import { createFarmSystem } from '../modules/farming/farmSystem.js';
 
-function updatePhaseCopy() {
-  const eyebrow = document.querySelector('.eyebrow');
-  const subtitle = document.querySelector('.subtitle');
-  const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 14';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造、农业与土地恢复原型';
-  if (note) note.innerHTML = '<strong>第十四阶段：</strong>每块田都保存独立肥力。休耕会慢慢恢复，作物成长与收获会受土壤影响；连续耕作会让同一块土地逐渐减产。';
-}
-
 function ensureReadout() {
   let readout = document.querySelector('#farm-readout');
   if (readout) return readout;
@@ -82,7 +73,6 @@ export function attachFarmRuntime() {
     buildingSystem: runtime.buildingSystem,
     seasonSystem: runtime.seasonSystem,
   });
-  updatePhaseCopy();
   const readout = ensureReadout();
   renderReadout(readout, farmSystem);
   patchMilletChip(runtime);

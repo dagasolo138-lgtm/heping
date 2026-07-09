@@ -46,6 +46,9 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   let clockTimer = 0;
   let needsTimer = 0;
   let phaseId = getDayPhase(gameTime.now()).id;
+  let lastError = null;
+  let lastTickAt = null;
+  let lastGameTime = gameTime.stamp();
   const foodDistribution = createFoodDistributionSystem({ eventBus, gameTime, campStore, campRulesSystem, campId: CAMP_ID });
 
   function activeWorldSpeedSystem() {
@@ -390,33 +393,57 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     eventBus.emit('environment:updated', { weather, fire, phase, time: gameTime.stamp() });
   }
 
+  function summarizeError(error) {
+    return {
+      message: error?.message ?? String(error),
+      name: error?.name ?? 'Error',
+      stack: error?.stack ?? null,
+      time: gameTime.stamp(),
+    };
+  }
+
+  function handleSimulationError(error) {
+    lastError = summarizeError(error);
+    running = false;
+    frameId = null;
+    console.error('[shengling:simulation-error]', error);
+    eventBus.emit('simulation:error', { error, summary: lastError, diagnostics: getDiagnostics() });
+  }
+
   function tick(now) {
     if (!running) return;
-    const realDelta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
-    previous = now;
-    const worldSpeed = getWorldSpeed();
-    const simulationDelta = realDelta * worldSpeed;
-    clockTimer += simulationDelta * WORLD_MINUTES_PER_REAL_SECOND;
-    const minutes = Math.floor(clockTimer);
-    if (minutes > 0) {
-      gameTime.advanceMinutes(minutes);
-      clockTimer -= minutes;
-      reportPhaseChange();
-      updateEnvironment();
-      eventBus.emit('simulation:time', {
-        time: gameTime.stamp(),
-        phase: getDayPhase(gameTime.now()),
-        weather: weatherSystem.get(),
-        fire: fireSystem.get(),
-        speed: getWorldSpeedView(),
-      });
+    try {
+      lastTickAt = Date.now();
+      lastGameTime = gameTime.stamp();
+      const realDelta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
+      previous = now;
+      const worldSpeed = getWorldSpeed();
+      const simulationDelta = realDelta * worldSpeed;
+      clockTimer += simulationDelta * WORLD_MINUTES_PER_REAL_SECOND;
+      const minutes = Math.floor(clockTimer);
+      if (minutes > 0) {
+        gameTime.advanceMinutes(minutes);
+        clockTimer -= minutes;
+        lastGameTime = gameTime.stamp();
+        reportPhaseChange();
+        updateEnvironment();
+        eventBus.emit('simulation:time', {
+          time: gameTime.stamp(),
+          phase: getDayPhase(gameTime.now()),
+          weather: weatherSystem.get(),
+          fire: fireSystem.get(),
+          speed: getWorldSpeedView(),
+        });
+      }
+      updateAgents(simulationDelta);
+      plannerTimer += simulationDelta;
+      if (plannerTimer >= 0.75) { plannerTimer = 0; plan(); }
+      needsTimer += simulationDelta;
+      if (needsTimer >= 5) { updateNeeds(needsTimer); needsTimer = 0; }
+      frameId = requestAnimationFrame(tick);
+    } catch (error) {
+      handleSimulationError(error);
     }
-    updateAgents(simulationDelta);
-    plannerTimer += simulationDelta;
-    if (plannerTimer >= 0.75) { plannerTimer = 0; plan(); }
-    needsTimer += simulationDelta;
-    if (needsTimer >= 5) { updateNeeds(needsTimer); needsTimer = 0; }
-    frameId = requestAnimationFrame(tick);
   }
 
   function start() {
@@ -441,6 +468,20 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     frameId = null;
   }
 
+  function getLastError() { return lastError ? copy(lastError) : null; }
+
+  function getDiagnostics() {
+    return {
+      lastTickAt,
+      lastGameTime: lastGameTime ? copy(lastGameTime) : null,
+      actionLoopRunning: running,
+      lastSimulationError: getLastError(),
+      worldSpeed: getWorldSpeedView(),
+      agentCount: agents.size,
+      pendingFrame: frameId !== null,
+    };
+  }
+
   return Object.freeze({
     start,
     stop,
@@ -454,6 +495,8 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     importFoodDistributionState: (snapshot) => foodDistribution.importState(snapshot),
     getFoodDistributionSystem: () => foodDistribution,
     resetRuntimeAgents,
+    getLastError,
+    getDiagnostics,
     isRunning: () => running,
   });
 }

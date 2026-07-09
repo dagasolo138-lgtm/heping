@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.24.0",
-  "buildId": "v0.24.0-ui-observer-20260709-01",
+  "version": "v0.24.1",
+  "buildId": "v0.24.1-touch-and-runloop-fix-20260709-01",
   "sourceCommit": "release-commit-sha-must-be-filled-after-commit",
   "branch": "main",
   "verificationPath": "/heping/version.json",

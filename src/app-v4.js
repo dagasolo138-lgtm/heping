@@ -65,6 +65,17 @@ const construction = $('#construction-status');
 const log = $('#action-log');
 let chroniclePanel = null;
 let selectedId = people.list()[0]?.id;
+const diagnostics = {
+  lastTickAt: null,
+  lastGameTime: time.stamp(),
+  renderCount: 0,
+  scheduledRenderCount: 0,
+  lastRenderReason: 'initial',
+  actionLoopRunning: false,
+  lastSimulationError: null,
+};
+let renderFrameId = null;
+const pendingRenderReasons = new Set();
 
 const view = createMapView({
   canvas: $('#map-canvas'),
@@ -77,7 +88,10 @@ const view = createMapView({
   getFire: () => actions.getFire(),
   controls: [...document.querySelectorAll('[data-map-control]')],
   onPersonSelect: (id) => select(id, false),
-  onReadout: ({ x, y, zoom }) => { $('#map-readout').textContent = `坐标 ${x}, ${y} · ${Math.round(zoom)} px/m`; },
+  onReadout: ({ x, y, zoom }) => {
+    const readout = $('#map-readout');
+    if (readout) readout.textContent = `坐标 ${x}, ${y} · ${Math.round(zoom)} px/m`;
+  },
 });
 const socialEvents = createSocialEventSystem({
   eventBus: bus,
@@ -284,6 +298,9 @@ function renderChronicles() {
 }
 
 function render() {
+  diagnostics.renderCount += 1;
+  diagnostics.actionLoopRunning = actions.isRunning();
+  diagnostics.lastGameTime = time.stamp();
   renderPeople();
   renderDetail();
   renderCamp();
@@ -295,23 +312,35 @@ function render() {
   view.redraw();
 }
 
+function scheduleRender(reason = 'unspecified') {
+  pendingRenderReasons.add(reason);
+  if (renderFrameId) return;
+  diagnostics.scheduledRenderCount += 1;
+  renderFrameId = requestAnimationFrame(() => {
+    renderFrameId = null;
+    diagnostics.lastRenderReason = [...pendingRenderReasons].join(', ');
+    pendingRenderReasons.clear();
+    render();
+  });
+}
+
 peopleList.addEventListener('click', (event) => {
   const row = event.target.closest('[data-person-id]');
   if (row) select(row.dataset.personId);
 });
 
 bus.on('people:changed', ({ person, reason }) => {
-  if (reason === 'activity:set' && person.activity.current) status.textContent = `${person.identity.name}：${person.activity.current.label} · ${person.activity.current.phase}`;
-  render();
+  if (reason === 'activity:set' && person.activity.current && status) status.textContent = `${person.identity.name}：${person.activity.current.label} · ${person.activity.current.phase}`;
+  scheduleRender(`people:${reason ?? 'changed'}`);
 });
-bus.on('camp:changed', renderCamp);
-bus.on('buildings:changed', () => { renderConstruction(); view.redraw(); });
+bus.on('camp:changed', () => scheduleRender('camp:changed'));
+bus.on('buildings:changed', () => scheduleRender('buildings:changed'));
 bus.on('buildings:completed', ({ building }) => {
   if (building.typeId === 'communalShelter') {
     const residents = people.getAlive().map((person) => person.id);
     buildings.assignOccupants(building.id, residents);
     residents.forEach((id) => people.setLocation(id, { homeId: building.id }));
-    status.textContent = '集体草棚建成，十位村民第一次有了遮蔽之所。';
+    if (status) status.textContent = '集体草棚建成，十位村民第一次有了遮蔽之所。';
   }
   if (building.typeId === 'storageShed') {
     camp.applyStorageUpgrade('starting-camp', {
@@ -320,31 +349,38 @@ bus.on('buildings:completed', ({ building }) => {
       capacityDelta: building.effects.storageCapacity,
       protectionDelta: building.effects.storageProtection,
     });
-    status.textContent = '简易储物棚建成，营地物资有了更大的遮蔽空间。';
+    if (status) status.textContent = '简易储物棚建成，营地物资有了更大的遮蔽空间。';
   }
-  render();
+  scheduleRender('buildings:completed');
 });
-bus.on('actions:log', ({ entry }) => { status.textContent = entry.summary; renderLog(); });
-bus.on('history:chronicle-created', ({ chronicle }) => { status.textContent = `聚落纪事写成：${chronicle.title}`; renderChronicles(); });
-bus.on('history:chronicles-hydrated', renderChronicles);
+bus.on('actions:log', ({ entry }) => { if (status) status.textContent = entry.summary; renderLog(); scheduleRender('actions:log'); });
+bus.on('history:chronicle-created', ({ chronicle }) => { if (status) status.textContent = `聚落纪事写成：${chronicle.title}`; scheduleRender('history:chronicle-created'); });
+bus.on('history:chronicles-hydrated', () => scheduleRender('history:chronicles-hydrated'));
 bus.on('environment:phase', ({ phase }) => {
-  status.textContent = phase.isNight ? '夜幕降临，村民正回到营地与住所。' : `${phase.label}，起始河谷正在苏醒。`;
+  if (status) status.textContent = phase.isNight ? '夜幕降临，村民正回到营地与住所。' : `${phase.label}，起始河谷正在苏醒。`;
   view.redraw();
 });
 bus.on('environment:weather', ({ weather: currentWeather }) => {
-  status.textContent = `天气转为${currentWeather.label}，气温 ${currentWeather.temperature}℃。`;
+  if (status) status.textContent = `天气转为${currentWeather.label}，气温 ${currentWeather.temperature}℃。`;
   renderEnvironment();
   view.redraw();
 });
 bus.on('environment:fire', () => { renderEnvironment(); renderCamp(); view.redraw(); });
-bus.on('environment:updated', () => { renderEnvironment(); view.redraw(); });
+bus.on('environment:updated', () => { renderEnvironment(); scheduleRender('environment:updated'); });
 bus.on('simulation:time', ({ time: stamp, phase }) => {
-  clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(phase?.label ?? '')} · ${esc(stamp.label)}`;
+  diagnostics.lastTickAt = Date.now();
+  diagnostics.lastGameTime = stamp;
+  if (clock) clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(phase?.label ?? '')} · ${esc(stamp.label)}`;
   if (topbarTime) topbarTime.textContent = stamp.label.replace(/^生灵历\s*/, '');
   renderEnvironment();
-  view.redraw();
+  scheduleRender('simulation:time');
 });
-bus.on('map:changed', ({ map: nextMap }) => { view.setMap(nextMap); view.redraw(); });
+bus.on('simulation:error', ({ summary }) => {
+  diagnostics.lastSimulationError = summary;
+  diagnostics.actionLoopRunning = false;
+  if (status) status.textContent = `模拟已暂停：${summary?.message ?? '未知错误'}`;
+});
+bus.on('map:changed', ({ map: nextMap }) => { view.setMap(nextMap); scheduleRender('map:changed'); });
 
 window.shengling = Object.freeze({
   peopleSystem: people,
@@ -360,6 +396,7 @@ window.shengling = Object.freeze({
   actionSystem: actions,
   gameTime: time,
   mapView: view,
+  diagnostics,
 });
 render();
 actions.start();
