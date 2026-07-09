@@ -126,6 +126,8 @@ function emitCampChange(eventBus, id, camp, { itemId = null, delta = 0, reason =
   });
 }
 
+export const CAMP_STORE_SCHEMA_VERSION = 1;
+
 export function createCampStore({ eventBus, gameTime }) {
   const camps = new Map();
 
@@ -268,5 +270,39 @@ export function createCampStore({ eventBus, gameTime }) {
     return getStorage(id);
   }
 
-  return Object.freeze({ create, get, list, change, take, getStorage, getFoodSummary, ageFood, applyStorageUpgrade });
+  function exportState() {
+    return {
+      schemaVersion: CAMP_STORE_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      camps: list(),
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== CAMP_STORE_SCHEMA_VERSION || !Array.isArray(snapshot.camps)) {
+      throw new Error('营地存档格式不兼容。');
+    }
+    const next = new Map();
+    snapshot.camps.forEach((camp) => {
+      if (!camp?.id) throw new Error('营地存档缺少 id。');
+      const draft = clone(camp);
+      draft.items = Object.fromEntries(Object.entries(draft.items ?? {}).map(([key, value]) => [key, normalize(value)]));
+      draft.storage = { label: '营地露天堆放', capacity: 0, protection: 0, upgrades: [], ...(draft.storage ?? {}) };
+      draft.storage.capacity = normalizeCapacity(draft.storage.capacity);
+      draft.storage.protection = normalizeCapacity(draft.storage.protection);
+      draft.storage.upgrades = Array.isArray(draft.storage.upgrades) ? draft.storage.upgrades.map(clone) : [];
+      ensureFoodState(draft);
+      next.set(draft.id, draft);
+    });
+    camps.clear();
+    next.forEach((camp, id) => camps.set(id, camp));
+    eventBus.emit('camp:hydrated', { camps: list(), time: gameTime.stamp() });
+    list().forEach((camp) => {
+      const current = camps.get(camp.id);
+      emitCampChange(eventBus, camp.id, current, { reason: 'camp:hydrated' });
+    });
+    return list();
+  }
+
+  return Object.freeze({ create, get, list, change, take, getStorage, getFoodSummary, ageFood, applyStorageUpgrade, exportState, importState });
 }

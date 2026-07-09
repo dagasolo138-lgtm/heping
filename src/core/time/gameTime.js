@@ -43,5 +43,27 @@ export function createGameTime({ year = 1, day = 1, minute = 480, tick = 0 } = {
     return { ...now(), ...clock, label: `生灵历 ${state.year} 年第 ${state.day} 日 ${clock.label}` };
   }
 
-  return { now, advance, advanceMinutes, timeOfDay, stamp };
+  function exportState() {
+    return { schemaVersion: 1, state: now(), exportedAt: stamp() };
+  }
+
+  function importState(snapshot) {
+    const next = snapshot?.state ?? snapshot;
+    const yearValue = Number(next?.year);
+    const dayValue = Number(next?.day);
+    const minuteValue = Number(next?.minute);
+    const tickValue = Number(next?.tick);
+    if (![yearValue, dayValue, minuteValue, tickValue].every(Number.isFinite)) {
+      throw new Error('时间存档格式不兼容。');
+    }
+    state = {
+      year: Math.max(1, Math.floor(yearValue)),
+      day: Math.min(360, Math.max(1, Math.floor(dayValue))),
+      minute: Math.min(1439, Math.max(0, Math.floor(minuteValue))),
+      tick: Math.max(0, Math.floor(tickValue)),
+    };
+    return now();
+  }
+
+  return { now, advance, advanceMinutes, timeOfDay, stamp, exportState, importState };
 }

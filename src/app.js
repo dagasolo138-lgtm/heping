@@ -6,6 +6,7 @@ import { attachFarmRuntime } from './bootstrap/attachFarmRuntime.js';
 import { attachFarmExpansionRuntime } from './bootstrap/attachFarmExpansionRuntime.js';
 import { attachFoodStorageRuntime } from './bootstrap/attachFoodStorageRuntime.js';
 import { attachWorldSpeedRuntime } from './bootstrap/attachWorldSpeedRuntime.js';
+import { attachWorldSaveRuntime } from './bootstrap/attachWorldSaveRuntime.js';
 import { attachMapHudRuntime } from './bootstrap/attachMapHudRuntime.js';
 import { attachBuildInfoRuntime } from './bootstrap/attachBuildInfoRuntime.js';
 
@@ -16,5 +17,6 @@ attachFarmRuntime();
 attachFarmExpansionRuntime();
 attachFoodStorageRuntime();
 attachWorldSpeedRuntime();
+attachWorldSaveRuntime();
 attachMapHudRuntime();
 attachBuildInfoRuntime();

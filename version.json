@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.15.1",
-  "buildId": "v0.15.1-audit-fixes-20260622-01",
-  "sourceCommit": "905a863d917d79a91126ba512ec4330c2d1bd7a9",
+  "version": "v0.23.0",
+  "buildId": "v0.23.0-llm-boundary-20260709-01",
+  "sourceCommit": "pending-local-commit",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
