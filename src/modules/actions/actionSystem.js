@@ -248,8 +248,17 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function finish(agent, task) {
+    function applyCompletionRelationFeedback(result) {
+      if (!result?.personId) return;
+      applyHelpfulIntentRelation({ personId: result.personId, task, peopleSystem, eventBus, gameTime });
+      applyCoWorkRelation({ personId: result.personId, task, agent, agents, peopleSystem, eventBus, gameTime });
+    }
+
     function complete(result) {
-      if (result) eventBus.emit('actions:completed', { result: copy(result), task: copy(task), personId: result.personId, time: gameTime.stamp() });
+      if (result) {
+        applyCompletionRelationFeedback(result);
+        eventBus.emit('actions:completed', { result: copy(result), task: copy(task), personId: result.personId, time: gameTime.stamp() });
+      }
       agent.task = null;
     }
 
@@ -299,8 +308,6 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const result = completeAction({ agent, task, peopleSystem, mapSystem, campStore, gameTime, campId: CAMP_ID });
     if (result) {
       log(result.summary, task.type, result.personId);
-      applyHelpfulIntentRelation({ personId: result.personId, task, peopleSystem, eventBus, gameTime });
-      applyCoWorkRelation({ personId: result.personId, task, agent, agents, peopleSystem, eventBus, gameTime });
     }
     complete(result);
   }
@@ -443,6 +450,9 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     getWeather: () => weatherSystem.get(),
     getFire: () => fireSystem.get(),
     getWorldSpeed: getWorldSpeedView,
+    exportFoodDistributionState: () => foodDistribution.exportState(),
+    importFoodDistributionState: (snapshot) => foodDistribution.importState(snapshot),
+    getFoodDistributionSystem: () => foodDistribution,
     resetRuntimeAgents,
     isRunning: () => running,
   });

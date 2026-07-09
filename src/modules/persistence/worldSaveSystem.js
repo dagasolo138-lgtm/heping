@@ -75,6 +75,7 @@ export function createWorldSaveSystem({
         roads: maybeExport(roadSystem),
         farms: maybeExport(farmSystem),
         foodStorage: maybeExport(foodStorageSystem),
+        foodDistribution: maybeExport(getRuntime?.()?.actionSystem?.getFoodDistributionSystem?.()),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
       },
@@ -121,6 +122,7 @@ export function createWorldSaveSystem({
     maybeImport(roadSystem, snapshot.systems.roads, '道路');
     maybeImport(farmSystem, snapshot.systems.farms, '农田');
     maybeImport(foodStorageSystem, snapshot.systems.foodStorage, '食物储存');
+    maybeImport(runtime?.actionSystem?.getFoodDistributionSystem?.(), snapshot.systems.foodDistribution, '食物分配');
     maybeImport(socialEventSystem, snapshot.systems.socialEvents, '社会事件');
     maybeImport(chronicleSystem, snapshot.systems.chronicles, '史书');
 
