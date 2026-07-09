@@ -111,7 +111,9 @@ export function createCampRulesSystem({ eventBus, gameTime, campId = 'starting-c
       ruleLabel: FOOD_RULES[rule.id]?.label ?? rule.id,
       eligible: true,
       priorityScore: Math.round(score * 10) / 10,
-      explanation: FOOD_RULES[rule.id]?.label ?? '营地分配规则',
+      explanation: `${FOOD_RULES[rule.id]?.label ?? '营地分配规则'}（当前为 advisory/explanatory：即时请求仍按先到先得发放，优先级仅用于解释与事件记录）`,
+      enforcement: 'advisory',
+      participatesInSorting: false,
       need,
     };
   }

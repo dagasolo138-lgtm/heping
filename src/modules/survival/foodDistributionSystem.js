@@ -23,7 +23,9 @@ function evaluateRule(campRulesSystem, person, people, need) {
     ruleLabel: '先到先得',
     eligible: true,
     priorityScore: 0,
-    explanation: '先到先得',
+    explanation: '先到先得（当前为实际即时顺序）',
+    enforcement: 'immediate',
+    participatesInSorting: true,
     need,
   };
 }
@@ -62,6 +64,8 @@ export function createFoodDistributionSystem({ eventBus, gameTime, campStore, ca
       ruleLabel: rule.ruleLabel,
       rulePriorityScore: rule.priorityScore,
       ruleExplanation: rule.explanation,
+      ruleEnforcement: rule.enforcement ?? 'advisory',
+      ruleParticipatesInSorting: Boolean(rule.participatesInSorting),
       granted: false,
       itemId: WATER_REQUEST.itemId,
       amount: 0,
@@ -103,6 +107,8 @@ export function createFoodDistributionSystem({ eventBus, gameTime, campStore, ca
       ruleLabel: rule.ruleLabel,
       rulePriorityScore: rule.priorityScore,
       ruleExplanation: rule.explanation,
+      ruleEnforcement: rule.enforcement ?? 'advisory',
+      ruleParticipatesInSorting: Boolean(rule.participatesInSorting),
       granted: false,
       itemId: null,
       amount: 0,

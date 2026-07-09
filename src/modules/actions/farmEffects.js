@@ -51,7 +51,7 @@ export function completeFarmAction({ agent, task, peopleSystem, farmSystem, game
       : '';
     const summary = `${person.identity.name}从${field?.label ?? '粟田'}收获了 ${harvest.amount} 份${harvest.label}，并留下了下一轮的种子${soilNote}。`;
     record({ agent, person, task, peopleSystem, gameTime, summary, details: { fieldId: task.data.fieldId, harvest } });
-    return { summary, personId: person.id };
+    return { summary, personId: person.id, harvest };
   }
 
   return null;

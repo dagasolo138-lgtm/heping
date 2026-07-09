@@ -1,4 +1,4 @@
-import { actionLabel } from '../actions/actionTypes.js';
+import { ACTION_TYPES, actionLabel } from '../actions/actionTypes.js';
 
 export const SOCIAL_EVENT_SCHEMA_VERSION = 1;
 
@@ -47,6 +47,8 @@ function eventSeverity(payload, fallback = 1) {
 }
 
 function summaryFor(event, actor, target = null) {
+  if (event.kind === 'buildingCompleted') return `${actor.identity.name}完成了${event.item ?? '建筑'}，这件事在营地传开了。`;
+  if (event.kind === 'majorHarvest') return `${actor.identity.name}带回了一次重要收获，营地记住了这件事。`;
   if (event.kind === 'action') return `${actor.identity.name}${actionLabel(event.action)}，这件事被旁人记住了。`;
   if (event.kind === 'resourceDenied') return `${actor.identity.name}在营地请求${event.item ?? event.need}时被拒绝。`;
   if (event.kind === 'resourceDistributed') return `${actor.identity.name}按“${event.ruleLabel ?? event.ruleId}”规则取得了${event.item ?? event.need}。`;
@@ -143,6 +145,7 @@ export function createSocialEventSystem({
       actorId: rawEvent.actorId ?? null,
       targetId: rawEvent.targetId ?? null,
       item: rawEvent.item ?? null,
+      amount: rawEvent.amount ?? null,
       ruleId: rawEvent.ruleId ?? null,
       ruleLabel: rawEvent.ruleLabel ?? null,
       action: rawEvent.action ?? null,
@@ -182,14 +185,33 @@ export function createSocialEventSystem({
     return exportState();
   }
 
-  const offCompleted = eventBus.on('actions:completed', ({ result, task, personId, time }) => ingest({
-    kind: 'action',
-    actorId: personId,
-    action: task?.type,
-    severity: 1,
-    summary: result?.summary,
-    time,
-  }));
+  const offCompleted = eventBus.on('actions:completed', ({ result, task, personId, time }) => {
+    // 降噪：普通劳动继续进入 lifeEvents，但不再默认成为可传播的社会传闻。
+    if (task?.type === ACTION_TYPES.BUILD_SITE && result?.completedBuilding) {
+      ingest({
+        kind: 'buildingCompleted',
+        actorId: personId,
+        action: task.type,
+        item: result.completedBuilding.label,
+        severity: 4,
+        summary: result.summary,
+        time,
+      });
+      return;
+    }
+    const harvestAmount = Number(result?.harvest?.amount ?? result?.details?.harvest?.amount ?? 0);
+    if (task?.type === ACTION_TYPES.HARVEST_MILLET && harvestAmount >= 8) {
+      ingest({
+        kind: 'majorHarvest',
+        actorId: personId,
+        action: task.type,
+        amount: harvestAmount,
+        severity: 3,
+        summary: result.summary,
+        time,
+      });
+    }
+  });
   const offDistributed = eventBus.on('survival:resource-distributed', (payload) => ingest({
     kind: 'resourceDistributed',
     actorId: payload.personId,
