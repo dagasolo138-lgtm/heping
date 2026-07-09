@@ -5,11 +5,15 @@ import { createFounders } from './modules/people/createFounders.js';
 import { createMapSystem } from './modules/map/mapSystem.js';
 import { placeStartingSettlers } from './modules/map/placeStartingSettlers.js';
 import { createCampStore, CAMP_ITEM_LABELS } from './modules/settlements/campStore.js';
+import { createCampRulesSystem } from './modules/settlements/campRules.js';
 import { createBuildingSystem } from './modules/buildings/buildingSystem.js';
 import { createWeatherSystem } from './modules/environment/weatherSystem.js';
 import { createFireSystem } from './modules/environment/fireSystem.js';
 import { getExposure } from './modules/environment/exposureSystem.js';
 import { createActionSystem } from './modules/actions/actionSystem.js';
+import { createSocialEventSystem } from './modules/social/socialEventSystem.js';
+import { createChronicleSystem } from './modules/history/chronicleSystem.js';
+import { createLlmBoundary } from './modules/ai/llmBoundary.js';
 import { createMapView } from './ui/map/mapView.js';
 import { occupationLabel } from './data/constants/occupations.js';
 import { traitLabel } from './data/constants/traits.js';
@@ -20,6 +24,7 @@ const time = createGameTime({ year: 1, day: 1, minute: 480 });
 const people = createPeopleSystem({ eventBus: bus, gameTime: time });
 const map = createMapSystem({ eventBus: bus, gameTime: time });
 const camp = createCampStore({ eventBus: bus, gameTime: time });
+const campRules = createCampRulesSystem({ eventBus: bus, gameTime: time });
 const buildings = createBuildingSystem({ eventBus: bus, gameTime: time });
 const weather = createWeatherSystem({ eventBus: bus, gameTime: time });
 
@@ -42,6 +47,7 @@ const actions = createActionSystem({
   buildingSystem: buildings,
   weatherSystem: weather,
   fireSystem: fire,
+  campRulesSystem: campRules,
   eventBus: bus,
   gameTime: time,
 });
@@ -56,6 +62,7 @@ const weatherReadout = $('#weather-readout');
 const resources = $('#camp-resources');
 const construction = $('#construction-status');
 const log = $('#action-log');
+let chroniclePanel = null;
 let selectedId = people.list()[0]?.id;
 
 const view = createMapView({
@@ -71,6 +78,21 @@ const view = createMapView({
   onPersonSelect: (id) => select(id, false),
   onReadout: ({ x, y, zoom }) => { $('#map-readout').textContent = `坐标 ${x}, ${y} · ${Math.round(zoom)} px/m`; },
 });
+const socialEvents = createSocialEventSystem({
+  eventBus: bus,
+  peopleSystem: people,
+  gameTime: time,
+  getRuntimePeople: () => actions.getRenderPeople(),
+});
+const chronicles = createChronicleSystem({
+  eventBus: bus,
+  gameTime: time,
+  peopleSystem: people,
+});
+const llmBoundary = createLlmBoundary({
+  peopleSystem: people,
+  chronicleSystem: chronicles,
+});
 
 function esc(value = '') {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -81,6 +103,31 @@ function conditionLabel(tag) {
     sleeping: '睡眠中', sheltered: '有住所', exposed: '露宿',
     soaked: '淋湿', chilled: '受寒', warm: '温暖', dry: '干燥',
   }[tag] ?? tag);
+}
+
+function factorLabel(key) {
+  return ({
+    personalNeed: '个人需求', campScarcity: '营地稀缺', skillFit: '技能适配', roleFit: '职业倾向',
+    traitBias: '性格倾向', distance: '距离成本', crowding: '并发拥挤', social: '社会因素',
+    emergency: '紧急程度', cargo: '携带物资', campStorage: '营地容量', cold: '受寒', wetness: '潮湿',
+  }[key] ?? key);
+}
+
+function renderUtilityDebug(utility) {
+  if (!utility) return '<section class="utility-card utility-card--empty"><h3>行动原因</h3><p class="muted">当前行动尚未接入效用评分，或正在待命。</p></section>';
+  const factorRows = Object.entries(utility.factors ?? {})
+    .sort(([, first], [, second]) => Math.abs(Number(second)) - Math.abs(Number(first)))
+    .slice(0, 5)
+    .map(([key, value]) => `<li><span>${esc(factorLabel(key))}</span><strong>${Number(value) > 0 ? '+' : ''}${esc(value)}</strong></li>`)
+    .join('');
+  const candidateRows = (utility.candidates ?? []).slice(0, 4)
+    .map((candidate) => `<li><span>${esc(candidate.label ?? candidate.type)}</span><strong>${esc(candidate.score)}</strong><small>${esc(candidate.reason ?? '')}</small></li>`)
+    .join('');
+  return `<section class="utility-card"><div class="utility-card__header"><h3>行动原因</h3><span>${esc(utility.planner ?? 'utility')} · ${esc(utility.score ?? 0)} 分</span></div>
+    <p>${esc(utility.reason ?? '暂无原因')}</p>
+    ${factorRows ? `<ul class="utility-factors">${factorRows}</ul>` : ''}
+    ${candidateRows ? `<div class="utility-candidates"><h4>候选评分</h4><ol>${candidateRows}</ol></div>` : ''}
+  </section>`;
 }
 
 function renderEnvironment() {
@@ -124,6 +171,9 @@ function renderDetail() {
   const skillRows = Object.entries(person.work.skills).filter(([, value]) => value > 0).sort(([, a], [, b]) => b - a).slice(0, 4)
     .map(([name, value]) => `<div><span>${esc(name)}</span><b>${value}</b></div>`).join('');
   const events = person.memories.lifeEvents.slice(-4).reverse().map((event) => `<li><time>${esc(event.time.label)}</time><p>${esc(event.summary)}</p></li>`).join('');
+  const personalMemories = person.memories.personal.slice(-5).reverse()
+    .map((memory) => `<li><time>${esc(memory.time.label)}</time><p>${esc(memory.summary)}</p><small>${memory.details?.source === 'rumor' ? '听闻' : memory.details?.source === 'direct' ? '亲历' : esc(memory.type)}</small></li>`)
+    .join('');
   const items = Object.entries(person.inventory.items).map(([name, value]) => `${CAMP_ITEM_LABELS[name] ?? name} ×${value}`).join('、') || '空';
   const conditions = person.state.statusTags.map((tag) => `<span class="tag">${esc(conditionLabel(tag))}</span>`).join('');
   detail.innerHTML = `
@@ -133,6 +183,7 @@ function renderDetail() {
       <div class="tag-row">${person.traits.map((trait) => `<span class="tag">${traitLabel(trait)}</span>`).join('')}${conditions}</div>
     </div></div>
     <div class="activity-banner ${current ? '' : 'activity-banner--idle'}"><span class="activity-banner__dot"></span><div><small>当前行动</small><strong>${current ? `${esc(current.label)} · ${esc(current.phase)}` : '待命'}</strong></div></div>
+    ${renderUtilityDebug(current?.utility)}
     <div class="exposure-summary"><span>潮湿 ${Math.round(exposure.wetness)} / 100</span><span>受寒 ${Math.round(exposure.cold)} / 100</span></div>
     <div class="metrics-grid">
       <div class="metric"><span>饥饿</span><strong>${Math.round(person.state.hunger)}</strong></div>
@@ -145,7 +196,8 @@ function renderDetail() {
     <div class="detail-columns"><section class="detail-card"><h3>技能倾向</h3><div class="skill-list">${skillRows}</div><p class="muted">${esc(person.work.preferences.join('、') || '暂无偏好')}</p></section>
       <section class="detail-card"><h3>生活状态</h3><p>居所：${home ? esc(home.label) : '露宿营地'}</p><p>环境：${person.state.statusTags.includes('exposed') ? '露宿时恢复较慢' : home ? '草棚可阻隔雨寒' : '尚未结算'}</p><p>物品：${esc(items)}</p></section>
       <section class="detail-card"><h3>人物关系</h3><p>伴侣：${person.family.spouseId ? '已有伴侣' : '无'}</p><p>手足：${person.family.siblingIds.length} 人</p><p>子女：${person.family.childIds.length} 人</p></section></div>
-    <section class="history-card"><div class="history-card__header"><h3>人生事实</h3><span>${person.memories.lifeEvents.length} 条</span></div><ol>${events}</ol></section>`;
+    <section class="history-card"><div class="history-card__header"><h3>人生事实</h3><span>${person.memories.lifeEvents.length} 条</span></div><ol>${events}</ol></section>
+    <section class="history-card"><div class="history-card__header"><h3>亲历与听闻</h3><span>${person.memories.personal.length} 条</span></div><ol>${personalMemories || '<li><p class="muted">暂无共同记忆。</p></li>'}</ol></section>`;
 }
 
 function renderCamp() {
@@ -186,6 +238,31 @@ function renderLog() {
   log.innerHTML = actions.getRecentLogs(5).map((entry) => `<li><time>${esc(entry.time.label.split(' ').at(-1))}</time><span>${esc(entry.summary)}</span></li>`).join('');
 }
 
+function ensureChroniclePanel() {
+  if (chroniclePanel) return chroniclePanel;
+  chroniclePanel = document.querySelector('#chronicle-panel');
+  if (chroniclePanel) return chroniclePanel;
+  chroniclePanel = document.createElement('section');
+  chroniclePanel.id = 'chronicle-panel';
+  chroniclePanel.className = 'chronicle-panel panel';
+  chroniclePanel.innerHTML = '<div class="panel__header"><div><p class="panel__kicker">SETTLEMENT CHRONICLE</p><h2>聚落纪事</h2></div><span class="count-pill" data-chronicle-count>0</span></div><ol class="chronicle-list" data-chronicle-list></ol>';
+  document.querySelector('.workspace')?.insertAdjacentElement('afterend', chroniclePanel);
+  return chroniclePanel;
+}
+
+function renderChronicles() {
+  const panel = ensureChroniclePanel();
+  const list = panel.querySelector('[data-chronicle-list]');
+  const countNode = panel.querySelector('[data-chronicle-count]');
+  const items = chronicles.listChronicles().slice(0, 5);
+  if (countNode) countNode.textContent = chronicles.listChronicles().length;
+  if (!list) return;
+  list.innerHTML = items.length ? items.map((entry) => {
+    const rows = (entry.entries ?? []).slice(0, 3).map((item) => `<li><time>${esc(item.time?.label ?? '')}</time><span>${esc(item.text)}</span></li>`).join('');
+    return `<li class="chronicle-entry"><div class="chronicle-entry__head"><strong>${esc(entry.title)}</strong><small>${esc(entry.createdAt?.label ?? '')} · ${entry.locked ? '已锁定' : '草稿'}</small></div><p>${esc(entry.summary)}</p><ol>${rows}</ol></li>`;
+  }).join('') : '<li class="chronicle-entry chronicle-entry--empty"><p class="muted">尚未生成聚落纪事。建筑完成、资源危机、规则变化或每十日周期会留下不可修改的史书条目。</p></li>';
+}
+
 function render() {
   renderPeople();
   renderDetail();
@@ -193,6 +270,7 @@ function render() {
   renderConstruction();
   renderEnvironment();
   renderLog();
+  renderChronicles();
   view.setSelectedPerson(selectedId);
   view.redraw();
 }
@@ -227,6 +305,8 @@ bus.on('buildings:completed', ({ building }) => {
   render();
 });
 bus.on('actions:log', ({ entry }) => { status.textContent = entry.summary; renderLog(); });
+bus.on('history:chronicle-created', ({ chronicle }) => { status.textContent = `聚落纪事写成：${chronicle.title}`; renderChronicles(); });
+bus.on('history:chronicles-hydrated', renderChronicles);
 bus.on('environment:phase', ({ phase }) => {
   status.textContent = phase.isNight ? '夜幕降临，村民正回到营地与住所。' : `${phase.label}，起始河谷正在苏醒。`;
   view.redraw();
@@ -252,6 +332,10 @@ window.shengling = Object.freeze({
   buildingSystem: buildings,
   weatherSystem: weather,
   fireSystem: fire,
+  campRulesSystem: campRules,
+  socialEventSystem: socialEvents,
+  chronicleSystem: chronicles,
+  llmBoundary,
   actionSystem: actions,
   gameTime: time,
   mapView: view,

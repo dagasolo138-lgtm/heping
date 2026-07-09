@@ -28,8 +28,16 @@ export function planWarmingTask({ person, fireSystem, actionCounts }) {
   const fire = fireSystem.get();
   const needed = exposure.cold >= 50 || exposure.wetness >= 58;
   if (!needed || !fire.lit || Number(actionCounts[ACTION_TYPES.WARM_BY_FIRE] ?? 0) >= 2) return null;
+  const score = Math.min(100, Math.round(exposure.cold * 0.72 + exposure.wetness * 0.48));
   return createTask(ACTION_TYPES.WARM_BY_FIRE, fire.position, {
     recovery: { wetness: 22, cold: 38 },
     fireId: fire.id,
+    utility: {
+      planner: 'utility',
+      score,
+      reason: exposure.cold >= exposure.wetness ? '受寒较高，需要靠近篝火取暖' : '湿冷较高，需要靠近篝火烘干',
+      factors: { cold: Math.round(exposure.cold), wetness: Math.round(exposure.wetness) },
+      candidates: [],
+    },
   }, 4.5);
 }

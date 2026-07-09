@@ -1,5 +1,5 @@
 import { createId } from '../../core/ids/createId.js';
-import { createConstructionSite } from './buildingSchema.js';
+import { BUILDING_SCHEMA_VERSION, createConstructionSite } from './buildingSchema.js';
 import { getBuildingType } from './buildingCatalog.js';
 
 function clone(value) {
@@ -156,6 +156,30 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     };
   }
 
+  function exportState() {
+    return {
+      schemaVersion: BUILDING_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      buildings: list(),
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== BUILDING_SCHEMA_VERSION || !Array.isArray(snapshot.buildings)) {
+      throw new Error('建筑存档格式不兼容。');
+    }
+    const next = new Map();
+    snapshot.buildings.forEach((building) => {
+      if (!building?.id) throw new Error('建筑存档缺少 id。');
+      next.set(building.id, clone(building));
+    });
+    buildings.clear();
+    next.forEach((building, id) => buildings.set(id, building));
+    eventBus.emit('buildings:hydrated', { buildings: list(), time: gameTime.stamp() });
+    emit('buildings:hydrated', list()[0] ?? null);
+    return list();
+  }
+
   return Object.freeze({
     get,
     list,
@@ -171,5 +195,7 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     assignOccupants,
     getMaterialNeed,
     getConstructionSummary,
+    exportState,
+    importState,
   });
 }

@@ -1,3 +1,5 @@
+export const FOOD_STORAGE_SCHEMA_VERSION = 1;
+
 const FOOD_DECAY_PER_MINUTE = Object.freeze({
   berries: 0.022,
   millet: 0.0065,
@@ -94,7 +96,28 @@ export function createFoodStorageSystem({ eventBus, gameTime, campStore, campId 
     return getSummary();
   }
 
+  function exportState() {
+    return {
+      schemaVersion: FOOD_STORAGE_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      lastProcessedTick,
+      lastWeather: lastWeather ? clone(lastWeather) : null,
+      lastResult: lastResult ? clone(lastResult) : null,
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== FOOD_STORAGE_SCHEMA_VERSION) {
+      throw new Error('食物储存存档格式不兼容。');
+    }
+    lastProcessedTick = Math.max(0, Number(snapshot.lastProcessedTick ?? gameTime.now().tick ?? 0));
+    lastWeather = snapshot.lastWeather ? clone(snapshot.lastWeather) : null;
+    lastResult = snapshot.lastResult ? clone(snapshot.lastResult) : null;
+    eventBus.emit('storage:food-hydrated', { summary: getSummary(), time: gameTime.stamp() });
+    return getSummary();
+  }
+
   eventBus.on('simulation:time', ({ weather }) => { sync(weather); });
 
-  return Object.freeze({ sync, getSummary });
+  return Object.freeze({ sync, getSummary, exportState, importState });
 }

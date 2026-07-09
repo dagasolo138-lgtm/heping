@@ -3,6 +3,8 @@ import { cropGrowthMultiplier, getCropType } from './cropCatalog.js';
 import { SECOND_FIELD_EXPANSION, canPlanSecondField, findSecondFieldAnchor } from './fieldExpansionPlanner.js';
 import { SOIL_LIMITS, createSoil, depleteSoil, describeSoil, recoverSoil, soilGrowthMultiplier, soilYieldMultiplier } from './soilModel.js';
 
+export const FARM_SCHEMA_VERSION = 1;
+
 const FIELD_FOOTPRINT = Object.freeze({ width: 6, height: 4 });
 const CLEARING_WORK_REQUIRED = 8;
 
@@ -270,6 +272,7 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     field.harvestCount += 1;
     field.updatedAt = gameTime.stamp();
     emit('field:harvested', field);
+    eventBus.emit('farms:harvested', { field: viewField(field), harvest: clone(result), time: gameTime.stamp() });
     return result;
   }
 
@@ -314,6 +317,31 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     return getSummary();
   }
 
+  function exportState() {
+    return {
+      schemaVersion: FARM_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      seedStock,
+      fields: [...fields.values()].map(clone),
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== FARM_SCHEMA_VERSION || !Array.isArray(snapshot.fields)) {
+      throw new Error('农田存档格式不兼容。');
+    }
+    const next = new Map();
+    snapshot.fields.forEach((field) => {
+      if (!field?.id) throw new Error('农田存档缺少 id。');
+      next.set(field.id, clone(field));
+    });
+    fields.clear();
+    next.forEach((field, id) => fields.set(id, field));
+    seedStock = Math.max(0, Number(snapshot.seedStock ?? 0));
+    emit('farms:hydrated');
+    return getSummary();
+  }
+
   eventBus.on('simulation:time', ({ weather }) => { syncGrowth(weather); });
   eventBus.on('seasons:changed', () => emit('season:changed'));
 
@@ -329,5 +357,7 @@ export function createFarmSystem({ eventBus, gameTime, mapSystem, buildingSystem
     listFields,
     getSummary,
     getFieldCenter: (field) => fieldCenter(field),
+    exportState,
+    importState,
   });
 }

@@ -1,5 +1,15 @@
+export const FIRE_SCHEMA_VERSION = 1;
+
 function clone(value) {
   return structuredClone(value);
+}
+
+function burnRate(weather) {
+  if (weather?.seasonId === 'winter' && weather?.isRain) return 1 / 85;
+  if (weather?.seasonId === 'winter' && Number(weather?.temperature ?? 99) <= 0) return 1 / 105;
+  if (weather?.isRain) return 1 / 115;
+  if (Number(weather?.temperature ?? 99) <= 8) return 1 / 140;
+  return 1 / 190;
 }
 
 function distance(first, second) {
@@ -37,7 +47,7 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
 
     const shouldBurn = Boolean(phase?.isNight || weather?.requiresFire);
     if (!shouldBurn) return get();
-    const rate = weather?.isRain ? 1 / 115 : weather?.temperature <= 8 ? 1 / 150 : 1 / 190;
+    const rate = burnRate(weather);
     const before = state.fuel;
     state.fuel = Math.max(0, state.fuel - elapsedMinutes * rate);
     state.lit = state.fuel > 0.01;
@@ -62,5 +72,31 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
     return state.lit && distance(point, state.position) <= state.warmthRadius;
   }
 
-  return Object.freeze({ get, sync, addFuel, needsFuel, isWarmAt });
+  function exportState() {
+    return {
+      schemaVersion: FIRE_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      state: get(),
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== FIRE_SCHEMA_VERSION || !snapshot.state) {
+      throw new Error('篝火存档格式不兼容。');
+    }
+    state = {
+      ...state,
+      ...clone(snapshot.state),
+      position: clone(snapshot.state.position ?? state.position),
+      fuel: Math.max(0, Number(snapshot.state.fuel ?? state.fuel)),
+      maxFuel: Math.max(0, Number(snapshot.state.maxFuel ?? state.maxFuel)),
+      warmthRadius: Math.max(0, Number(snapshot.state.warmthRadius ?? state.warmthRadius)),
+      lastTick: Math.max(0, Number(snapshot.state.lastTick ?? gameTime.now().tick ?? 0)),
+      lit: Boolean(snapshot.state.lit),
+    };
+    emit('fire:hydrated');
+    return get();
+  }
+
+  return Object.freeze({ get, sync, addFuel, needsFuel, isWarmAt, exportState, importState });
 }

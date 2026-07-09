@@ -1,3 +1,5 @@
+export const ROAD_SCHEMA_VERSION = 1;
+
 const TRAIL_THRESHOLD = 4;
 const DIRT_ROAD_THRESHOLD = 10;
 
@@ -99,10 +101,36 @@ export function createRoadSystem({ eventBus, gameTime }) {
     return 1;
   }
 
+  function exportState() {
+    return {
+      schemaVersion: ROAD_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      cells: [...cells.values()].map(clone),
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== ROAD_SCHEMA_VERSION || !Array.isArray(snapshot.cells)) {
+      throw new Error('道路存档格式不兼容。');
+    }
+    cells.clear();
+    snapshot.cells.forEach((cell) => {
+      const x = Math.round(Number(cell?.x));
+      const y = Math.round(Number(cell?.y));
+      if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('道路存档坐标无效。');
+      const draft = { ...clone(cell), x, y, stage: stageFor(Number(cell.traffic ?? 0)) };
+      cells.set(keyOf(x, y), draft);
+    });
+    emit('roads:hydrated', [...cells.values()]);
+    return getSummary();
+  }
+
   return Object.freeze({
     recordTraversal,
     listRoads,
     getSummary,
     getMovementMultiplierAt,
+    exportState,
+    importState,
   });
 }

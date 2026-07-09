@@ -13,6 +13,8 @@ import { planFireTask, planWarmingTask } from './weatherPlanner.js';
 import { planNightSleep } from './nightPlanner.js';
 import { completeSleep } from './sleepEffects.js';
 import { planNextAction } from './actionPlanner.js';
+import { applyCoWorkRelation, applyHelpfulIntentRelation } from '../social/relationEffects.js';
+import { createFoodDistributionSystem } from '../survival/foodDistributionSystem.js';
 
 const CAMP_ID = 'starting-camp';
 const WORLD_MINUTES_PER_REAL_SECOND = 6;
@@ -31,10 +33,10 @@ const FARM_ACTIONS = new Set([ACTION_TYPES.CLEAR_FIELD, ACTION_TYPES.SOW_MILLET,
 
 function copy(value) { return structuredClone(value); }
 function near(first, second) { return Math.hypot(first.x - second.x, first.y - second.y) <= 3; }
-function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination) }; }
+function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination), utility: task.data?.utility ? copy(task.data.utility) : null }; }
 function currentFarmSystem() { return globalThis.shengling?.farmSystem ?? null; }
 
-export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, eventBus, gameTime, worldSpeedSystem = null }) {
+export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, campRulesSystem = null, eventBus, gameTime, worldSpeedSystem = null }) {
   const agents = new Map();
   const logs = [];
   let running = false;
@@ -44,6 +46,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   let clockTimer = 0;
   let needsTimer = 0;
   let phaseId = getDayPhase(gameTime.now()).id;
+  const foodDistribution = createFoodDistributionSystem({ eventBus, gameTime, campStore, campRulesSystem, campId: CAMP_ID });
 
   function activeWorldSpeedSystem() {
     return worldSpeedSystem ?? globalThis.shengling?.worldSpeedSystem ?? null;
@@ -71,9 +74,23 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   function recentLogs(limit = 10) { return logs.slice(0, limit).map(copy); }
 
   function ensureAgents() {
-    peopleSystem.getAlive().forEach((person) => {
+    const people = peopleSystem.getAlive();
+    people.forEach((person) => {
       if (agents.has(person.id)) return;
       agents.set(person.id, { personId: person.id, x: Number(person.location.tileX ?? 0), y: Number(person.location.tileY ?? 0), task: null });
+    });
+  }
+
+  function resetRuntimeAgents({ clearActivities = true } = {}) {
+    agents.clear();
+    peopleSystem.getAlive().forEach((person) => {
+      agents.set(person.id, {
+        personId: person.id,
+        x: Number(person.location.tileX ?? 0),
+        y: Number(person.location.tileY ?? 0),
+        task: null,
+      });
+      if (clearActivities) peopleSystem.setActivity(person.id, { status: 'idle', current: null });
     });
   }
 
@@ -196,7 +213,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       const farming = farmSystem && !phase.isNight && !isEmergency(person)
         ? planFarmAction({ person, farmSystem, actionCounts })
         : null;
-      const generic = planNextAction({ person, camp, population: people.length, mapSystem, actionCounts, reservedFeatureIds });
+      const generic = planNextAction({ person, camp, population: people.length, people, mapSystem, actionCounts, reservedFeatureIds });
       const planned = fireTask ?? warmthTask ?? sleep ?? construction ?? farming ?? generic;
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
@@ -231,31 +248,36 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   }
 
   function finish(agent, task) {
+    function complete(result) {
+      if (result) eventBus.emit('actions:completed', { result: copy(result), task: copy(task), personId: result.personId, time: gameTime.stamp() });
+      agent.task = null;
+    }
+
     if (task.type === ACTION_TYPES.SLEEP) {
       const result = completeSleep({ agent, task, peopleSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
-      agent.task = null;
+      complete(result);
       return;
     }
 
     if (task.type === ACTION_TYPES.TEND_FIRE) {
       const result = completeTendFire({ agent, task, peopleSystem, campStore, fireSystem, gameTime, campId: CAMP_ID });
       if (result) log(result.summary, task.type, result.personId);
-      agent.task = null;
+      complete(result);
       return;
     }
 
     if (task.type === ACTION_TYPES.WARM_BY_FIRE) {
       const result = completeWarmByFire({ agent, task, peopleSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
-      agent.task = null;
+      complete(result);
       return;
     }
 
     if (FARM_ACTIONS.has(task.type)) {
       const result = completeFarmAction({ agent, task, peopleSystem, farmSystem: currentFarmSystem(), gameTime });
       if (result) log(result.summary, task.type, result.personId);
-      agent.task = null;
+      complete(result);
       return;
     }
 
@@ -263,20 +285,24 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       if (task.data.stage === 'collect') return continueMaterialDelivery(agent, task);
       const result = deliverConstructionMaterial({ agent, task, peopleSystem, buildingSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
-      agent.task = null;
+      complete(result);
       return;
     }
 
     if (task.type === ACTION_TYPES.BUILD_SITE) {
       const result = performConstructionWork({ agent, task, peopleSystem, buildingSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
-      agent.task = null;
+      complete(result);
       return;
     }
 
     const result = completeAction({ agent, task, peopleSystem, mapSystem, campStore, gameTime, campId: CAMP_ID });
-    if (result) log(result.summary, task.type, result.personId);
-    agent.task = null;
+    if (result) {
+      log(result.summary, task.type, result.personId);
+      applyHelpfulIntentRelation({ personId: result.personId, task, peopleSystem, eventBus, gameTime });
+      applyCoWorkRelation({ personId: result.personId, task, agent, agents, peopleSystem, eventBus, gameTime });
+    }
+    complete(result);
   }
 
   function updateAgents(delta) {
@@ -326,10 +352,14 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       }
 
       if (near(agent, camp.anchor)) {
-        if (patch.thirst >= 56 && campStore.take(CAMP_ID, 'water', 1, 'drink') > 0) patch.thirst -= 34;
+        if (patch.thirst >= 56) {
+          const water = foodDistribution.requestWater({ person, people, thirstBefore: patch.thirst });
+          if (water.granted) patch.thirst -= water.thirstReduction;
+        }
         if (patch.hunger >= 56) {
-          if (campStore.take(CAMP_ID, 'berries', 1, 'eat') > 0) patch.hunger -= 26;
-          else if (campStore.take(CAMP_ID, 'millet', 1, 'eat') > 0) patch.hunger -= 32;
+          const food = foodDistribution.requestFood({ person, people, hungerBefore: patch.hunger });
+          if (food.granted) patch.hunger -= food.hungerReduction;
+          else patch.stress += 1.8;
         }
       }
       peopleSystem.patchState(person.id, patch);
@@ -413,6 +443,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     getWeather: () => weatherSystem.get(),
     getFire: () => fireSystem.get(),
     getWorldSpeed: getWorldSpeedView,
+    resetRuntimeAgents,
     isRunning: () => running,
   });
 }

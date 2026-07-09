@@ -1,3 +1,7 @@
+export const ECOLOGY_SCHEMA_VERSION = 1;
+
+const SEASONAL_RENEWAL_MULTIPLIER = Object.freeze({ spring: 1, summer: 0.85, autumn: 1.5, winter: 3 });
+
 const RESOURCE_RENEWAL = Object.freeze({
   tree: {
     label: '树木',
@@ -22,6 +26,15 @@ function isInsideBuilding(point, building) {
     && point.x < building.anchor.x + building.footprint.width
     && point.y >= building.anchor.y
     && point.y < building.anchor.y + building.footprint.height;
+}
+
+function currentSeasonId() {
+  return globalThis.shengling?.seasonSystem?.get?.().id ?? 'spring';
+}
+
+function renewalMinutes(config) {
+  const multiplier = Number(SEASONAL_RENEWAL_MULTIPLIER[currentSeasonId()] ?? 1);
+  return Math.max(60, Math.round(Number(config.regrowMinutes ?? 0) * multiplier));
 }
 
 function summary(entries) {
@@ -66,7 +79,9 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
       markerKind: config.markerKind,
       markerLabel: config.markerLabel,
       depletedAt: gameTime.stamp(),
-      regrowAtTick: Number(now.tick) + config.regrowMinutes,
+      seasonId: currentSeasonId(),
+      regrowMinutes: renewalMinutes(config),
+      regrowAtTick: Number(now.tick) + renewalMinutes(config),
       delayedCount: 0,
     };
     entries.set(entry.id, entry);
@@ -119,8 +134,29 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
     return getSummary();
   }
 
+  function exportState() {
+    return {
+      schemaVersion: ECOLOGY_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      entries: list(),
+    };
+  }
+
+  function importState(snapshot) {
+    if (snapshot?.schemaVersion !== ECOLOGY_SCHEMA_VERSION || !Array.isArray(snapshot.entries)) {
+      throw new Error('生态存档格式不兼容。');
+    }
+    entries.clear();
+    snapshot.entries.forEach((entry) => {
+      if (!entry?.id) throw new Error('生态存档缺少资源 id。');
+      entries.set(entry.id, clone(entry));
+    });
+    emit('ecology:hydrated');
+    return getSummary();
+  }
+
   eventBus.on('map:feature-removed', ({ feature }) => { registerDepletion(feature); });
   eventBus.on('simulation:time', () => { sync(); });
 
-  return Object.freeze({ registerDepletion, sync, list, getSummary });
+  return Object.freeze({ registerDepletion, sync, list, getSummary, exportState, importState });
 }
