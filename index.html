@@ -57,6 +57,7 @@
         <div class="map-panel__tools" aria-label="地图控制">
           <button type="button" data-map-control="zoom-out" aria-label="缩小地图" title="缩小地图">−</button>
           <button type="button" data-map-control="center" aria-label="回到营地" title="回到营地">◎</button>
+          <button type="button" data-map-control="drag-mode" aria-pressed="false" aria-label="切换地图拖动模式" title="切换地图拖动模式">拖动地图</button>
           <button type="button" data-map-control="zoom-in" aria-label="放大地图" title="放大地图">＋</button>
         </div>
       </div>
@@ -64,7 +65,7 @@
         <canvas id="map-canvas" aria-label="起始河谷地图" aria-describedby="map-gesture-help"></canvas>
         <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
         <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
-        <p id="map-gesture-help" class="map-gesture-hint">拖动浏览 · 双指缩放 · 点村民查看</p>
+        <p id="map-gesture-help" class="map-gesture-hint">单指滚动页面/点村民 · 开启拖动地图后可平移 · 双指尝试缩放</p>
       </div>
       <div class="map-legend">
         <span><i class="legend-swatch legend-swatch--forest"></i>林地</span>

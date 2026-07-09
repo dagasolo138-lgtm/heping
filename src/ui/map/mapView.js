@@ -33,6 +33,7 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
   let drag = null;
   let pinch = null;
   let suppressTap = false;
+  let dragMode = false;
   let frameId = null;
   let lastPaint = 0;
   let dirty = true;
@@ -162,20 +163,30 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
 
   canvas.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (event.cancelable) event.preventDefault();
+    const isMouse = event.pointerType === 'mouse';
+    if (isMouse && event.cancelable) event.preventDefault();
     canvas.focus({ preventScroll: true });
-    canvas.setPointerCapture(event.pointerId);
+    if (isMouse) canvas.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (pointers.size === 1) {
       suppressTap = false;
       pinch = null;
-      startDrag(event.pointerId, pointers.get(event.pointerId));
+      if (isMouse || dragMode) {
+        if (dragMode && event.cancelable) event.preventDefault();
+        canvas.setPointerCapture(event.pointerId);
+        startDrag(event.pointerId, pointers.get(event.pointerId));
+      } else {
+        drag = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY, moved: false, tapOnly: true };
+      }
     } else if (pointers.size === 2) {
+      if (event.cancelable) event.preventDefault();
       suppressTap = true;
       drag = null;
+      canvas.setPointerCapture(event.pointerId);
       startPinch();
     } else {
+      if (event.cancelable) event.preventDefault();
       suppressTap = true;
       drag = null;
       pinch = null;
@@ -185,11 +196,15 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
   canvas.addEventListener('pointermove', (event) => {
     const previous = pointers.get(event.pointerId);
     if (!previous) return;
-    if (event.cancelable) event.preventDefault();
     const point = { x: event.clientX, y: event.clientY };
     pointers.set(event.pointerId, point);
 
     if (pointers.size === 1 && drag?.pointerId === event.pointerId) {
+      if (drag.tapOnly) {
+        if (Math.abs(point.x - drag.lastX) + Math.abs(point.y - drag.lastY) > 8) drag.moved = true;
+        return;
+      }
+      if (event.cancelable) event.preventDefault();
       const dx = point.x - drag.lastX;
       const dy = point.y - drag.lastY;
       if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
@@ -203,6 +218,7 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
     }
 
     if (pointers.size === 2) {
+      if (event.cancelable) event.preventDefault();
       if (!pinch) startPinch();
       if (!pinch) return;
       const [first, second] = [...pointers.values()];
@@ -278,6 +294,12 @@ export function createMapView({ canvas, mapSystem, peopleSystem, getRenderPeople
     if (control.dataset.mapControl === 'zoom-in') zoomAt(camera.zoom * 1.18, center.x, center.y);
     if (control.dataset.mapControl === 'zoom-out') zoomAt(camera.zoom / 1.18, center.x, center.y);
     if (control.dataset.mapControl === 'center') centerOnCamp();
+    if (control.dataset.mapControl === 'drag-mode') {
+      dragMode = !dragMode;
+      canvas.classList.toggle('is-drag-mode', dragMode);
+      control.setAttribute('aria-pressed', String(dragMode));
+      control.textContent = dragMode ? '滚动页面' : '拖动地图';
+    }
   }));
 
   window.addEventListener('resize', resize);
