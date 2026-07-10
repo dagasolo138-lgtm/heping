@@ -1,4 +1,5 @@
 import { createId } from '../../core/ids/createId.js';
+import { createFixedStepClock, SIMULATION_SECONDS_PER_TICK, WORLD_MINUTES_PER_REAL_SECOND } from '../../core/simulation/fixedStepClock.js';
 import { getDayPhase } from '../environment/dayCycle.js';
 import { EXPOSURE_KEY, evaluateExposure, getExposure } from '../environment/exposureSystem.js';
 import { ACTION_TYPES } from './actionTypes.js';
@@ -13,11 +14,12 @@ import { planFireTask, planWarmingTask } from './weatherPlanner.js';
 import { planNightSleep } from './nightPlanner.js';
 import { completeSleep } from './sleepEffects.js';
 import { planNextAction } from './actionPlanner.js';
+import { createReservationLedger } from './reservationLedger.js';
 import { applyCoWorkRelation, applyHelpfulIntentRelation } from '../social/relationEffects.js';
 import { createFoodDistributionSystem } from '../survival/foodDistributionSystem.js';
 
 const CAMP_ID = 'starting-camp';
-const WORLD_MINUTES_PER_REAL_SECOND = 6;
+const UI_PUBLISH_INTERVAL_MS = 100;
 const WEATHER_SENSITIVE_ACTIONS = new Set([
   ACTION_TYPES.FETCH_WATER,
   ACTION_TYPES.GATHER_BERRIES,
@@ -33,23 +35,46 @@ const FARM_ACTIONS = new Set([ACTION_TYPES.CLEAR_FIELD, ACTION_TYPES.SOW_MILLET,
 
 function copy(value) { return structuredClone(value); }
 function near(first, second) { return Math.hypot(first.x - second.x, first.y - second.y) <= 3; }
-function taskView(task, phase) { return { id: task.id, type: task.type, label: task.label, phase, destination: copy(task.destination), utility: task.data?.utility ? copy(task.data.utility) : null }; }
+function taskView(task, phase) {
+  return {
+    id: task.id,
+    type: task.type,
+    label: task.label,
+    phase,
+    destination: copy(task.destination),
+    utility: task.data?.utility ? copy(task.data.utility) : null,
+  };
+}
 function currentFarmSystem() { return globalThis.shengling?.farmSystem ?? null; }
 
-export function createActionSystem({ peopleSystem, mapSystem, campStore, buildingSystem, weatherSystem, fireSystem, campRulesSystem = null, eventBus, gameTime, worldSpeedSystem = null }) {
+export function createActionSystem({
+  peopleSystem,
+  mapSystem,
+  campStore,
+  buildingSystem,
+  weatherSystem,
+  fireSystem,
+  campRulesSystem = null,
+  eventBus,
+  gameTime,
+  worldSpeedSystem = null,
+  reservationLedger = null,
+} = {}) {
   const agents = new Map();
   const logs = [];
+  const ledger = reservationLedger ?? createReservationLedger();
+  const fixedClock = createFixedStepClock();
+  const foodDistribution = createFoodDistributionSystem({ eventBus, gameTime, campStore, campRulesSystem, campId: CAMP_ID });
   let running = false;
   let frameId = null;
   let previous = 0;
   let plannerTimer = 0;
-  let clockTimer = 0;
   let needsTimer = 0;
   let phaseId = getDayPhase(gameTime.now()).id;
   let lastError = null;
   let lastTickAt = null;
   let lastGameTime = gameTime.stamp();
-  const foodDistribution = createFoodDistributionSystem({ eventBus, gameTime, campStore, campRulesSystem, campId: CAMP_ID });
+  let lastUiPublishAt = 0;
 
   function activeWorldSpeedSystem() {
     return worldSpeedSystem ?? globalThis.shengling?.worldSpeedSystem ?? null;
@@ -77,14 +102,19 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
   function recentLogs(limit = 10) { return logs.slice(0, limit).map(copy); }
 
   function ensureAgents() {
-    const people = peopleSystem.getAlive();
-    people.forEach((person) => {
+    peopleSystem.getAlive().forEach((person) => {
       if (agents.has(person.id)) return;
-      agents.set(person.id, { personId: person.id, x: Number(person.location.tileX ?? 0), y: Number(person.location.tileY ?? 0), task: null });
+      agents.set(person.id, {
+        personId: person.id,
+        x: Number(person.location.tileX ?? 0),
+        y: Number(person.location.tileY ?? 0),
+        task: null,
+      });
     });
   }
 
   function resetRuntimeAgents({ clearActivities = true } = {}) {
+    ledger.clear();
     agents.clear();
     peopleSystem.getAlive().forEach((person) => {
       agents.set(person.id, {
@@ -107,28 +137,96 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
 
   function counts() {
     const result = {};
-    agents.forEach((agent) => { if (agent.task) result[agent.task.type] = (result[agent.task.type] ?? 0) + 1; });
+    ledger.list({ type: 'task-slot' }).forEach((entry) => {
+      const actionType = entry.key;
+      result[actionType] = (result[actionType] ?? 0) + 1;
+    });
     return result;
   }
 
   function reservations() {
-    const ids = new Set();
-    agents.forEach((agent) => { if (agent.task?.data?.featureId) ids.add(agent.task.data.featureId); });
-    return ids;
+    return new Set(ledger.list({ type: 'feature' }).map((entry) => entry.key));
   }
 
   function pendingCampStorageReservations() {
-    let total = 0;
-    agents.forEach((agent) => {
-      if (agent.task?.type !== ACTION_TYPES.HAUL_TO_CAMP) return;
-      total += Math.max(0, Number(agent.task.data?.reservedCapacity ?? 0));
-    });
-    return total;
+    return ledger.amount({ type: 'camp-storage', key: CAMP_ID });
   }
 
   function cancelConstructionReservation(task) {
     if (task?.type !== ACTION_TYPES.DELIVER_MATERIALS || !task.data?.reservationId) return false;
     return buildingSystem.cancelReservation(task.data.siteId, task.data.reservationId);
+  }
+
+  function releaseTaskReservations(task) {
+    if (!task) return [];
+    const ids = task.data?.runtimeReservationIds ?? [];
+    const released = ids.map((id) => ledger.release(id)).filter(Boolean);
+    if (!ids.length && task.id) released.push(...ledger.releaseTask(task.id));
+    return released;
+  }
+
+  function reserveTaskResources(task, personId) {
+    const acquired = [];
+    const reserve = (input) => {
+      const entry = ledger.reserve({ ...input, taskId: task.id, ownerId: personId });
+      if (entry) acquired.push(entry.id);
+      return entry;
+    };
+
+    if (!reserve({
+      id: `${task.id}:slot`,
+      type: 'task-slot',
+      key: task.type,
+      metadata: { actionType: task.type },
+    })) return false;
+
+    if (task.data?.featureId && !reserve({
+      id: `${task.id}:feature`,
+      type: 'feature',
+      key: task.data.featureId,
+      capacity: 1,
+      metadata: { featureId: task.data.featureId },
+    })) {
+      acquired.forEach((id) => ledger.release(id));
+      return false;
+    }
+
+    if (task.type === ACTION_TYPES.HAUL_TO_CAMP) {
+      const amount = Math.max(0, Number(task.data?.reservedCapacity ?? 0));
+      const available = Math.max(0, Number(campStore.getStorage(CAMP_ID)?.available ?? 0));
+      if (amount > 0 && !reserve({
+        id: `${task.id}:camp-storage`,
+        type: 'camp-storage',
+        key: CAMP_ID,
+        amount,
+        capacity: available,
+        metadata: { campId: CAMP_ID },
+      })) {
+        acquired.forEach((id) => ledger.release(id));
+        return false;
+      }
+    }
+
+    if (task.type === ACTION_TYPES.DELIVER_MATERIALS && task.data?.reservationId) {
+      if (!reserve({
+        id: `${task.id}:building-material`,
+        type: 'building-material',
+        key: task.data.reservationId,
+        amount: Math.max(1, Number(task.data?.amount ?? task.data?.carriedAmount ?? 1)),
+        capacity: Math.max(1, Number(task.data?.amount ?? task.data?.carriedAmount ?? 1)),
+        metadata: {
+          siteId: task.data.siteId,
+          materialId: task.data.materialId,
+          buildingReservationId: task.data.reservationId,
+        },
+      })) {
+        acquired.forEach((id) => ledger.release(id));
+        return false;
+      }
+    }
+
+    task.data = { ...(task.data ?? {}), runtimeReservationIds: acquired };
+    return true;
   }
 
   function setActivity(person, task, phase) {
@@ -175,7 +273,8 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
 
   function assign(person, agent, planned) {
     const task = createRuntimeTask(weatherAdjustedTask(planned), agent, mapSystem);
-    if (!task) {
+    if (!task || !reserveTaskResources(task, person.id)) {
+      if (task) releaseTaskReservations(task);
       cancelConstructionReservation(planned);
       return false;
     }
@@ -214,21 +313,14 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const actionCounts = counts();
     const reservedFeatureIds = reservations();
     const storage = campStore.getStorage(CAMP_ID);
-    let availableCampStorage = Math.max(
-      0,
-      Number(storage?.available ?? Infinity) - pendingCampStorageReservations(),
-    );
+    let availableCampStorage = Math.max(0, Number(storage?.available ?? Infinity) - pendingCampStorageReservations());
     const people = peopleSystem.getAlive();
+
     people.forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent || agent.task) return;
-
-      const fireTask = !isEmergency(person)
-        ? planFireTask({ camp, fireSystem, weather, phase, actionCounts })
-        : null;
-      const warmthTask = !hasCargo(person)
-        ? planWarmingTask({ person, fireSystem, actionCounts })
-        : null;
+      const fireTask = !isEmergency(person) ? planFireTask({ camp, fireSystem, weather, phase, actionCounts }) : null;
+      const warmthTask = !hasCargo(person) ? planWarmingTask({ person, fireSystem, actionCounts }) : null;
       const sleep = phase.isNight && !mustStayAwake(person)
         ? planNightSleep({ person, camp, buildingSystem, time: gameTime.now(), worldMinutesPerSecond: WORLD_MINUTES_PER_REAL_SECOND })
         : null;
@@ -253,18 +345,21 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       }
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
-      if (planned.data.featureId) reservedFeatureIds.add(planned.data.featureId);
+      if (planned.data?.featureId) reservedFeatureIds.add(planned.data.featureId);
       if (planned.type === ACTION_TYPES.HAUL_TO_CAMP) {
-        availableCampStorage = Math.max(
-          0,
-          availableCampStorage - Math.max(0, Number(planned.data?.reservedCapacity ?? 0)),
-        );
+        availableCampStorage = Math.max(0, availableCampStorage - Math.max(0, Number(planned.data?.reservedCapacity ?? 0)));
       }
     });
   }
 
   function clearTask(agent, personId) {
-    if (agent.task?.type === ACTION_TYPES.SLEEP) peopleSystem.removeStatusTag(personId, 'sleeping');
+    const task = agent.task;
+    releaseTaskReservations(task);
+    if (task?.type === ACTION_TYPES.SLEEP) {
+      peopleSystem.removeStatusTag(personId, 'sleeping');
+      peopleSystem.removeStatusTag(personId, 'sheltered');
+      peopleSystem.removeStatusTag(personId, 'exposed');
+    }
     agent.task = null;
     peopleSystem.setActivity(personId, { status: 'idle', current: null });
   }
@@ -283,6 +378,10 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       log('运送建材的路线被阻断，调拨已取消。', task.type, agent.personId);
       return;
     }
+    nextTask.data = {
+      ...(nextTask.data ?? {}),
+      runtimeReservationIds: [...(task.data?.runtimeReservationIds ?? [])],
+    };
     agent.task = nextTask;
     const person = peopleSystem.get(agent.personId);
     setActivity(person, nextTask, '送往工地');
@@ -301,6 +400,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
         applyCompletionRelationFeedback(result);
         eventBus.emit('actions:completed', { result: copy(result), task: copy(task), personId: result.personId, time: gameTime.stamp() });
       }
+      releaseTaskReservations(task);
       agent.task = null;
     }
 
@@ -310,28 +410,24 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       complete(result);
       return;
     }
-
     if (task.type === ACTION_TYPES.TEND_FIRE) {
       const result = completeTendFire({ agent, task, peopleSystem, campStore, fireSystem, gameTime, campId: CAMP_ID });
       if (result) log(result.summary, task.type, result.personId);
       complete(result);
       return;
     }
-
     if (task.type === ACTION_TYPES.WARM_BY_FIRE) {
       const result = completeWarmByFire({ agent, task, peopleSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
       complete(result);
       return;
     }
-
     if (FARM_ACTIONS.has(task.type)) {
       const result = completeFarmAction({ agent, task, peopleSystem, farmSystem: currentFarmSystem(), gameTime });
       if (result) log(result.summary, task.type, result.personId);
       complete(result);
       return;
     }
-
     if (task.type === ACTION_TYPES.DELIVER_MATERIALS) {
       if (task.data.stage === 'collect') return continueMaterialDelivery(agent, task);
       const result = deliverConstructionMaterial({ agent, task, peopleSystem, buildingSystem, gameTime });
@@ -339,18 +435,14 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       complete(result);
       return;
     }
-
     if (task.type === ACTION_TYPES.BUILD_SITE) {
       const result = performConstructionWork({ agent, task, peopleSystem, buildingSystem, gameTime });
       if (result) log(result.summary, task.type, result.personId);
       complete(result);
       return;
     }
-
     const result = completeAction({ agent, task, peopleSystem, mapSystem, campStore, gameTime, campId: CAMP_ID });
-    if (result) {
-      log(result.summary, task.type, result.personId);
-    }
+    if (result) log(result.summary, task.type, result.personId);
     complete(result);
   }
 
@@ -361,7 +453,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       const person = peopleSystem.get(agent.personId);
       if (!person?.identity.alive) {
         cancelConstructionReservation(agent.task);
-        agent.task = null;
+        clearTask(agent, agent.personId);
         return;
       }
       const speed = Math.max(0.45, 1.34 * (0.55 + person.state.energy / 180) * Number(weather.movementMultiplier ?? 1));
@@ -390,7 +482,6 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
         peopleSystem.setExtension(person.id, EXPOSURE_KEY, evaluation.exposure);
       }
       syncExposureTags(person, evaluation);
-
       const patch = {
         hunger: person.state.hunger + seconds * 0.075,
         thirst: person.state.thirst + seconds * 0.12,
@@ -398,13 +489,11 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
         stress: person.state.stress + evaluation.stateDelta.stress,
         health: person.state.health + evaluation.stateDelta.health,
       };
-
       if (sleeping) {
         patch.energy = person.state.energy + seconds * (shelteredSleep ? 0.78 : 0.25) + evaluation.stateDelta.energy;
         patch.stress = person.state.stress + seconds * (shelteredSleep ? -0.24 : 0.16) + evaluation.stateDelta.stress;
         if (!shelteredSleep) patch.health = person.state.health - seconds * 0.018 + evaluation.stateDelta.health;
       }
-
       if (near(agent, camp.anchor)) {
         if (patch.thirst >= 56) {
           const water = foodDistribution.requestWater({ person, people, thirstBefore: patch.thirst });
@@ -435,6 +524,63 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const weather = weatherSystem.sync();
     const fire = fireSystem.sync({ weather, phase });
     eventBus.emit('environment:updated', { weather, fire, phase, time: gameTime.stamp() });
+    return { weather, fire, phase };
+  }
+
+  function tickPayload(environment = null) {
+    const current = environment ?? {
+      phase: getDayPhase(gameTime.now()),
+      weather: weatherSystem.get(),
+      fire: fireSystem.get(),
+    };
+    return {
+      time: gameTime.stamp(),
+      phase: current.phase,
+      weather: current.weather,
+      fire: current.fire,
+      speed: getWorldSpeedView(),
+      fixedStep: {
+        worldMinutes: 1,
+        simulationSeconds: SIMULATION_SECONDS_PER_TICK,
+      },
+    };
+  }
+
+  function stepWorldMinute() {
+    gameTime.advanceMinutes(1);
+    lastGameTime = gameTime.stamp();
+    eventBus.emit('simulation:pre-tick', { time: lastGameTime, fixedStep: { worldMinutes: 1 } });
+    reportPhaseChange();
+    const environment = updateEnvironment();
+    const payload = tickPayload(environment);
+    eventBus.emit('simulation:tick', payload);
+    updateAgents(SIMULATION_SECONDS_PER_TICK);
+    plannerTimer += SIMULATION_SECONDS_PER_TICK;
+    while (plannerTimer >= 0.75) {
+      plannerTimer -= 0.75;
+      plan();
+    }
+    needsTimer += SIMULATION_SECONDS_PER_TICK;
+    while (needsTimer >= 5) {
+      needsTimer -= 5;
+      updateNeeds(5);
+    }
+    return payload;
+  }
+
+  function publishUiTime(now, force = false) {
+    if (!force && now - lastUiPublishAt < UI_PUBLISH_INTERVAL_MS) return false;
+    lastUiPublishAt = now;
+    eventBus.emit('simulation:time', tickPayload());
+    return true;
+  }
+
+  function advanceTicks(count, { publishUi = false } = {}) {
+    const total = Math.max(0, Math.floor(Number(count) || 0));
+    let payload = null;
+    for (let index = 0; index < total; index += 1) payload = stepWorldMinute();
+    if (publishUi && payload) eventBus.emit('simulation:time', payload);
+    return total;
   }
 
   function summarizeError(error) {
@@ -458,32 +604,13 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     if (!running) return;
     try {
       lastTickAt = Date.now();
-      lastGameTime = gameTime.stamp();
-      const realDelta = Math.min(0.12, Math.max(0, (now - previous) / 1000));
+      const realDelta = Math.max(0, (now - previous) / 1000);
       previous = now;
-      const worldSpeed = getWorldSpeed();
-      const simulationDelta = realDelta * worldSpeed;
-      clockTimer += simulationDelta * WORLD_MINUTES_PER_REAL_SECOND;
-      const minutes = Math.floor(clockTimer);
-      if (minutes > 0) {
-        gameTime.advanceMinutes(minutes);
-        clockTimer -= minutes;
-        lastGameTime = gameTime.stamp();
-        reportPhaseChange();
-        updateEnvironment();
-        eventBus.emit('simulation:time', {
-          time: gameTime.stamp(),
-          phase: getDayPhase(gameTime.now()),
-          weather: weatherSystem.get(),
-          fire: fireSystem.get(),
-          speed: getWorldSpeedView(),
-        });
+      const ticks = fixedClock.consume(realDelta, getWorldSpeed());
+      if (ticks > 0) {
+        advanceTicks(ticks);
+        publishUiTime(now);
       }
-      updateAgents(simulationDelta);
-      plannerTimer += simulationDelta;
-      if (plannerTimer >= 0.75) { plannerTimer = 0; plan(); }
-      needsTimer += simulationDelta;
-      if (needsTimer >= 5) { updateNeeds(needsTimer); needsTimer = 0; }
       frameId = requestAnimationFrame(tick);
     } catch (error) {
       handleSimulationError(error);
@@ -495,6 +622,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     ensureAgents();
     running = true;
     previous = performance.now();
+    lastUiPublishAt = previous;
     const phase = getDayPhase(gameTime.now());
     const weather = weatherSystem.get();
     const fire = fireSystem.get();
@@ -523,12 +651,15 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       worldSpeed: getWorldSpeedView(),
       agentCount: agents.size,
       pendingFrame: frameId !== null,
+      fixedStep: fixedClock.getDiagnostics(),
+      reservations: ledger.getSummary(),
     };
   }
 
   return Object.freeze({
     start,
     stop,
+    advanceTicks,
     getRenderPeople: renderPeople,
     getRecentLogs: recentLogs,
     getDayPhase: () => getDayPhase(gameTime.now()),
@@ -538,6 +669,7 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     exportFoodDistributionState: () => foodDistribution.exportState(),
     importFoodDistributionState: (snapshot) => foodDistribution.importState(snapshot),
     getFoodDistributionSystem: () => foodDistribution,
+    getReservationLedger: () => ledger,
     resetRuntimeAgents,
     getLastError,
     getDiagnostics,
