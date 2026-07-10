@@ -1,0 +1,9 @@
+{
+  "name": "shengling",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "find src test -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "test": "node --test"
+  }
+}

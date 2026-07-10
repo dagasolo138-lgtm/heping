@@ -57,9 +57,14 @@ export function completeAction({ agent, task, peopleSystem, mapSystem, campStore
         delivered[itemId] = actual;
       }
     });
+    const remaining = Object.fromEntries(RESOURCE_IDS
+      .map((itemId) => [itemId, Number(peopleSystem.get(person.id).inventory.items[itemId] ?? 0)])
+      .filter(([, value]) => value > 0));
     summary = Object.keys(delivered).length
       ? `${person.identity.name}把${itemText(delivered)}搬回了起始营地。`
-      : `${person.identity.name}回到营地，但没有可归还的物资。`;
+      : Object.keys(remaining).length
+        ? `${person.identity.name}抵达营地时储存已满，暂时无法卸下${itemText(remaining)}。`
+        : `${person.identity.name}回到营地，背包中没有需要归还的物资。`;
     details = { ...details, delivered };
   }
 
