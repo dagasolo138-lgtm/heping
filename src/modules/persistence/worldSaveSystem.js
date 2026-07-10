@@ -1,5 +1,5 @@
 import { migrateWorldSave } from './worldMigrations.js';
-import { exportActionRuntimeSnapshot, restoreActionRuntimeSnapshot, validateActionRuntimeSnapshot } from './actionRuntimeSnapshot.js';
+import { exportActionRuntimeSnapshot, restoreActionRuntimeSnapshot, validateActionRuntimeCoordinates } from './actionRuntimeSnapshot.js';
 import { WORLD_SAVE_APP_VERSION, WORLD_SAVE_DEFAULT_SLOT, WORLD_SAVE_SCHEMA_VERSION, slotKey } from './worldSaveSchema.js';
 
 function clone(value) {
@@ -145,7 +145,7 @@ export function createWorldSaveSystem({
       if (state === null || state === undefined) return;
       if (!system?.importState) throw new Error(`${label} 系统不支持读取存档。`);
     });
-    validateActionRuntimeSnapshot(snapshot.systems.actionRuntime);
+    validateActionRuntimeCoordinates(snapshot.systems.actionRuntime, snapshot.systems.map);
   }
 
   function importSystems(snapshot, runtime) {
