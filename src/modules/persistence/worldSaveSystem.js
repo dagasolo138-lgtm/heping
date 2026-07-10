@@ -88,6 +88,7 @@ export function createWorldSaveSystem({
         foodDistribution: maybeExport(runtime?.actionSystem?.getFoodDistributionSystem?.()),
         tools: maybeExport(runtime?.toolSystem),
         resourceFlow: maybeExport(runtime?.resourceFlowSystem),
+        dailyEconomy: maybeExport(runtime?.dailyEconomySystem),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
         actionRuntime: exportActionRuntimeSnapshot({
@@ -138,6 +139,7 @@ export function createWorldSaveSystem({
       ['foodDistribution', '食物分配', runtime?.actionSystem?.getFoodDistributionSystem?.()],
       ['tools', '工具', runtime?.toolSystem],
       ['resourceFlow', '资源流水', runtime?.resourceFlowSystem],
+      ['dailyEconomy', '每日经济摘要', runtime?.dailyEconomySystem],
       ['socialEvents', '社会事件', socialEventSystem],
       ['chronicles', '史书', chronicleSystem],
     ];
@@ -162,6 +164,9 @@ export function createWorldSaveSystem({
     if (snapshot.systems.resourceFlow === null || snapshot.systems.resourceFlow === undefined) {
       runtime?.resourceFlowSystem?.importState?.({ schemaVersion: 1, sequence: 0, entries: [] });
     }
+    if (snapshot.systems.dailyEconomy === null || snapshot.systems.dailyEconomy === undefined) {
+      runtime?.dailyEconomySystem?.reset?.();
+    }
   }
 
   function refreshMap(runtime) {
@@ -185,6 +190,7 @@ export function createWorldSaveSystem({
       buildings: buildingSystem?.createCheckpoint?.() ?? null,
       tools: runtime?.toolSystem?.createCheckpoint?.() ?? null,
       resourceFlow: runtime?.resourceFlowSystem?.createCheckpoint?.() ?? null,
+      dailyEconomy: runtime?.dailyEconomySystem?.createCheckpoint?.() ?? null,
     };
   }
 
@@ -197,6 +203,9 @@ export function createWorldSaveSystem({
     }
     if (checkpoint?.resourceFlow && runtime?.resourceFlowSystem?.restoreCheckpoint) {
       runtime.resourceFlowSystem.restoreCheckpoint(checkpoint.resourceFlow);
+    }
+    if (checkpoint?.dailyEconomy && runtime?.dailyEconomySystem?.restoreCheckpoint) {
+      runtime.dailyEconomySystem.restoreCheckpoint(checkpoint.dailyEconomy);
     }
   }
 

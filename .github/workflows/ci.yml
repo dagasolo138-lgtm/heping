@@ -21,17 +21,26 @@ jobs:
         run: |
           set -o pipefail
           npm test | tee test-output.log
-      - name: Read day-30 fingerprint
+      - name: Read deterministic fingerprints
         if: always()
-        id: fingerprint
+        id: fingerprints
         run: |
-          value=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' test-output.log 2>/dev/null | tail -1 | cut -d= -f2)
-          echo "value=$value" >> "$GITHUB_OUTPUT"
-          if [ -n "$value" ]; then echo "DAY30_FINGERPRINT=$value"; fi
+          day30=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' test-output.log 2>/dev/null | tail -1 | cut -d= -f2)
+          day60=$(grep -oE 'DAY60_FINGERPRINT=[a-f0-9]{64}' test-output.log 2>/dev/null | tail -1 | cut -d= -f2)
+          echo "day30=$day30" >> "$GITHUB_OUTPUT"
+          echo "day60=$day60" >> "$GITHUB_OUTPUT"
+          if [ -n "$day30" ]; then echo "DAY30_FINGERPRINT=$day30"; fi
+          if [ -n "$day60" ]; then echo "DAY60_FINGERPRINT=$day60"; fi
       - uses: actions/upload-artifact@v4
-        if: always() && steps.fingerprint.outputs.value != ''
+        if: always() && steps.fingerprints.outputs.day30 != ''
         with:
-          name: day30-${{ steps.fingerprint.outputs.value }}
+          name: day30-${{ steps.fingerprints.outputs.day30 }}
+          path: test-output.log
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.fingerprints.outputs.day60 != ''
+        with:
+          name: day60-${{ steps.fingerprints.outputs.day60 }}
           path: test-output.log
           retention-days: 7
       - run: npm run build
