@@ -111,11 +111,16 @@ export function restoreActionRuntimeSnapshot({ snapshot, peopleSystem, mapSystem
       peopleSystem.setLocation(person.id, { tileX: savedAgent.x, tileY: savedAgent.y });
       restoredPositions += 1;
     }
-    if (savedAgent?.interruptedTask || person.activity?.current) interruptedTasks += 1;
+    const interruptedTask = savedAgent?.interruptedTask ?? person.activity?.current ?? null;
+    if (interruptedTask) interruptedTasks += 1;
     if (person.activity?.status !== 'idle' || person.activity?.current) {
       peopleSystem.setActivity(person.id, { status: 'idle', current: null });
     }
     if (person.state?.statusTags?.includes('sleeping')) peopleSystem.removeStatusTag(person.id, 'sleeping');
+    if (interruptedTask?.type === 'sleep') {
+      if (person.state?.statusTags?.includes('sheltered')) peopleSystem.removeStatusTag(person.id, 'sheltered');
+      if (person.state?.statusTags?.includes('exposed')) peopleSystem.removeStatusTag(person.id, 'exposed');
+    }
   });
 
   return {

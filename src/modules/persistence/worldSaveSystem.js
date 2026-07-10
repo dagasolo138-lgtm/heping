@@ -154,6 +154,11 @@ export function createWorldSaveSystem({
     });
   }
 
+  function refreshMap(runtime) {
+    runtime?.mapView?.setMap?.(mapSystem.get());
+    runtime?.mapView?.redraw?.();
+  }
+
   function refreshRuntime(runtime, snapshot) {
     const actionRuntime = restoreActionRuntimeSnapshot({
       snapshot: snapshot.systems.actionRuntime,
@@ -161,9 +166,20 @@ export function createWorldSaveSystem({
       mapSystem,
     });
     runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: false });
-    runtime?.mapView?.setMap?.(mapSystem.get());
-    runtime?.mapView?.redraw?.();
+    refreshMap(runtime);
     return actionRuntime;
+  }
+
+  function captureRollbackCheckpoint() {
+    return {
+      buildings: buildingSystem?.createCheckpoint?.() ?? null,
+    };
+  }
+
+  function restoreRollbackCheckpoint(checkpoint) {
+    if (checkpoint?.buildings && buildingSystem?.restoreCheckpoint) {
+      buildingSystem.restoreCheckpoint(checkpoint.buildings);
+    }
   }
 
   function importSnapshot(rawSnapshot) {
@@ -171,6 +187,7 @@ export function createWorldSaveSystem({
     const runtime = getRuntime?.();
     validateImportTargets(snapshot, runtime);
     const rollbackSnapshot = exportSnapshot();
+    const rollbackCheckpoint = captureRollbackCheckpoint();
     const wasRunning = Boolean(runtime?.actionSystem?.isRunning?.());
     runtime?.actionSystem?.stop?.();
 
@@ -183,7 +200,8 @@ export function createWorldSaveSystem({
       let rollbackError = null;
       try {
         importSystems(rollbackSnapshot, runtime);
-        refreshRuntime(runtime, rollbackSnapshot);
+        restoreRollbackCheckpoint(rollbackCheckpoint);
+        refreshMap(runtime);
       } catch (nextError) {
         rollbackError = nextError;
       }

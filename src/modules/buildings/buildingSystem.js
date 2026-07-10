@@ -165,6 +165,22 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     };
   }
 
+  function replaceState(snapshot, { preserveReservations = false, reason = 'buildings:hydrated' } = {}) {
+    if (snapshot?.schemaVersion !== BUILDING_SCHEMA_VERSION || !Array.isArray(snapshot.buildings)) {
+      throw new Error('建筑存档格式不兼容。');
+    }
+    const next = new Map();
+    snapshot.buildings.forEach((building) => {
+      if (!building?.id) throw new Error('建筑存档缺少 id。');
+      next.set(building.id, preserveReservations ? clone(building) : withoutTransientReservations(building));
+    });
+    buildings.clear();
+    next.forEach((building, id) => buildings.set(id, building));
+    eventBus.emit(reason, { buildings: list(), time: gameTime.stamp() });
+    emit(reason, list()[0] ?? null);
+    return list();
+  }
+
   function exportState() {
     return {
       schemaVersion: BUILDING_SCHEMA_VERSION,
@@ -174,19 +190,19 @@ export function createBuildingSystem({ eventBus, gameTime }) {
   }
 
   function importState(snapshot) {
-    if (snapshot?.schemaVersion !== BUILDING_SCHEMA_VERSION || !Array.isArray(snapshot.buildings)) {
-      throw new Error('建筑存档格式不兼容。');
-    }
-    const next = new Map();
-    snapshot.buildings.forEach((building) => {
-      if (!building?.id) throw new Error('建筑存档缺少 id。');
-      next.set(building.id, withoutTransientReservations(building));
-    });
-    buildings.clear();
-    next.forEach((building, id) => buildings.set(id, building));
-    eventBus.emit('buildings:hydrated', { buildings: list(), time: gameTime.stamp() });
-    emit('buildings:hydrated', list()[0] ?? null);
-    return list();
+    return replaceState(snapshot, { preserveReservations: false, reason: 'buildings:hydrated' });
+  }
+
+  function createCheckpoint() {
+    return {
+      schemaVersion: BUILDING_SCHEMA_VERSION,
+      exportedAt: gameTime.stamp(),
+      buildings: list(),
+    };
+  }
+
+  function restoreCheckpoint(snapshot) {
+    return replaceState(snapshot, { preserveReservations: true, reason: 'buildings:checkpoint-restored' });
   }
 
   return Object.freeze({
@@ -206,5 +222,7 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     getConstructionSummary,
     exportState,
     importState,
+    createCheckpoint,
+    restoreCheckpoint,
   });
 }
