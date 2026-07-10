@@ -9,9 +9,14 @@ function sameTile(first, second) {
 export function createRoadTickSampler({ roadSystem, getPeople } = {}) {
   const lastTiles = new Map();
 
+  function currentPeople() {
+    const runtimePeople = globalThis.shengling?.actionSystem?.getMovementPeople?.();
+    if (Array.isArray(runtimePeople)) return runtimePeople;
+    return getPeople?.() ?? [];
+  }
+
   function sample() {
-    const people = getPeople?.() ?? [];
-    people.forEach((person) => {
+    currentPeople().forEach((person) => {
       if (person.location?.tileX === null || person.location?.tileY === null) return;
       const current = tileOf(person);
       const previous = lastTiles.get(person.id);
