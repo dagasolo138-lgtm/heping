@@ -71,13 +71,12 @@ export function advanceRuntimeTask(agent, deltaSeconds, speedTilesPerSecond) {
   if (!task) return null;
 
   if (task.phase === 'moving') {
-    const context = runtimeContext(agent.personId);
+    const runtime = globalThis.shengling ?? {};
     const laborMultiplier = movementLaborMultiplier({
-      person: context.person,
       task,
       agent,
-      mapSystem: globalThis.shengling?.mapSystem ?? null,
-      roadSystem: context.roadSystem,
+      mapSystem: runtime.mapSystem ?? null,
+      roadSystem: runtime.roadSystem ?? null,
     });
     let remaining = Math.max(0, deltaSeconds * speedTilesPerSecond * laborMultiplier);
     while (remaining > 0 && task.routeIndex < task.route.length) {
