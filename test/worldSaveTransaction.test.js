@@ -109,7 +109,7 @@ test('缺少目标导入器时在停止模拟之前拒绝读取', () => {
 
   assert.throws(
     () => fixture.worldSave.importSnapshot(snapshot),
-    /生态系统不支持读取存档/,
+    /生态\s*系统不支持读取存档/,
   );
   assert.equal(fixture.runtimeCalls.stop, 0);
   assert.equal(fixture.runtimeCalls.start, 0);
