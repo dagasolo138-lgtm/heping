@@ -195,6 +195,7 @@ function detectBottlenecks({ flow, labor, denials, stockTargets, balances }) {
 export function createDailyEconomySystem({ eventBus, gameTime, resourceFlowSystem, getRuntime = () => globalThis.shengling } = {}) {
   const reports = new Map();
   let current = createDraft(gameTime.stamp(), getRuntime?.() ?? {});
+  let rollingOver = false;
 
   function ensureCurrent() {
     const now = gameTime.stamp();
@@ -239,14 +240,20 @@ export function createDailyEconomySystem({ eventBus, gameTime, resourceFlowSyste
   }
 
   function rollover(now = gameTime.stamp()) {
-    if (dayKey(now) === dayKey(current)) return null;
-    const report = finalizeCurrent(now);
-    current = createDraft(now, getRuntime?.() ?? {});
-    eventBus?.emit?.('daily-economy:opened', { year: current.year, day: current.day, openingInventory: clone(current.openingInventory), time: clone(now) });
-    return report;
+    if (dayKey(now) === dayKey(current) || rollingOver) return null;
+    rollingOver = true;
+    try {
+      const report = finalizeCurrent(now);
+      current = createDraft(now, getRuntime?.() ?? {});
+      eventBus?.emit?.('daily-economy:opened', { year: current.year, day: current.day, openingInventory: clone(current.openingInventory), time: clone(now) });
+      return report;
+    } finally {
+      rollingOver = false;
+    }
   }
 
   function observe(eventName, payload = {}) {
+    if (rollingOver && eventName.startsWith('daily-economy:')) return;
     if (eventName === 'simulation:pre-tick') {
       rollover(gameTime.stamp());
       return;
