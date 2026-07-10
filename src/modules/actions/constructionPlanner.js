@@ -1,3 +1,4 @@
+import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 import { buildingCenter, findInitialShelterPlacement, findStorageShedPlacement } from '../buildings/buildingPlacement.js';
 
@@ -6,7 +7,7 @@ const BUILD_ORDER = Object.freeze(['communalShelter', 'storageShed']);
 function createTask(type, destination, data, workDuration) {
   const meta = ACTION_META[type];
   return {
-    id: crypto.randomUUID?.() ?? `construction-${Date.now()}-${Math.random()}`,
+    id: createId('task'),
     type,
     label: meta.label,
     phaseLabel: meta.phaseLabel,
@@ -38,7 +39,6 @@ export function ensureSettlementConstruction(context) {
   return null;
 }
 
-// Legacy name retained because the action runtime imports it. It now plans the next settlement building.
 export function ensureInitialShelter(context) {
   return ensureSettlementConstruction(context);
 }

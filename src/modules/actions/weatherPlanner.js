@@ -1,10 +1,11 @@
+import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 import { getExposure } from '../environment/exposureSystem.js';
 
 function createTask(type, destination, data = {}, duration) {
   const meta = ACTION_META[type];
   return {
-    id: crypto.randomUUID?.() ?? `weather-${Date.now()}-${Math.random()}`,
+    id: createId('task'),
     type,
     label: meta.label,
     phaseLabel: meta.phaseLabel,

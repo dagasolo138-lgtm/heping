@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Run tests
+        run: |
+          set -o pipefail
+          npm test | tee test-output.log
+      - name: Read day-30 fingerprint
+        id: fingerprint
+        run: |
+          value=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' test-output.log | tail -1 | cut -d= -f2)
+          test -n "$value"
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: day30-${{ steps.fingerprint.outputs.value }}
+          path: test-output.log
+          retention-days: 7
+      - run: npm run build

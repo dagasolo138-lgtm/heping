@@ -1,7 +1,6 @@
+import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createRoadSystem } from '../modules/roads/roadSystem.js';
-
-const BASE_SAMPLE_INTERVAL_MS = 240;
-const MIN_SAMPLE_INTERVAL_MS = 16;
+import { createRoadTickSampler } from '../modules/roads/roadTickSampler.js';
 
 function ensureReadout() {
   let readout = document.querySelector('#road-readout');
@@ -25,22 +24,6 @@ function renderReadout(readout, roadSystem) {
   readout.textContent = `路径形成 · 踩踏 ${summary.wornTiles} 格 · 土路 ${summary.dirtTiles} 格`;
 }
 
-function tileOf(person) {
-  return {
-    x: Math.round(person.location.tileX),
-    y: Math.round(person.location.tileY),
-  };
-}
-
-function sameTile(first, second) {
-  return first?.x === second?.x && first?.y === second?.y;
-}
-
-function currentSampleInterval() {
-  const speed = Number(globalThis.shengling?.worldSpeedSystem?.get?.().value ?? 1);
-  return Math.max(MIN_SAMPLE_INTERVAL_MS, BASE_SAMPLE_INTERVAL_MS / Math.max(0.5, speed));
-}
-
 export function attachRoadRuntime() {
   const runtime = globalThis.shengling;
   const eventBus = globalThis.__shenglingEventBus;
@@ -48,40 +31,34 @@ export function attachRoadRuntime() {
   if (runtime.roadSystem) return runtime.roadSystem;
 
   const roadSystem = createRoadSystem({ eventBus, gameTime: runtime.gameTime });
-  const lastTiles = new Map();
+  const sampler = createRoadTickSampler({ roadSystem, getPeople: () => runtime.actionSystem.getMovementPeople() });
   const readout = ensureReadout();
-  let frameId = null;
-  let lastSample = 0;
-
-  function sample(now) {
-    frameId = requestAnimationFrame(sample);
-    if (now - lastSample < currentSampleInterval()) return;
-    lastSample = now;
-    runtime.actionSystem.getRenderPeople().forEach((person) => {
-      if (person.location.tileX === null || person.location.tileY === null) return;
-      const current = tileOf(person);
-      const previous = lastTiles.get(person.id);
-      if (previous && person.activity?.status === 'moving' && !sameTile(previous, current)) {
-        roadSystem.recordTraversal({ personId: person.id, from: previous, to: current });
-      }
-      lastTiles.set(person.id, current);
-    });
-  }
+  const ui = createUiRenderScheduler({
+    maxFps: 10,
+    render: () => {
+      renderReadout(readout, roadSystem);
+      runtime.mapView.redraw();
+    },
+  });
 
   renderReadout(readout, roadSystem);
+  const stopTick = eventBus.on('simulation:tick', sampler.sample);
   eventBus.on('roads:changed', ({ changed }) => {
-    renderReadout(readout, roadSystem);
-    runtime.mapView.redraw();
+    ui.request('roads:changed');
     if (changed.some((road) => road.stage === 'dirtRoad')) {
       const status = document.querySelector('#system-status');
       if (status) status.textContent = '反复通行的路线被踩实，新的土路提高了村民的行走效率。';
     }
   });
 
-  frameId = requestAnimationFrame(sample);
   const system = Object.freeze({
     ...roadSystem,
-    stop() { if (frameId) cancelAnimationFrame(frameId); frameId = null; },
+    sampleTick: sampler.sample,
+    resetSampler: sampler.reset,
+    stop() {
+      stopTick();
+      ui.stop();
+    },
   });
   globalThis.shengling = Object.freeze({ ...runtime, roadSystem: system });
   return system;

@@ -1,9 +1,10 @@
+import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 
 function createTask(type, destination, data = {}, duration = ACTION_META[type].workDuration) {
   const meta = ACTION_META[type];
   return {
-    id: crypto.randomUUID?.() ?? `farm-${Date.now()}-${Math.random()}`,
+    id: createId('task'),
     type,
     label: meta.label,
     phaseLabel: meta.phaseLabel,

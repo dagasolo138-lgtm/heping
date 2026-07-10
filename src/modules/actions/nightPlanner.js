@@ -1,3 +1,4 @@
+import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 import { buildingCenter } from '../buildings/buildingPlacement.js';
 import { minutesUntilDawn, nightKey } from '../environment/dayCycle.js';
@@ -5,7 +6,7 @@ import { minutesUntilDawn, nightKey } from '../environment/dayCycle.js';
 function createTask(destination, data, workDuration) {
   const meta = ACTION_META[ACTION_TYPES.SLEEP];
   return {
-    id: crypto.randomUUID?.() ?? `sleep-${Date.now()}-${Math.random()}`,
+    id: createId('task'),
     type: ACTION_TYPES.SLEEP,
     label: meta.label,
     phaseLabel: meta.phaseLabel,

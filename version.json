@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.25.3.1",
-  "buildId": "v0.25.3.1-rollback-hardening-20260710-01",
-  "sourceCommit": "0ed7d826d1d73535bb5f42998ce4ff67dcc09a5e",
+  "version": "v0.26.0",
+  "buildId": "v0.26.0-deterministic-kernel-20260710-01",
+  "sourceCommit": "d304a9fb6d02b073cf66a5878bc13d6ac0c8d2ff",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional commit for v0.25.3.1 failed-load runtime preservation, building reservation checkpoint rollback and interrupted-sleep cleanup; later documentation and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the final functional v0.26.0 commit containing the locked day-30 replay fingerprint and world-save app version; later README, roadmap, CODEX and manifest commits may follow it."
   }
 }

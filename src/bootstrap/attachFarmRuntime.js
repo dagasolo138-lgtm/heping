@@ -1,3 +1,4 @@
+import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createFarmSystem } from '../modules/farming/farmSystem.js';
 
 function ensureReadout() {
@@ -74,20 +75,27 @@ export function attachFarmRuntime() {
     seasonSystem: runtime.seasonSystem,
   });
   const readout = ensureReadout();
+  const ui = createUiRenderScheduler({
+    maxFps: 10,
+    render: () => {
+      renderReadout(readout, farmSystem);
+      patchMilletChip(runtime);
+      runtime.mapView.redraw();
+    },
+  });
   renderReadout(readout, farmSystem);
   patchMilletChip(runtime);
 
-  eventBus.on('farms:changed', () => {
-    renderReadout(readout, farmSystem);
-    runtime.mapView.redraw();
-  });
+  eventBus.on('simulation:tick', ({ weather }) => farmSystem.syncGrowth(weather));
+  eventBus.on('farms:changed', () => ui.request('farms:changed'));
   eventBus.on('farms:matured', ({ field }) => {
     const status = document.querySelector('#system-status');
     if (status) status.textContent = `${field.label}的粟米已经成熟，村民可以开始收获。`;
   });
-  eventBus.on('seasons:changed', () => renderReadout(readout, farmSystem));
-  eventBus.on('camp:changed', () => patchMilletChip(runtime));
+  eventBus.on('seasons:changed', () => ui.request('seasons:changed'));
+  eventBus.on('camp:changed', () => ui.request('camp:changed'));
 
-  globalThis.shengling = Object.freeze({ ...runtime, farmSystem });
-  return farmSystem;
+  const system = Object.freeze({ ...farmSystem, stopUi: () => ui.stop() });
+  globalThis.shengling = Object.freeze({ ...runtime, farmSystem: system });
+  return system;
 }
