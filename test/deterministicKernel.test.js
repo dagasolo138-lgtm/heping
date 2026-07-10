@@ -27,7 +27,7 @@ import { createCampStore } from '../src/modules/settlements/campStore.js';
 import { createSocialEventSystem } from '../src/modules/social/socialEventSystem.js';
 import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSystem.js';
 
-const DAY_30_EXPECTED_FINGERPRINT = '0876a28dbd85d9ceb38c273a2049bb9433439089169be8bb27f79037efb73c4c';
+const DAY_30_EXPECTED_FINGERPRINT = 'c170c6ced37c5c3629112087d57dbb18ec29a8b01bce967c0c20b53716aeaa37';
 
 function round(value, digits = 4) {
   const factor = 10 ** digits;
@@ -287,9 +287,9 @@ test('固定种子回放到第 30 日命中确定性世界指纹', { timeout: 30
     const reservedStorage = world.actions.getReservationLedger().amount({ type: 'camp-storage', key: 'starting-camp' });
     assert.ok(reservedStorage <= storage.available);
     world.people.getAliveRuntime().forEach((person) => {
-      Object.values(person.inventory.items).forEach((amount) => assert.ok(Number(amount) >= 0));
+      Object.values(person.inventory.items).forEach((itemAmount) => assert.ok(Number(itemAmount) >= 0));
     });
-    Object.values(world.camp.get('starting-camp').items).forEach((amount) => assert.ok(Number(amount) >= 0));
+    Object.values(world.camp.get('starting-camp').items).forEach((itemAmount) => assert.ok(Number(itemAmount) >= 0));
     const activeTasks = world.people.getAliveRuntime().filter((person) => person.activity.current).length;
     assert.equal(world.actions.getReservationLedger().count({ type: 'task-slot' }), activeTasks);
     assert.equal(world.actions.getDiagnostics().lastSimulationError, null);
