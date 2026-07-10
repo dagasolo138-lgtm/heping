@@ -76,6 +76,15 @@ export function createActionSystem({
   let lastGameTime = gameTime.stamp();
   let lastUiPublishAt = 0;
 
+  function runtimePeople() {
+    const lightweight = peopleSystem.getAliveRuntime?.();
+    return Array.isArray(lightweight) ? lightweight : peopleSystem.getAlive();
+  }
+
+  function runtimePerson(personId) {
+    return peopleSystem.getRuntime?.(personId) ?? peopleSystem.get(personId);
+  }
+
   function activeWorldSpeedSystem() {
     return worldSpeedSystem ?? globalThis.shengling?.worldSpeedSystem ?? null;
   }
@@ -102,7 +111,7 @@ export function createActionSystem({
   function recentLogs(limit = 10) { return logs.slice(0, limit).map(copy); }
 
   function ensureAgents() {
-    peopleSystem.getAlive().forEach((person) => {
+    runtimePeople().forEach((person) => {
       if (agents.has(person.id)) return;
       agents.set(person.id, {
         personId: person.id,
@@ -116,7 +125,7 @@ export function createActionSystem({
   function resetRuntimeAgents({ clearActivities = true } = {}) {
     ledger.clear();
     agents.clear();
-    peopleSystem.getAlive().forEach((person) => {
+    runtimePeople().forEach((person) => {
       agents.set(person.id, {
         personId: person.id,
         x: Number(person.location.tileX ?? 0),
@@ -135,11 +144,25 @@ export function createActionSystem({
     });
   }
 
+  function movementPeople() {
+    ensureAgents();
+    return runtimePeople().map((person) => {
+      const agent = agents.get(person.id);
+      return {
+        id: person.id,
+        location: {
+          tileX: agent?.x ?? Number(person.location.tileX ?? 0),
+          tileY: agent?.y ?? Number(person.location.tileY ?? 0),
+        },
+        activity: { status: person.activity?.status ?? 'idle' },
+      };
+    });
+  }
+
   function counts() {
     const result = {};
     ledger.list({ type: 'task-slot' }).forEach((entry) => {
-      const actionType = entry.key;
-      result[actionType] = (result[actionType] ?? 0) + 1;
+      result[entry.key] = (result[entry.key] ?? 0) + 1;
     });
     return result;
   }
@@ -208,12 +231,13 @@ export function createActionSystem({
     }
 
     if (task.type === ACTION_TYPES.DELIVER_MATERIALS && task.data?.reservationId) {
+      const amount = Math.max(1, Number(task.data?.amount ?? task.data?.carriedAmount ?? 1));
       if (!reserve({
         id: `${task.id}:building-material`,
         type: 'building-material',
         key: task.data.reservationId,
-        amount: Math.max(1, Number(task.data?.amount ?? task.data?.carriedAmount ?? 1)),
-        capacity: Math.max(1, Number(task.data?.amount ?? task.data?.carriedAmount ?? 1)),
+        amount,
+        capacity: amount,
         metadata: {
           siteId: task.data.siteId,
           materialId: task.data.materialId,
@@ -314,7 +338,7 @@ export function createActionSystem({
     const reservedFeatureIds = reservations();
     const storage = campStore.getStorage(CAMP_ID);
     let availableCampStorage = Math.max(0, Number(storage?.available ?? Infinity) - pendingCampStorageReservations());
-    const people = peopleSystem.getAlive();
+    const people = runtimePeople();
 
     people.forEach((person) => {
       const agent = agents.get(person.id);
@@ -383,7 +407,7 @@ export function createActionSystem({
       runtimeReservationIds: [...(task.data?.runtimeReservationIds ?? [])],
     };
     agent.task = nextTask;
-    const person = peopleSystem.get(agent.personId);
+    const person = runtimePerson(agent.personId);
     setActivity(person, nextTask, '送往工地');
     log(transition.summary, task.type, agent.personId);
   }
@@ -450,7 +474,7 @@ export function createActionSystem({
     const weather = weatherSystem.get();
     agents.forEach((agent) => {
       if (!agent.task) return;
-      const person = peopleSystem.get(agent.personId);
+      const person = runtimePerson(agent.personId);
       if (!person?.identity.alive) {
         cancelConstructionReservation(agent.task);
         clearTask(agent, agent.personId);
@@ -468,7 +492,7 @@ export function createActionSystem({
     const camp = campStore.get(CAMP_ID);
     if (!camp) return;
     const weather = weatherSystem.get();
-    const people = peopleSystem.getAlive();
+    const people = runtimePeople();
     people.forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent) return;
@@ -661,6 +685,7 @@ export function createActionSystem({
     stop,
     advanceTicks,
     getRenderPeople: renderPeople,
+    getMovementPeople: movementPeople,
     getRecentLogs: recentLogs,
     getDayPhase: () => getDayPhase(gameTime.now()),
     getWeather: () => weatherSystem.get(),
