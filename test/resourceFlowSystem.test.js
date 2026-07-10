@@ -81,7 +81,7 @@ test('自然采集与腐败分别归入生产源和废弃物流向', () => {
   assert.equal(spoiled.to, 'waste:spoilage');
 });
 
-test('多人领取同一批物资时支持部分匹配且不重复计算', () => {
+test('领取同一批物资时支持匹配且不重复计算', () => {
   const harness = createHarness();
   harness.camps[0].items.wood = 3;
   observeCamp(harness, 'inventory');
@@ -98,6 +98,30 @@ test('多人领取同一批物资时支持部分匹配且不重复计算', () =>
   assert.equal(entries[0].amount, 3);
   assert.equal(entries[0].from, 'camp:starting-camp');
   assert.equal(entries[0].to, 'person:person-1');
+});
+
+test('同 tick 的独立生产与消费不会误配为账户转移', () => {
+  const harness = createHarness();
+  harness.system.enqueue({
+    account: 'person:consumer',
+    itemId: 'berries',
+    delta: -1,
+    reason: 'food:consume',
+    personId: 'consumer',
+  });
+  harness.system.enqueue({
+    account: 'person:gatherer',
+    itemId: 'berries',
+    delta: 1,
+    reason: 'inventory:item',
+    personId: 'gatherer',
+    actionType: 'gatherBerries',
+  });
+  const entries = harness.system.flush();
+  assert.equal(entries.length, 2);
+  assert.ok(entries.some((entry) => entry.category === 'consumption' && entry.to === 'needs:consumer'));
+  assert.ok(entries.some((entry) => entry.category === 'production' && entry.from.startsWith('map:feature:')));
+  assert.equal(entries.some((entry) => entry.category === 'transfer'), false);
 });
 
 test('工具磨损和修理进入耐久流水', () => {
