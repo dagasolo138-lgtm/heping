@@ -49,13 +49,29 @@ export function validateActionRuntimeSnapshot(rawSnapshot) {
   return clone(rawSnapshot);
 }
 
+export function validateActionRuntimeCoordinates(rawSnapshot, mapSnapshot, { personIds = null } = {}) {
+  const snapshot = validateActionRuntimeSnapshot(rawSnapshot);
+  if (!snapshot) return null;
+  const width = Number(mapSnapshot?.geometry?.width);
+  const height = Number(mapSnapshot?.geometry?.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return snapshot;
+
+  snapshot.agents.forEach((agent) => {
+    if (personIds && !personIds.has(agent.personId)) return;
+    if (agent.x < 0 || agent.y < 0 || agent.x > width - 1 || agent.y > height - 1) {
+      throw new Error(`行动运行时坐标越界：${agent.personId}`);
+    }
+  });
+  return snapshot;
+}
+
 export function exportActionRuntimeSnapshot({ actionSystem, peopleSystem, exportedAt = null } = {}) {
   const persistentPeople = alivePeople(peopleSystem);
   if (!persistentPeople) return null;
 
   const rendered = actionSystem?.getRenderPeople?.();
   const renderedPeople = Array.isArray(rendered) ? rendered : persistentPeople;
-  return {
+  return validateActionRuntimeSnapshot({
     schemaVersion: ACTION_RUNTIME_SCHEMA_VERSION,
     interruptionPolicy: ACTION_INTERRUPTION_POLICY,
     exportedAt: clone(exportedAt),
@@ -67,21 +83,6 @@ export function exportActionRuntimeSnapshot({ actionSystem, peopleSystem, export
         y: Number(person.location?.tileY ?? 0),
         interruptedTask: summarizeTask(person.activity?.current),
       })),
-  };
-}
-
-function validateCoordinatesAgainstMap(snapshot, mapSystem, peopleById) {
-  if (!snapshot) return;
-  const map = mapSystem?.get?.();
-  const width = Number(map?.geometry?.width);
-  const height = Number(map?.geometry?.height);
-  if (!Number.isFinite(width) || !Number.isFinite(height)) return;
-
-  snapshot.agents.forEach((agent) => {
-    if (!peopleById.has(agent.personId)) return;
-    if (agent.x < 0 || agent.y < 0 || agent.x > width - 1 || agent.y > height - 1) {
-      throw new Error(`行动运行时坐标越界：${agent.personId}`);
-    }
   });
 }
 
@@ -96,9 +97,10 @@ export function restoreActionRuntimeSnapshot({ snapshot, peopleSystem, mapSystem
     };
   }
 
-  const validated = validateActionRuntimeSnapshot(snapshot);
   const peopleById = new Map(people.map((person) => [person.id, person]));
-  validateCoordinatesAgainstMap(validated, mapSystem, peopleById);
+  const validated = validateActionRuntimeCoordinates(snapshot, mapSystem?.get?.(), {
+    personIds: new Set(peopleById.keys()),
+  });
   const agentsById = new Map((validated?.agents ?? []).map((agent) => [agent.personId, agent]));
   let restoredPositions = 0;
   let interruptedTasks = 0;
