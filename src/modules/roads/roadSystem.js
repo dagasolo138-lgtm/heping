@@ -98,6 +98,7 @@ export function createRoadSystem({ eventBus, gameTime }) {
   function getMovementMultiplierAt(x, y) {
     const cell = cells.get(keyOf(Math.round(x), Math.round(y)));
     if (cell?.stage === 'dirtRoad') return 1.16;
+    if (cell?.stage === 'wornTrail') return 1.07;
     return 1;
   }
 
