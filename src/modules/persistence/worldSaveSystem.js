@@ -64,6 +64,14 @@ export function createWorldSaveSystem({
     return gameTime.stamp();
   }
 
+  function safeEmit(eventName, payload) {
+    try {
+      eventBus.emit(eventName, payload);
+    } catch (error) {
+      console.error(`[shengling:${eventName}:listener-error]`, error);
+    }
+  }
+
   function exportSnapshot({ interruptRuntime = true } = {}) {
     const time = stamp();
     const runtime = getRuntime?.();
@@ -170,7 +178,7 @@ export function createWorldSaveSystem({
       ? null
       : validateActionRuntimeState(rawRuntimeSnapshot);
     const savedAgents = new Map((runtimeSnapshot?.agents ?? []).map((agent) => [agent.personId, agent]));
-    const positions = peopleSystem.getAlive().map((person) => {
+    const positions = (peopleSystem.getAlive?.() ?? []).map((person) => {
       const savedAgent = savedAgents.get(person.id) ?? null;
       const position = resolveSavedRuntimePosition({ savedAgent, person, mapSystem });
       return {
@@ -191,21 +199,21 @@ export function createWorldSaveSystem({
 
   function applyRuntimeRestore(prepared) {
     prepared.positions.forEach((entry) => {
-      const person = peopleSystem.get(entry.personId);
-      peopleSystem.setLocation(entry.personId, { tileX: entry.x, tileY: entry.y });
-      if (person?.state?.statusTags?.includes('sleeping')) peopleSystem.removeStatusTag(entry.personId, 'sleeping');
+      const person = peopleSystem.get?.(entry.personId);
+      peopleSystem.setLocation?.(entry.personId, { tileX: entry.x, tileY: entry.y });
+      if (person?.state?.statusTags?.includes('sleeping')) peopleSystem.removeStatusTag?.(entry.personId, 'sleeping');
       if (entry.interruptedTask?.type === ACTION_TYPES.SLEEP) {
-        if (person?.state?.statusTags?.includes('sheltered')) peopleSystem.removeStatusTag(entry.personId, 'sheltered');
-        if (person?.state?.statusTags?.includes('exposed')) peopleSystem.removeStatusTag(entry.personId, 'exposed');
+        if (person?.state?.statusTags?.includes('sheltered')) peopleSystem.removeStatusTag?.(entry.personId, 'sheltered');
+        if (person?.state?.statusTags?.includes('exposed')) peopleSystem.removeStatusTag?.(entry.personId, 'exposed');
       }
-      peopleSystem.setActivity(entry.personId, { status: 'idle', current: null });
+      peopleSystem.setActivity?.(entry.personId, { status: 'idle', current: null });
     });
     return prepared;
   }
 
   function commitRuntimeRestore(runtime, prepared) {
     runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: false });
-    eventBus.emit('actions:interrupted-by-load', {
+    safeEmit('actions:interrupted-by-load', {
       policy: prepared.policy,
       restoredCount: prepared.positions.length,
       interruptedCount: prepared.interruptedCount,
@@ -241,40 +249,40 @@ export function createWorldSaveSystem({
     const wasRunning = Boolean(runtime?.actionSystem?.isRunning?.());
     runtime?.actionSystem?.stop?.();
 
-    let preparedRuntime = null;
     try {
-      importSystems(snapshot, runtime);
-      preparedRuntime = prepareRuntimeRestore(snapshot.systems.actionRuntime);
-      refreshMap(runtime);
-      applyRuntimeRestore(preparedRuntime);
-    } catch (error) {
-      let rollbackError = null;
+      let preparedRuntime = null;
       try {
-        importSystems(rollbackSnapshot, runtime);
-        restoreRollbackCheckpoint(rollbackCheckpoint);
+        importSystems(snapshot, runtime);
+        preparedRuntime = prepareRuntimeRestore(snapshot.systems.actionRuntime);
         refreshMap(runtime);
-      } catch (nextError) {
-        rollbackError = nextError;
+        applyRuntimeRestore(preparedRuntime);
+      } catch (error) {
+        let rollbackError = null;
+        try {
+          importSystems(rollbackSnapshot, runtime);
+          restoreRollbackCheckpoint(rollbackCheckpoint);
+          refreshMap(runtime);
+        } catch (nextError) {
+          rollbackError = nextError;
+        }
+
+        const failure = {
+          error: summarizeError(error),
+          rollbackSucceeded: rollbackError === null,
+          rollbackError: rollbackError ? summarizeError(rollbackError) : null,
+          requestedAppVersion: snapshot.appVersion ?? null,
+          time: stamp(),
+        };
+        safeEmit('save:load-failed', failure);
+
+        if (rollbackError) {
+          throw new Error(`读取世界存档失败，且恢复读取前状态失败：${failure.error.message}；回滚错误：${failure.rollbackError.message}`, { cause: error });
+        }
+        throw new Error(`读取世界存档失败，已恢复读取前状态：${failure.error.message}`, { cause: error });
       }
 
-      const failure = {
-        error: summarizeError(error),
-        rollbackSucceeded: rollbackError === null,
-        rollbackError: rollbackError ? summarizeError(rollbackError) : null,
-        requestedAppVersion: snapshot.appVersion ?? null,
-        time: stamp(),
-      };
-      eventBus.emit('save:load-failed', failure);
-
-      if (rollbackError) {
-        throw new Error(`读取世界存档失败，且恢复读取前状态失败：${failure.error.message}；回滚错误：${failure.rollbackError.message}`, { cause: error });
-      }
-      throw new Error(`读取世界存档失败，已恢复读取前状态：${failure.error.message}`, { cause: error });
-    }
-
-    commitRuntimeRestore(runtime, preparedRuntime);
-    try {
-      eventBus.emit('save:loaded', {
+      commitRuntimeRestore(runtime, preparedRuntime);
+      safeEmit('save:loaded', {
         snapshot: clone(snapshot),
         runtime: {
           policy: preparedRuntime.policy,
@@ -284,10 +292,10 @@ export function createWorldSaveSystem({
         },
         time: stamp(),
       });
+      return clone(snapshot);
     } finally {
       if (wasRunning) runtime?.actionSystem?.start?.();
     }
-    return clone(snapshot);
   }
 
   function load(slot = WORLD_SAVE_DEFAULT_SLOT) {
