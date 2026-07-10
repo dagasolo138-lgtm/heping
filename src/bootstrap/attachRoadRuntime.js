@@ -1,7 +1,5 @@
+import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createRoadSystem } from '../modules/roads/roadSystem.js';
-
-const BASE_SAMPLE_INTERVAL_MS = 240;
-const MIN_SAMPLE_INTERVAL_MS = 16;
 
 function ensureReadout() {
   let readout = document.querySelector('#road-readout');
@@ -26,19 +24,11 @@ function renderReadout(readout, roadSystem) {
 }
 
 function tileOf(person) {
-  return {
-    x: Math.round(person.location.tileX),
-    y: Math.round(person.location.tileY),
-  };
+  return { x: Math.round(person.location.tileX), y: Math.round(person.location.tileY) };
 }
 
 function sameTile(first, second) {
   return first?.x === second?.x && first?.y === second?.y;
-}
-
-function currentSampleInterval() {
-  const speed = Number(globalThis.shengling?.worldSpeedSystem?.get?.().value ?? 1);
-  return Math.max(MIN_SAMPLE_INTERVAL_MS, BASE_SAMPLE_INTERVAL_MS / Math.max(0.5, speed));
 }
 
 export function attachRoadRuntime() {
@@ -50,13 +40,15 @@ export function attachRoadRuntime() {
   const roadSystem = createRoadSystem({ eventBus, gameTime: runtime.gameTime });
   const lastTiles = new Map();
   const readout = ensureReadout();
-  let frameId = null;
-  let lastSample = 0;
+  const ui = createUiRenderScheduler({
+    maxFps: 10,
+    render: () => {
+      renderReadout(readout, roadSystem);
+      runtime.mapView.redraw();
+    },
+  });
 
-  function sample(now) {
-    frameId = requestAnimationFrame(sample);
-    if (now - lastSample < currentSampleInterval()) return;
-    lastSample = now;
+  function sampleTick() {
     runtime.actionSystem.getRenderPeople().forEach((person) => {
       if (person.location.tileX === null || person.location.tileY === null) return;
       const current = tileOf(person);
@@ -69,19 +61,22 @@ export function attachRoadRuntime() {
   }
 
   renderReadout(readout, roadSystem);
+  const stopTick = eventBus.on('simulation:tick', sampleTick);
   eventBus.on('roads:changed', ({ changed }) => {
-    renderReadout(readout, roadSystem);
-    runtime.mapView.redraw();
+    ui.request('roads:changed');
     if (changed.some((road) => road.stage === 'dirtRoad')) {
       const status = document.querySelector('#system-status');
       if (status) status.textContent = '反复通行的路线被踩实，新的土路提高了村民的行走效率。';
     }
   });
 
-  frameId = requestAnimationFrame(sample);
   const system = Object.freeze({
     ...roadSystem,
-    stop() { if (frameId) cancelAnimationFrame(frameId); frameId = null; },
+    sampleTick,
+    stop() {
+      stopTick();
+      ui.stop();
+    },
   });
   globalThis.shengling = Object.freeze({ ...runtime, roadSystem: system });
   return system;
