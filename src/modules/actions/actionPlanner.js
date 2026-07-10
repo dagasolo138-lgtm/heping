@@ -244,7 +244,7 @@ function createUtilityCandidates(context) {
 
   if (needsResource(ACTION_TYPES.CHOP_TREE, context, person)) {
     const wood = attachStockTarget(makeChopTask(person, mapSystem, reservedFeatureIds), context.stockTargets);
-    if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId }));
+    if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId } }));
   }
 
   if (person.state.energy <= 60) {
