@@ -19,32 +19,34 @@ function interruptedTaskView(task) {
     type: task.type ?? null,
     label: task.label ?? null,
     phase: task.phase ?? null,
-    stage: task.data?.stage ?? null,
     destination: task.destination ? clone(task.destination) : null,
-    workElapsed: Number(task.workElapsed ?? 0),
-    workDuration: Number(task.workDuration ?? 0),
-    reservationId: task.data?.reservationId ?? null,
-    siteId: task.data?.siteId ?? null,
-    materialId: task.data?.materialId ?? null,
-    carriedAmount: Number(task.data?.carriedAmount ?? 0),
-    reservedCapacity: Number(task.data?.reservedCapacity ?? 0),
-    featureId: task.data?.featureId ?? null,
+    utility: task.utility ? clone(task.utility) : null,
   };
 }
 
-export function exportActionRuntimeState({ agents, exportedAt } = {}) {
-  const list = agents instanceof Map ? [...agents.values()] : Array.isArray(agents) ? agents : [];
+function normalizeRuntimeEntry(entry) {
+  return {
+    personId: entry?.personId ?? entry?.id ?? null,
+    x: Number(entry?.x ?? entry?.location?.tileX),
+    y: Number(entry?.y ?? entry?.location?.tileY),
+    interruptedTask: interruptedTaskView(entry?.task ?? entry?.activity?.current ?? null),
+  };
+}
+
+export function exportActionRuntimeState({ agents, people, exportedAt } = {}) {
+  const list = agents instanceof Map
+    ? [...agents.values()]
+    : Array.isArray(agents)
+      ? agents
+      : Array.isArray(people)
+        ? people
+        : [];
   return {
     schemaVersion: ACTION_RUNTIME_SCHEMA_VERSION,
     policy: ACTION_RUNTIME_LOAD_POLICY,
     exportedAt: clone(exportedAt ?? null),
     agents: list
-      .map((agent) => ({
-        personId: agent.personId,
-        x: Number(agent.x),
-        y: Number(agent.y),
-        interruptedTask: interruptedTaskView(agent.task),
-      }))
+      .map(normalizeRuntimeEntry)
       .sort((first, second) => String(first.personId).localeCompare(String(second.personId))),
   };
 }
