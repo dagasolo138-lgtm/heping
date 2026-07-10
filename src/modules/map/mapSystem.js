@@ -1,7 +1,7 @@
 import { MAP_SCHEMA_VERSION } from './mapSchema.js';
 import { generateStartingValley } from './startingValleyGenerator.js';
 import { addFeature, removeFeature, setTerrainAt } from './mapMutations.js';
-import { findNearestFeature, findNearestWalkableNeighbor, findNearestWaterAccess, getChunkAt, getFeaturesAt, getTile, isWalkable } from './mapQueries.js';
+import { findNearestFeature, findNearestWalkableNeighbor, findNearestWaterAccess, getChunkAt, getFeaturesAt, getTerrainAt, getTile, isWalkable } from './mapQueries.js';
 
 function clone(value) {
   return structuredClone(value);
@@ -53,6 +53,7 @@ export function createMapSystem({ eventBus, gameTime }) {
     get,
     exportState,
     importState,
+    getTerrainAt: (x, y) => map ? getTerrainAt(map, Math.round(x), Math.round(y)) : null,
     getTile: (x, y) => map ? clone(getTile(map, x, y)) : null,
     getFeaturesAt: (x, y) => map ? clone(getFeaturesAt(map, x, y)) : [],
     getChunkAt: (x, y) => map ? getChunkAt(map, x, y) : null,
