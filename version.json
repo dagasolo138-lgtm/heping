@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.27.4",
-  "buildId": "v0.27.4-resource-flow-20260710-01",
-  "sourceCommit": "8a89e832920e877bf147e406da3460ad7541e6f1",
+  "version": "v0.27.5",
+  "buildId": "v0.27.5-daily-economy-day60-20260710-01",
+  "sourceCommit": "cc24e3b427e776063c9778d93dc53cea13260624",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional v0.27.4 commit containing the unified resource-flow ledger, same-tick transfer matching, persistence and rollback, consumption classification, verification tests and world-save app version; later README, roadmap, CODEX and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the final functional v0.27.5 commit containing daily economic reconciliation, bottleneck reporting, transactional persistence, the locked day-60 economy fingerprint, speed-batch consistency coverage and the world-save app version; later README, roadmap, CODEX and manifest commits may follow it."
   }
 }
