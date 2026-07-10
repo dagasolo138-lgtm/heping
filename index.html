@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#14221e" />
+  <meta name="theme-color" content="#101a14" />
   <title>生灵 · 起始河谷</title>
   <link rel="stylesheet" href="./src/styles/main.css" />
   <link rel="stylesheet" href="./src/styles/construction.css" />
@@ -13,19 +13,26 @@
 </head>
 <body>
   <main class="app-shell">
-    <header class="topbar observer-topbar">
+    <header class="command-bar">
       <div class="observer-title">
-        <p class="eyebrow">SHENGLING / FOUNDATION 16</p>
-        <h1>生灵</h1>
-        <p class="subtitle">起始河谷 · 荒野手账与聚落观察器</p>
+        <p class="eyebrow">SHENGLING / VALLEY 01</p>
+        <div class="observer-title__line">
+          <h1>生灵</h1>
+          <span class="live-mark"><i></i>世界运行中</span>
+        </div>
+        <p class="subtitle">起始河谷聚落观察器</p>
       </div>
+
       <div class="observer-statusbar" aria-label="聚落状态栏">
-        <div class="observer-statusbar__item"><span>生灵历</span><strong id="topbar-time">1 年第 1 日 08:00</strong></div>
-        <div id="weather-readout" class="observer-statusbar__item observer-weather">晴朗 · 18℃ · 篝火燃料 4.0</div>
+        <div class="status-readout status-readout--time">
+          <span>生灵历</span>
+          <strong id="topbar-time">1 年第 1 日 08:00</strong>
+        </div>
+        <div id="weather-readout" class="status-readout status-readout--weather">晴朗 · 18℃ · 篝火燃料 4.0</div>
         <div class="world-speed-control" role="group" aria-label="世界运行速度">
           <div class="world-speed-control__copy">
-            <span class="world-speed-control__kicker">WORLD SPEED</span>
-            <strong id="world-speed-status">世界速度 1×</strong>
+            <span class="world-speed-control__kicker">速度</span>
+            <strong id="world-speed-status">1×</strong>
           </div>
           <div class="world-speed-control__buttons">
             <button type="button" data-world-speed="0.5" aria-pressed="false">0.5×</button>
@@ -35,98 +42,107 @@
             <button type="button" data-world-speed="10" aria-pressed="false">10×</button>
           </div>
         </div>
-        <div class="topbar__status" aria-live="polite">
-          <span class="status-dot"></span>
-          <span id="system-status">村民正在建立起始营地的生存循环</span>
-        </div>
+        <details class="system-menu">
+          <summary aria-label="打开存档与系统菜单">系统</summary>
+          <div class="system-popover" data-system-tools></div>
+        </details>
       </div>
     </header>
 
-    <section class="phase-note">
-      <strong>第十三阶段：</strong>
-      第一块粟田完成首次收获后，村民会在营地附近人工开垦第二块田。扩田沿用原有开垦、春播、季节成长和收获规则。
-    </section>
-
-    <div class="observer-layout">
-    <section class="map-panel panel">
-      <div class="panel__header map-panel__header">
-        <div>
-          <p class="panel__kicker">STARTING VALLEY / 160 × 120 METERS</p>
-          <h2>起始河谷</h2>
-        </div>
-        <div class="map-panel__tools" aria-label="地图控制">
-          <button type="button" data-map-control="zoom-out" aria-label="缩小地图" title="缩小地图">−</button>
-          <button type="button" data-map-control="center" aria-label="回到营地" title="回到营地">◎</button>
-          <button type="button" data-map-control="drag-mode" aria-pressed="false" aria-label="切换地图拖动模式" title="切换地图拖动模式">拖动地图</button>
-          <button type="button" data-map-control="zoom-in" aria-label="放大地图" title="放大地图">＋</button>
-        </div>
-      </div>
-      <div class="map-canvas-wrap">
-        <canvas id="map-canvas" aria-label="起始河谷地图" aria-describedby="map-gesture-help"></canvas>
-        <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
-        <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
-        <p id="map-gesture-help" class="map-gesture-hint">单指滚动页面/点村民 · 开启拖动地图后可平移 · 双指尝试缩放</p>
-      </div>
-      <div class="map-legend">
-        <span><i class="legend-swatch legend-swatch--forest"></i>林地</span>
-        <span><i class="legend-swatch legend-swatch--stone"></i>石滩</span>
-        <span><i class="legend-swatch legend-swatch--water"></i>河流</span>
-        <span><i class="legend-swatch legend-swatch--camp"></i>营地</span>
-        <span class="map-legend__hint">拖动浏览 · 双指/滚轮缩放 · 点村民查看 · <kbd>Home</kbd> 回营地</span>
-      </div>
-      <div class="settlement-strip">
-        <section class="camp-stock">
-          <div class="strip-heading"><p class="panel__kicker">CAMP STOCK</p><h3>营地储备</h3></div>
-          <div id="camp-resources" class="resource-chips" aria-live="polite"></div>
-        </section>
-        <section class="construction-watch">
-          <div class="strip-heading"><p class="panel__kicker">CONSTRUCTION</p><h3>聚落建造</h3></div>
-          <div id="construction-status" class="construction-status" aria-live="polite"></div>
-        </section>
-        <section class="action-feed">
-          <div class="strip-heading"><p class="panel__kicker">LIVING RECORD</p><h3>即时动向</h3></div>
-          <ol id="action-log" class="action-log" aria-live="polite"></ol>
-        </section>
-      </div>
-    </section>
-
-    <aside class="observer-sidebar">
-      <section class="workspace">
-      <aside class="people-panel panel">
-        <div class="panel__header">
-          <div>
-            <p class="panel__kicker">INITIAL SETTLEMENT</p>
-            <h2>初始村民</h2>
-          </div>
-          <span id="people-count" class="count-pill">10</span>
-        </div>
-        <div id="people-list" class="people-list" aria-label="初始村民列表"></div>
-      </aside>
-
-      <section class="detail-panel panel">
-        <div id="person-detail" class="person-detail"></div>
-      </section>
-      </section>
-    </aside>
+    <div class="world-ticker" aria-live="polite">
+      <span class="status-dot"></span>
+      <span id="system-status">村民正在建立起始营地的生存循环</span>
     </div>
 
-    <section class="foundation-grid">
-      <article class="foundation-card">
-        <p class="panel__kicker">MAP CONTROL</p>
-        <h3>把地图当作观察窗口</h3>
-        <p>拖动查看河谷；手机双指缩放，电脑可用滚轮、按钮或键盘。轻点村民会直接展开其个人状态与近期事实。</p>
-      </article>
-      <article class="foundation-card">
-        <p class="panel__kicker">LIVING SYSTEM</p>
-        <h3>世界会先留下事实</h3>
-        <p>村民的行动、建造、播种和收获会进入客观生活记录。人物面板用于观察这些已发生的事，不直接改写世界。</p>
-      </article>
-      <article class="foundation-card">
-        <p class="panel__kicker">NEXT</p>
-        <h3>让农业进入长期循环</h3>
-        <p>下一步将加入土壤肥力或更多作物，让第二块田之后的扩张真正面对土地、季节与粮食储备的约束。</p>
-      </article>
-    </section>
+    <div class="observer-layout">
+      <section class="map-panel panel" aria-label="起始河谷观察窗口">
+        <div class="panel__header map-panel__header">
+          <div>
+            <p class="panel__kicker">STARTING VALLEY · 160 × 120 M</p>
+            <h2>起始河谷</h2>
+          </div>
+          <div class="map-panel__tools" aria-label="地图控制">
+            <button type="button" data-map-control="zoom-out" aria-label="缩小地图" title="缩小地图">−</button>
+            <button type="button" data-map-control="center" aria-label="回到营地" title="回到营地">◎</button>
+            <button type="button" data-map-control="drag-mode" aria-pressed="false" aria-label="切换地图拖动模式" title="切换地图拖动模式">拖动地图</button>
+            <button type="button" data-map-control="zoom-in" aria-label="放大地图" title="放大地图">＋</button>
+          </div>
+        </div>
+        <div class="map-canvas-wrap is-hud-collapsed">
+          <canvas id="map-canvas" aria-label="起始河谷地图" aria-describedby="map-gesture-help"></canvas>
+          <div id="world-time" class="map-overlay map-overlay--left"><span class="map-overlay__dot"></span>生灵历 1 年第 1 日 08:00</div>
+          <div id="map-readout" class="map-overlay map-overlay--right">坐标 79, 74 · 14 px/m</div>
+          <p id="map-gesture-help" class="map-gesture-hint">单指滚动页面 · 开启拖动后平移地图 · 双指缩放</p>
+        </div>
+        <div class="map-legend">
+          <span><i class="legend-swatch legend-swatch--forest"></i>林地</span>
+          <span><i class="legend-swatch legend-swatch--stone"></i>石滩</span>
+          <span><i class="legend-swatch legend-swatch--water"></i>河流</span>
+          <span><i class="legend-swatch legend-swatch--camp"></i>营地</span>
+          <span class="map-legend__hint">点选村民查看详情 · <kbd>Home</kbd> 回营地</span>
+        </div>
+      </section>
+
+      <aside class="observer-sidebar is-open" data-observer-drawer aria-label="聚落观察面板">
+        <button class="drawer-handle" type="button" data-observer-drawer-toggle aria-expanded="true">
+          <span></span><b>聚落观察</b><small>下滑收起</small>
+        </button>
+        <nav class="observer-tabs" role="tablist" aria-label="观察分类">
+          <button id="observer-tab-people" type="button" role="tab" aria-selected="true" aria-controls="observer-panel-people" data-observer-tab="people">人物</button>
+          <button id="observer-tab-camp" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-camp" data-observer-tab="camp">营地</button>
+          <button id="observer-tab-events" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-events" data-observer-tab="events">事件</button>
+          <button id="observer-tab-chronicle" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-chronicle" data-observer-tab="chronicle">史书</button>
+        </nav>
+
+        <div class="observer-panels">
+          <section id="observer-panel-people" class="observer-panel" role="tabpanel" aria-labelledby="observer-tab-people" data-observer-panel="people">
+            <div class="workspace">
+              <aside class="people-panel panel">
+                <div class="panel__header panel__header--compact">
+                  <div>
+                    <p class="panel__kicker">SETTLERS</p>
+                    <h2>初始村民</h2>
+                  </div>
+                  <span id="people-count" class="count-pill">10</span>
+                </div>
+                <div id="people-list" class="people-list" aria-label="初始村民列表"></div>
+              </aside>
+              <section class="detail-panel panel">
+                <div id="person-detail" class="person-detail"></div>
+              </section>
+            </div>
+          </section>
+
+          <section id="observer-panel-camp" class="observer-panel" role="tabpanel" aria-labelledby="observer-tab-camp" data-observer-panel="camp" hidden>
+            <section class="camp-stock panel">
+              <div class="panel__header panel__header--compact">
+                <div><p class="panel__kicker">CAMP STOCK</p><h2>营地储备</h2></div>
+              </div>
+              <div id="camp-resources" class="resource-chips" aria-live="polite"></div>
+            </section>
+            <section class="construction-watch panel">
+              <div class="panel__header panel__header--compact">
+                <div><p class="panel__kicker">CONSTRUCTION</p><h2>聚落建造</h2></div>
+              </div>
+              <div id="construction-status" class="construction-status" aria-live="polite"></div>
+            </section>
+          </section>
+
+          <section id="observer-panel-events" class="observer-panel" role="tabpanel" aria-labelledby="observer-tab-events" data-observer-panel="events" hidden>
+            <section class="action-feed panel">
+              <div class="panel__header panel__header--compact">
+                <div><p class="panel__kicker">LIVING RECORD</p><h2>即时动向</h2></div>
+              </div>
+              <ol id="action-log" class="action-log action-log--full" aria-live="polite"></ol>
+            </section>
+          </section>
+
+          <section id="observer-panel-chronicle" class="observer-panel" role="tabpanel" aria-labelledby="observer-tab-chronicle" data-observer-panel="chronicle" hidden>
+            <div data-chronicle-host></div>
+          </section>
+        </div>
+      </aside>
+    </div>
   </main>
 
   <script type="module" src="./src/app.js"></script>

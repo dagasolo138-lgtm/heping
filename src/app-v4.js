@@ -162,6 +162,7 @@ function select(id, focus = true) {
   view.setSelectedPerson(id);
   if (focus) view.focusPerson(runtime);
   render();
+  document.dispatchEvent(new CustomEvent('observer:person-selected', { detail: { personId: id } }));
 }
 
 function renderPeople() {
@@ -280,7 +281,9 @@ function ensureChroniclePanel() {
     const collapsed = list?.classList.toggle('is-collapsed');
     button.textContent = collapsed ? '展开全部纪事' : '收起纪事';
   });
-  document.querySelector('.workspace')?.insertAdjacentElement('afterend', chroniclePanel);
+  const host = document.querySelector('[data-chronicle-host]');
+  if (host) host.append(chroniclePanel);
+  else document.querySelector('.workspace')?.insertAdjacentElement('afterend', chroniclePanel);
   return chroniclePanel;
 }
 

@@ -86,8 +86,10 @@ function ensurePanel() {
     </div>
   `;
 
+  const systemTools = document.querySelector('[data-system-tools]');
   const speedControl = document.querySelector('.world-speed-control');
-  if (speedControl?.parentElement) speedControl.insertAdjacentElement('afterend', panel);
+  if (systemTools) systemTools.append(panel);
+  else if (speedControl?.parentElement) speedControl.insertAdjacentElement('afterend', panel);
   else document.querySelector('.map-panel')?.prepend(panel);
   return panel;
 }

@@ -1,14 +1,5 @@
 import { createResourceRenewalSystem } from '../modules/ecology/resourceRenewalSystem.js';
 
-function updatePhaseCopy() {
-  const eyebrow = document.querySelector('.eyebrow');
-  const subtitle = document.querySelector('.subtitle');
-  const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 08';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造与自然资源循环原型';
-  if (note) note.innerHTML = '<strong>第八阶段：</strong>树木与浆果被耗尽后会留下恢复标记。树在三个世界日后、浆果在一个世界日后尝试回到原位置；建筑或其他物件占用时会顺延恢复。';
-}
-
 function ensureReadout() {
   let readout = document.querySelector('#ecology-readout');
   if (readout) return readout;
@@ -43,7 +34,6 @@ export function attachEcologyRuntime() {
     mapSystem: runtime.mapSystem,
     buildingSystem: runtime.buildingSystem,
   });
-  updatePhaseCopy();
   const readout = ensureReadout();
   renderReadout(readout, ecologySystem);
 

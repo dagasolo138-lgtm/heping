@@ -7,8 +7,9 @@ function ensureReadout() {
   readout.id = 'build-info-readout';
   readout.className = 'build-info-readout';
   readout.setAttribute('aria-live', 'polite');
+  const systemTools = document.querySelector('[data-system-tools]');
   const shell = document.querySelector('.app-shell');
-  (shell ?? document.body).append(readout);
+  (systemTools ?? shell ?? document.body).append(readout);
   return readout;
 }
 
