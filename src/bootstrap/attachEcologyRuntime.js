@@ -1,3 +1,4 @@
+import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createResourceRenewalSystem } from '../modules/ecology/resourceRenewalSystem.js';
 
 function ensureReadout() {
@@ -35,17 +36,23 @@ export function attachEcologyRuntime() {
     buildingSystem: runtime.buildingSystem,
   });
   const readout = ensureReadout();
+  const ui = createUiRenderScheduler({
+    maxFps: 10,
+    render: () => {
+      renderReadout(readout, ecologySystem);
+      runtime.mapView.redraw();
+    },
+  });
   renderReadout(readout, ecologySystem);
 
-  eventBus.on('ecology:changed', () => {
-    renderReadout(readout, ecologySystem);
-    runtime.mapView.redraw();
-  });
+  eventBus.on('simulation:tick', () => ecologySystem.sync());
+  eventBus.on('ecology:changed', () => ui.request('ecology:changed'));
   eventBus.on('ecology:regrown', ({ entry }) => {
     const status = document.querySelector('#system-status');
     if (status) status.textContent = `${entry.label}在原地恢复，起始河谷重新长出资源。`;
   });
 
-  globalThis.shengling = Object.freeze({ ...runtime, ecologySystem });
-  return ecologySystem;
+  const system = Object.freeze({ ...ecologySystem, stopUi: () => ui.stop() });
+  globalThis.shengling = Object.freeze({ ...runtime, ecologySystem: system });
+  return system;
 }
