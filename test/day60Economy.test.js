@@ -159,6 +159,7 @@ function createReplayWorld(seed) {
     if (currentCamp) farms.ensureExpansionField({ campAnchor: currentCamp.anchor });
   });
 
+  globalThis.shengling = runtime;
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   globalThis.requestAnimationFrame = () => 1;
