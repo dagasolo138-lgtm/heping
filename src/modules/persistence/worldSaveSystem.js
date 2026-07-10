@@ -28,6 +28,14 @@ function maybeImport(system, snapshot, label) {
   return system.importState(snapshot);
 }
 
+function summarizeError(error) {
+  return {
+    name: error?.name ?? 'Error',
+    message: error?.message ?? String(error),
+    stack: error?.stack ?? null,
+  };
+}
+
 export function createWorldSaveSystem({
   eventBus,
   gameTime,
@@ -105,33 +113,83 @@ export function createWorldSaveSystem({
     }
   }
 
-  function importSnapshot(rawSnapshot) {
-    const snapshot = migrateWorldSave(rawSnapshot);
-    const runtime = getRuntime?.();
-    const wasRunning = Boolean(runtime?.actionSystem?.isRunning?.());
-    runtime?.actionSystem?.stop?.();
+  function importTargets(runtime) {
+    return [
+      ['gameTime', '时间', gameTime],
+      ['people', '人物', peopleSystem],
+      ['map', '地图', mapSystem],
+      ['camp', '营地', campStore],
+      ['campRules', '营地规则', campRulesSystem],
+      ['buildings', '建筑', buildingSystem],
+      ['fire', '篝火', fireSystem],
+      ['ecology', '生态', ecologySystem],
+      ['roads', '道路', roadSystem],
+      ['farms', '农田', farmSystem],
+      ['foodStorage', '食物储存', foodStorageSystem],
+      ['foodDistribution', '食物分配', runtime?.actionSystem?.getFoodDistributionSystem?.()],
+      ['socialEvents', '社会事件', socialEventSystem],
+      ['chronicles', '史书', chronicleSystem],
+    ];
+  }
 
-    maybeImport(gameTime, snapshot.systems.gameTime, '时间');
-    maybeImport(peopleSystem, snapshot.systems.people, '人物');
-    maybeImport(mapSystem, snapshot.systems.map, '地图');
-    maybeImport(campStore, snapshot.systems.camp, '营地');
-    maybeImport(campRulesSystem, snapshot.systems.campRules, '营地规则');
-    maybeImport(buildingSystem, snapshot.systems.buildings, '建筑');
-    maybeImport(fireSystem, snapshot.systems.fire, '篝火');
-    maybeImport(ecologySystem, snapshot.systems.ecology, '生态');
-    maybeImport(roadSystem, snapshot.systems.roads, '道路');
-    maybeImport(farmSystem, snapshot.systems.farms, '农田');
-    maybeImport(foodStorageSystem, snapshot.systems.foodStorage, '食物储存');
-    maybeImport(runtime?.actionSystem?.getFoodDistributionSystem?.(), snapshot.systems.foodDistribution, '食物分配');
-    maybeImport(socialEventSystem, snapshot.systems.socialEvents, '社会事件');
-    maybeImport(chronicleSystem, snapshot.systems.chronicles, '史书');
+  function validateImportTargets(snapshot, runtime) {
+    importTargets(runtime).forEach(([key, label, system]) => {
+      const state = snapshot.systems[key];
+      if (state === null || state === undefined) return;
+      if (!system?.importState) throw new Error(`${label} 系统不支持读取存档。`);
+    });
+  }
 
+  function importSystems(snapshot, runtime) {
+    importTargets(runtime).forEach(([key, label, system]) => {
+      maybeImport(system, snapshot.systems[key], label);
+    });
+  }
+
+  function refreshRuntime(runtime) {
     runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: true });
     runtime?.mapView?.setMap?.(mapSystem.get());
     runtime?.mapView?.redraw?.();
-    eventBus.emit('save:loaded', { snapshot: clone(snapshot), time: stamp() });
-    if (wasRunning) runtime?.actionSystem?.start?.();
-    return clone(snapshot);
+  }
+
+  function importSnapshot(rawSnapshot) {
+    const snapshot = migrateWorldSave(rawSnapshot);
+    const runtime = getRuntime?.();
+    validateImportTargets(snapshot, runtime);
+    const rollbackSnapshot = exportSnapshot();
+    const wasRunning = Boolean(runtime?.actionSystem?.isRunning?.());
+    runtime?.actionSystem?.stop?.();
+
+    try {
+      importSystems(snapshot, runtime);
+      refreshRuntime(runtime);
+      eventBus.emit('save:loaded', { snapshot: clone(snapshot), time: stamp() });
+      return clone(snapshot);
+    } catch (error) {
+      let rollbackError = null;
+      try {
+        importSystems(rollbackSnapshot, runtime);
+        refreshRuntime(runtime);
+      } catch (nextError) {
+        rollbackError = nextError;
+      }
+
+      const failure = {
+        error: summarizeError(error),
+        rollbackSucceeded: rollbackError === null,
+        rollbackError: rollbackError ? summarizeError(rollbackError) : null,
+        requestedAppVersion: snapshot.appVersion ?? null,
+        time: stamp(),
+      };
+      eventBus.emit('save:load-failed', failure);
+
+      if (rollbackError) {
+        throw new Error(`读取世界存档失败，且恢复读取前状态失败：${failure.error.message}；回滚错误：${failure.rollbackError.message}`, { cause: error });
+      }
+      throw new Error(`读取世界存档失败，已恢复读取前状态：${failure.error.message}`, { cause: error });
+    } finally {
+      if (wasRunning) runtime?.actionSystem?.start?.();
+    }
   }
 
   function load(slot = WORLD_SAVE_DEFAULT_SLOT) {
