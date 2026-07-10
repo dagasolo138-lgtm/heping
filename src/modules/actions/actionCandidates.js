@@ -1,4 +1,5 @@
 import { ACTION_TYPES } from './actionTypes.js';
+import { estimatePlannedLaborCost } from './laborCostModel.js';
 
 function distance(first, second) {
   return Math.hypot(Number(first.x) - Number(second.x), Number(first.y) - Number(second.y));
@@ -12,8 +13,16 @@ function estimateDistance(person, destination) {
   return distance(locationOf(person), destination);
 }
 
-export function makeActionCandidate({ task, person, source, target = {}, availability = { executable: true, reason: null } }) {
+export function makeActionCandidate({ task, person, source, target = {}, availability = { executable: true, reason: null }, laborContext = {} }) {
   if (!task) return null;
+  const runtime = globalThis.shengling ?? {};
+  const laborCost = estimatePlannedLaborCost({
+    person,
+    task,
+    mapSystem: laborContext.mapSystem ?? runtime.mapSystem ?? null,
+    roadSystem: laborContext.roadSystem ?? runtime.roadSystem ?? null,
+    weather: laborContext.weather ?? runtime.weatherSystem?.get?.() ?? null,
+  });
   return Object.freeze({
     type: task.type,
     label: task.label,
@@ -23,10 +32,16 @@ export function makeActionCandidate({ task, person, source, target = {}, availab
     availability: Object.freeze({ ...availability }),
     estimates: Object.freeze({
       distance: estimateDistance(person, task.destination),
-      workDuration: Number(task.workDuration ?? 0),
+      workDuration: Number(laborCost?.effectiveWorkDuration ?? task.workDuration ?? 0),
+      expectedDuration: Number(laborCost?.expectedDuration ?? task.workDuration ?? 0),
+      expectedEnergy: Number(laborCost?.expectedEnergy ?? 0),
+      loadWeight: Number(laborCost?.loadWeight ?? 0),
+      terrainFactor: Number(laborCost?.factors?.terrain ?? 1),
+      roadFactor: Number(laborCost?.factors?.road ?? 1),
       expectedYield: Number(task.data?.yield ?? 0),
       risk: 0,
     }),
+    laborCost,
     createTask: () => structuredClone(task),
   });
 }
