@@ -3,7 +3,7 @@
   "project": "生灵",
   "version": "v0.24.2",
   "buildId": "v0.24.2-day4-stability-20260709-01",
-  "sourceCommit": "pending-code-commit",
+  "sourceCommit": "d07ef47a64511d929e297b00b494c83b64975efe",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
