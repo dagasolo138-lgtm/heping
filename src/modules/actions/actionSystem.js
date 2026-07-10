@@ -117,6 +117,20 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     return ids;
   }
 
+  function pendingCampStorageReservations() {
+    let total = 0;
+    agents.forEach((agent) => {
+      if (agent.task?.type !== ACTION_TYPES.HAUL_TO_CAMP) return;
+      total += Math.max(0, Number(agent.task.data?.reservedCapacity ?? 0));
+    });
+    return total;
+  }
+
+  function cancelConstructionReservation(task) {
+    if (task?.type !== ACTION_TYPES.DELIVER_MATERIALS || !task.data?.reservationId) return false;
+    return buildingSystem.cancelReservation(task.data.siteId, task.data.reservationId);
+  }
+
   function setActivity(person, task, phase) {
     const restful = task.type === ACTION_TYPES.REST || task.type === ACTION_TYPES.SLEEP || task.type === ACTION_TYPES.WARM_BY_FIRE;
     peopleSystem.setActivity(person.id, {
@@ -161,7 +175,10 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
 
   function assign(person, agent, planned) {
     const task = createRuntimeTask(weatherAdjustedTask(planned), agent, mapSystem);
-    if (!task) return false;
+    if (!task) {
+      cancelConstructionReservation(planned);
+      return false;
+    }
     agent.task = task;
     applySleepTags(person.id, task);
     setActivity(person, task);
@@ -196,6 +213,11 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const weather = weatherSystem.get();
     const actionCounts = counts();
     const reservedFeatureIds = reservations();
+    const storage = campStore.getStorage(CAMP_ID);
+    let availableCampStorage = Math.max(
+      0,
+      Number(storage?.available ?? Infinity) - pendingCampStorageReservations(),
+    );
     const people = peopleSystem.getAlive();
     people.forEach((person) => {
       const agent = agents.get(person.id);
@@ -210,17 +232,34 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
       const sleep = phase.isNight && !mustStayAwake(person)
         ? planNightSleep({ person, camp, buildingSystem, time: gameTime.now(), worldMinutesPerSecond: WORLD_MINUTES_PER_REAL_SECOND })
         : null;
-      const construction = !phase.isNight && !isEmergency(person)
-        ? planConstructionAction({ person, camp, buildingSystem, actionCounts })
-        : null;
-      const farming = farmSystem && !phase.isNight && !isEmergency(person)
-        ? planFarmAction({ person, farmSystem, actionCounts })
-        : null;
-      const generic = planNextAction({ person, camp, population: people.length, people, mapSystem, actionCounts, reservedFeatureIds });
-      const planned = fireTask ?? warmthTask ?? sleep ?? construction ?? farming ?? generic;
+      let planned = fireTask ?? warmthTask ?? sleep;
+      if (!planned && !phase.isNight && !isEmergency(person)) {
+        planned = planConstructionAction({ person, camp, buildingSystem, actionCounts });
+      }
+      if (!planned && farmSystem && !phase.isNight && !isEmergency(person)) {
+        planned = planFarmAction({ person, farmSystem, actionCounts });
+      }
+      if (!planned) {
+        planned = planNextAction({
+          person,
+          camp,
+          population: people.length,
+          people,
+          mapSystem,
+          actionCounts,
+          reservedFeatureIds,
+          storage: storage ? { ...storage, available: availableCampStorage } : null,
+        });
+      }
       if (!planned || !assign(person, agent, planned)) return;
       actionCounts[planned.type] = (actionCounts[planned.type] ?? 0) + 1;
       if (planned.data.featureId) reservedFeatureIds.add(planned.data.featureId);
+      if (planned.type === ACTION_TYPES.HAUL_TO_CAMP) {
+        availableCampStorage = Math.max(
+          0,
+          availableCampStorage - Math.max(0, Number(planned.data?.reservedCapacity ?? 0)),
+        );
+      }
     });
   }
 
@@ -320,7 +359,11 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     agents.forEach((agent) => {
       if (!agent.task) return;
       const person = peopleSystem.get(agent.personId);
-      if (!person?.identity.alive) { agent.task = null; return; }
+      if (!person?.identity.alive) {
+        cancelConstructionReservation(agent.task);
+        agent.task = null;
+        return;
+      }
       const speed = Math.max(0.45, 1.34 * (0.55 + person.state.energy / 180) * Number(weather.movementMultiplier ?? 1));
       const update = advanceRuntimeTask(agent, delta, speed);
       if (!update) return;
@@ -333,7 +376,8 @@ export function createActionSystem({ peopleSystem, mapSystem, campStore, buildin
     const camp = campStore.get(CAMP_ID);
     if (!camp) return;
     const weather = weatherSystem.get();
-    peopleSystem.getAlive().forEach((person) => {
+    const people = peopleSystem.getAlive();
+    people.forEach((person) => {
       const agent = agents.get(person.id);
       if (!agent) return;
       const sleeping = agent.task?.type === ACTION_TYPES.SLEEP;

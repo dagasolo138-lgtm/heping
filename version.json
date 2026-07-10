@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.24.1",
-  "buildId": "v0.24.1-touch-and-runloop-fix-20260709-01",
-  "sourceCommit": "release-commit-sha-must-be-filled-after-commit",
+  "version": "v0.24.2",
+  "buildId": "v0.24.2-day4-stability-20260709-01",
+  "sourceCommit": "pending-code-commit",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "This development commit cannot know its own final SHA before it exists; replace sourceCommit with the actual release commit SHA after commit/deploy verification. Current pre-change HEAD was c320f527ea6fecf3b8644f8fc7f7e8cc0aeab3d6."
+    "sourceCommitPolicy": "The publishing workflow creates the code commit first, then backfills its SHA here in a metadata-only commit before the pull request is merged."
   }
 }

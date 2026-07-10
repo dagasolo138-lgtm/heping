@@ -51,16 +51,23 @@ function carriedItems(person) {
   return Object.fromEntries(ITEM_TYPES.map((itemId) => [itemId, amount(person.inventory.items, itemId)]).filter(([, value]) => value > 0));
 }
 
+function carriedAmount(items) {
+  return Object.values(items).reduce((total, value) => total + Math.max(0, Number(value) || 0), 0);
+}
+
 function utilitySummary({ score, reason, factors = {}, candidates = [], socialTargets = [] }) {
   return { planner: 'utility', score, reason, factors, candidates, socialTargets };
 }
 
 function makeHaulTask(person, camp, storage) {
   const carried = carriedItems(person);
-  if (!Object.keys(carried).length || availableCampStorage(camp, storage) <= 0) return null;
+  const available = availableCampStorage(camp, storage);
+  const reservedCapacity = Math.min(carriedAmount(carried), available);
+  if (!Object.keys(carried).length || reservedCapacity <= 0) return null;
   return createTask(ACTION_TYPES.HAUL_TO_CAMP, camp.anchor, {
     campId: camp.id,
     carried,
+    reservedCapacity,
     utility: utilitySummary({
       score: 99,
       reason: '携带物资、营地有可用容量',

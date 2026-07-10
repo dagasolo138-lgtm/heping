@@ -20,6 +20,15 @@ function materialsReady(site) {
     .every((itemId) => Number(site.materials.delivered[itemId] ?? 0) >= Number(site.materials.required[itemId] ?? 0));
 }
 
+function withoutTransientReservations(building) {
+  const snapshot = clone(building);
+  snapshot.materials = {
+    ...snapshot.materials,
+    reservations: [],
+  };
+  return snapshot;
+}
+
 export function createBuildingSystem({ eventBus, gameTime }) {
   const buildings = new Map();
 
@@ -160,7 +169,7 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     return {
       schemaVersion: BUILDING_SCHEMA_VERSION,
       exportedAt: gameTime.stamp(),
-      buildings: list(),
+      buildings: list().map(withoutTransientReservations),
     };
   }
 
@@ -171,7 +180,7 @@ export function createBuildingSystem({ eventBus, gameTime }) {
     const next = new Map();
     snapshot.buildings.forEach((building) => {
       if (!building?.id) throw new Error('建筑存档缺少 id。');
-      next.set(building.id, clone(building));
+      next.set(building.id, withoutTransientReservations(building));
     });
     buildings.clear();
     next.forEach((building, id) => buildings.set(id, building));
