@@ -52,6 +52,12 @@ function capPenalty(type, actionCounts) {
   return active * -2;
 }
 
+function laborPenalty(candidate) {
+  const duration = Math.max(0, Number(candidate.estimates?.expectedDuration ?? candidate.estimates?.workDuration ?? 0));
+  const energy = Math.max(0, Number(candidate.estimates?.expectedEnergy ?? 0));
+  return -Math.min(30, duration * 0.18 + energy * 1.35);
+}
+
 function explain(factors) {
   return Object.entries(factors)
     .filter(([, value]) => Math.abs(Number(value)) >= 2)
@@ -64,6 +70,7 @@ function explain(factors) {
       roleFit: '职业倾向',
       traitBias: '性格倾向',
       distance: '距离成本',
+      laborCost: '劳动成本',
       crowding: '并发拥挤',
       social: '社会因素',
     }[key] ?? key))
@@ -80,7 +87,8 @@ export function scoreUtilityCandidates({ person, desire, candidates, camp, popul
       skillFit: skillScore(candidate.type, person),
       roleFit: Number(ROLE_FIT[person.work.occupation]?.[candidate.type] ?? ROLE_FIT.unassigned[candidate.type] ?? 0),
       traitBias: traitScore(candidate.type, desire),
-      distance: -Math.min(22, Number(candidate.estimates.distance ?? 0) * 0.32),
+      distance: -Math.min(12, Number(candidate.estimates.distance ?? 0) * 0.14),
+      laborCost: laborPenalty(candidate),
       crowding: capPenalty(candidate.type, actionCounts),
       social: social.score,
     };

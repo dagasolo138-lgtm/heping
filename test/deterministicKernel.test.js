@@ -27,7 +27,7 @@ import { createCampStore } from '../src/modules/settlements/campStore.js';
 import { createSocialEventSystem } from '../src/modules/social/socialEventSystem.js';
 import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSystem.js';
 
-const DAY_30_EXPECTED_FINGERPRINT = 'c170c6ced37c5c3629112087d57dbb18ec29a8b01bce967c0c20b53716aeaa37';
+const DAY_30_EXPECTED_FINGERPRINT = '20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c';
 
 function round(value, digits = 4) {
   const factor = 10 ** digits;
