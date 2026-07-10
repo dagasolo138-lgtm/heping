@@ -91,7 +91,9 @@ function skillLevel(person, taskType) {
 }
 
 function terrainSpeedAt(mapSystem, x, y) {
-  const terrain = mapSystem?.getTile?.(Math.round(x), Math.round(y))?.terrain;
+  const tileX = Math.round(x);
+  const tileY = Math.round(y);
+  const terrain = mapSystem?.getTerrainAt?.(tileX, tileY) ?? mapSystem?.getTile?.(tileX, tileY)?.terrain;
   return clamp(TERRAIN_SPEED[terrain] ?? 1, 0.5, 1.15);
 }
 
