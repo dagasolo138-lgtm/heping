@@ -27,7 +27,7 @@ import { createCampStore } from '../src/modules/settlements/campStore.js';
 import { createSocialEventSystem } from '../src/modules/social/socialEventSystem.js';
 import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSystem.js';
 
-const DAY_30_EXPECTED_FINGERPRINT = null;
+const DAY_30_EXPECTED_FINGERPRINT = '0876a28dbd85d9ceb38c273a2049bb9433439089169be8bb27f79037efb73c4c';
 
 function round(value, digits = 4) {
   const factor = 10 ** digits;
@@ -281,8 +281,7 @@ test('固定种子回放到第 30 日命中确定性世界指纹', { timeout: 30
     console.log(`DAY30_FINGERPRINT=${digest}`);
 
     assert.deepEqual(world.time.now(), { year: 1, day: 30, minute: 720, tick: 42_000 });
-    assert.match(digest, /^[a-f0-9]{64}$/);
-    if (DAY_30_EXPECTED_FINGERPRINT) assert.equal(digest, DAY_30_EXPECTED_FINGERPRINT);
+    assert.equal(digest, DAY_30_EXPECTED_FINGERPRINT);
 
     const storage = world.camp.getStorage('starting-camp');
     const reservedStorage = world.actions.getReservationLedger().amount({ type: 'camp-storage', key: 'starting-camp' });
