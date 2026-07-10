@@ -64,7 +64,7 @@ function createFixture() {
   return { events, runtimeCalls, worldSave, systems: { gameTime, peopleSystem, mapSystem, campStore, buildingSystem, fireSystem } };
 }
 
-test('损坏的子系统存档会回滚全部已导入状态并恢复模拟循环', () => {
+test('损坏的子系统存档会回滚全部已导入状态、保留原行动运行时并恢复模拟循环', () => {
   const fixture = createFixture();
   const before = fixture.worldSave.exportSnapshot();
   const damaged = copy(before);
@@ -86,7 +86,7 @@ test('损坏的子系统存档会回滚全部已导入状态并恢复模拟循�
   assert.deepEqual(fixture.systems.buildingSystem.read(), before.systems.buildings);
   assert.equal(fixture.runtimeCalls.stop, 1);
   assert.equal(fixture.runtimeCalls.start, 1);
-  assert.equal(fixture.runtimeCalls.reset, 1);
+  assert.equal(fixture.runtimeCalls.reset, 0);
   assert.equal(fixture.events.at(-1).name, 'save:load-failed');
   assert.equal(fixture.events.at(-1).payload.rollbackSucceeded, true);
 });
