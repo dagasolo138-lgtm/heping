@@ -6,9 +6,9 @@
 
 ---
 
-## 当前版本：v0.27.3
+## 当前版本：v0.27.4
 
-《生灵》是部署在 GitHub Pages 的纯前端 ES Module 动态世界模拟游戏。当前处于 v0.27 生存经济阶段，动态目标库存、统一劳动成本以及工具与耐久已经完成。
+《生灵》是部署在 GitHub Pages 的纯前端 ES Module 动态世界模拟游戏。当前处于 v0.27 生存经济阶段，动态目标库存、统一劳动成本、工具耐久与统一资源流水已经完成。
 
 ## 不可破坏规则
 
@@ -19,8 +19,11 @@
 - `globalThis.shengling` 是运行时模块挂接点；后挂接模块必须展开当前对象，避免覆盖已有系统。
 - 世界结算必须经过固定 tick；UI 事件不得承担世界事实结算。
 - 运行时占用必须进入统一预留账本，并在完成、取消、死亡、路线失败和读档重建时释放。
-- 工具耐久属于长期世界事实；工具任务占用属于瞬时运行时状态，不能混为一个存档字段。
-- 读档保持事务性：目标快照先验证；失败时恢复长期状态、建筑瞬时预留、工具检查点和原行动运行时。
+- **预留账本与资源流水是两套不同事实：** 前者记录未来承诺和瞬时占用，后者只记录已经发生的账户增减和转移。
+- 同一批物资的来源和去向必须配对成一笔内部转移，不得把搬运重复记成生产与消费。
+- 不同人物在同一 tick 独立发生的生产和消费不得因数量相等而互相抵消。
+- 工具耐久属于长期世界事实；工具任务占用属于瞬时运行时状态。
+- 读档保持事务性：目标快照先验证；失败时恢复长期状态、建筑瞬时预留、工具检查点、资源流水检查点和原行动运行时。
 - 成功读档采用 `cancel-and-replan`：恢复实时坐标和长期事实，取消未完成任务后重新规划。
 - 动态库存必须区分现货、人物背包、在途资源和已经承诺的资源，不能重复计算同一批物资。
 - 劳动成本只影响规则驱动的选择、移动、耗时与精力，不得依赖 UI 帧率或 AI 输出。
@@ -71,7 +74,7 @@ window.shengling.reservationLedger.getSummary()
 window.shengling.actionSystem.getDiagnostics().reservations
 ```
 
-账本是瞬时运行时状态，不写入长期存档。成功读档重建代理时清空；失败读档保留原行动运行时与账本。
+预留账本是瞬时状态，不写入长期存档。成功读档重建代理时清空；失败读档保留原行动运行时与账本。
 
 ## v0.27.1 动态目标库存
 
@@ -89,7 +92,7 @@ window.shengling.actionSystem.getDiagnostics().reservations
 
 - 每人每日水 `0.9`；每人每日食物 `0.72`。
 - 冬季食物倍率 `1.3`；冬季木材倍率 `1.75`。
-- 目标库存最多使用当前储存容量的 92%，保留操作余量。
+- 目标库存最多使用当前储存容量的 92%。
 - 人物背包按全体存活人物汇总。
 - 同一规划轮的新任务立即进入在途估算。
 - 工地材料预留和添柴任务计入承诺量。
@@ -116,49 +119,16 @@ window.shengling.stockTargetSystem.refresh()
 
 成本因素：
 
-- **距离：** 候选评分阶段使用当前位置到目标的预估；任务分配后使用实际 A* 路线。
-- **负重：** 水 `1.1`、木材 `1.4`、浆果 `0.35`、粟米 `0.45` 重量单位。
+- **距离：** 候选评分使用直线预估；分配后使用实际 A* 路线。
+- **负重：** 水 `1.1`、木材 `1.4`、浆果 `0.35`、粟米 `0.45`。
 - **地形速度：** 草地 `1`、高草 `0.84`、林地 `0.86`、泥土 `1.03`、沙岸 `0.87`、石滩 `0.89`、农田 `0.92`。
 - **道路：** 磨损小径 `1.07×`，土路 `1.16×`。
 - **天气：** 读取 `movementMultiplier` 与 `workMultiplier`。
-- **体力：** 低精力降低移动速度；低于 60 后增加工作耗时，低于 50 后增加额外能耗。
-- **技能：** 捕鱼、采集、伐木、建造技能降低对应劳动额外能耗，最低为无技能能耗的 65%。
-- **行动强度：** 伐木、施工、开垦高于取水、播种和添柴。
-- **工具：** 从 `toolSystem` 预览可用工具，写入精确任务成本快照。
+- **体力：** 低精力降低移动速度；低于 60 增加工作耗时，低于 50 增加额外能耗。
+- **技能：** 捕鱼、采集、伐木、建造技能降低对应劳动能耗，最低为 65%。
+- **工具：** 从 `toolSystem` 预览可用工具，写入任务成本快照。
 
-任务快照核心字段：
-
-```js
-task.data.laborCost = {
-  schemaVersion: 2,
-  distance,
-  loadWeight,
-  effectiveLoadWeight,
-  tool,
-  skill,
-  skillLevel,
-  intensity,
-  factors: {
-    terrain,
-    road,
-    load,
-    weatherMovement,
-    weatherWork,
-    fatigueSpeed,
-    fatigueWork,
-    skillEnergy,
-    toolWork,
-    toolEnergy,
-    toolLoad
-  },
-  effectiveWorkDuration,
-  travelSeconds,
-  expectedDuration,
-  movementExtraEnergyRate,
-  workExtraEnergyRate,
-  expectedEnergy
-}
-```
+任务快照 schema v2 记录距离、原始负重、有效负重、工具、技能、地形、道路、天气、疲劳、预计耗时和预计能耗。
 
 性能边界：
 
@@ -187,32 +157,21 @@ window.shengling.laborCostSystem.getRecent(10)
 | 简易农具 | `tool-simple-farm-tool-1` | 84 | `clearField`、`sowMillet`、`harvestMillet` |
 | 石镐 | `tool-stone-pick-1` | 100 | 暂无；为采石保留 |
 
-所有初始工具归属：
+所有初始工具归属营地 `starting-camp`。
 
-```js
-owner = { type: 'camp', id: 'starting-camp' }
-location = { type: 'camp', id: 'starting-camp' }
-```
-
-### 劳动效果
+劳动效果：
 
 - 石斧：工作耗时倍率 `0.70`，额外能耗倍率 `0.82`。
 - 搬运篮：工作耗时倍率 `0.92`，额外能耗倍率 `0.80`，有效负重倍率 `0.64`。
 - 简易农具：工作耗时倍率 `0.76`，额外能耗倍率 `0.86`。
-- 石镐已定义效果，但在采石行动出现前不会被选中。
 
-工具效果进入 `laborCostModel`，不能只显示在 UI 或背包中。
+生命周期模块：`src/modules/tools/toolSystem.js`
 
-### 生命周期
-
-模块：`src/modules/tools/toolSystem.js`
-
-- `actions:assigned`：优先使用 `task.data.laborCost.tool.id`，在统一账本创建 `tool` 预留。
-- `people:changed` 且活动归零：先释放工具账本占用，但暂留任务分配记录。
-- `actions:completed`：根据任务类型和 `workAmount` 扣耐久，随后删除分配记录。
-- 取消、死亡、路线失败：不会产生 `actions:completed`，下一次 `simulation:tick` 通过 `reconcile()` 删除孤立分配。
-- 耐久归零后状态为 `broken`，不再进入 `previewForAction()`。
-- `repair()` 恢复指定耐久；`replace()` 恢复满耐久。当前两者是机制 API，尚未消耗材料或劳动。
+- `actions:assigned`：优先使用劳动成本快照中的工具，在统一账本创建 `tool` 预留。
+- `actions:completed`：根据任务和 `workAmount` 扣耐久，随后删除分配记录。
+- 取消、死亡、路线失败：由 `reconcile()` 删除孤立分配，不结算完整任务磨损。
+- 耐久归零后状态为 `broken`，不再进入候选。
+- `repair()` 与 `replace()` 当前为机制 API，尚未消耗材料或劳动。
 
 运行时：
 
@@ -225,26 +184,136 @@ window.shengling.toolSystem.repair(toolId, amount)
 window.shengling.toolSystem.replace(toolId)
 ```
 
-### 存档与回滚
+存档：
 
-- 世界存档 `systems.tools` 保存工具耐久、损坏、归属、位置、累计磨损和维修次数。
+- `systems.tools` 保存工具耐久、损坏、归属、位置、累计磨损和维修次数。
 - 工具任务分配与预留不进入长期存档。
-- 读取 v0.27.2 及更早存档时，缺少 `systems.tools` 会调用 `resetToDefaults()`。
-- 成功读档后，行动代理重建会清空旧运行时预留并重新规划。
-- 失败读档前保存 `toolSystem.createCheckpoint()`；回滚时用 `restoreCheckpoint()` 恢复原耐久和原任务分配。
-- `toolSystem.importState()` 不主动清除统一账本，避免失败读档破坏原行动运行时；成功路径由 `actionSystem.resetRuntimeAgents()` 统一清账。
+- 旧存档缺少工具字段时调用 `resetToDefaults()`。
+- 失败读档使用 `toolSystem.createCheckpoint()` / `restoreCheckpoint()`。
 
-### UI
+## v0.27.4 统一资源流水
 
-模块：`src/bootstrap/attachToolRuntime.js`
+### 模块与职责
 
-营地面板显示：
+核心：`src/modules/economy/resourceFlowSystem.js`
 
-```text
-工具名 当前耐久/最大耐久（可用 / 使用中 / 损坏）
+挂接：`src/bootstrap/attachResourceFlowRuntime.js`
+
+资源流水是已经发生的世界事实，记录格式：
+
+```js
+{
+  schemaVersion: 1,
+  id,
+  sequence,
+  tick,
+  time,
+  itemId,
+  amount,
+  unit,
+  from,
+  to,
+  category,
+  reason,
+  personId,
+  taskId,
+  reservationId,
+  metadata
+}
 ```
 
-`attachToolRuntime()` 必须在 `attachWorldSaveRuntime()` 前执行，保证世界存档系统能够发现 `runtime.toolSystem`。
+类别：
+
+- `production`：河流、地图物件、农田或其他生产源进入账户。
+- `transfer`：人物、营地、工地等账户之间移动。
+- `consumption`：食物和水进入人物需求。
+- `fuel`：木材进入篝火。
+- `construction`：材料进入工地或建筑消耗。
+- `spoilage`：食物进入腐败废弃。
+- `wear`：工具耐久进入磨损。
+- `repair`：维修恢复工具耐久。
+
+### 同 tick 配对规则
+
+系统维护人物背包、营地库存和工具耐久影子状态，并收集实际增减。
+
+配对条件只能是：
+
+1. 正负变化拥有相同且非空的 `taskId`；或
+2. 账户为人物与营地，行动类型明确为 `haulToCamp` 或 `deliverMaterials`。
+
+除此之外，即使物品、数量和 tick 相同，也不得自动配对。
+
+示例：
+
+```text
+人物 A 背包 -3 木材
+营地 +3 木材
+行动 = haulToCamp
+→ 一笔 person:A → camp:starting-camp 的 transfer
+```
+
+```text
+人物 A 吃掉 -1 浆果
+人物 B 采集 +1 浆果
+同一 tick
+→ 一笔 consumption + 一笔 production，不得互相抵消
+```
+
+### 未配对流向
+
+增加：
+
+- `fetchWater` → `environment:river`
+- `gatherBerries` / `chopTree` → `map:feature:*`
+- `harvestMillet` → `farm:*`
+- 其他 → `world:production`
+
+减少：
+
+- `food:consume` / `drink` / distribution → `needs:*`
+- `food:decay` / spoil → `waste:spoilage`
+- 添柴 → `fire:starting-camp`
+- 建材与施工 → `building:*`
+- 工具耐久 → `wear:*`
+- 其他 → `world:consumption`
+
+### 检查点与存档
+
+- 最多保留最近 5,000 笔。
+- `systems.resourceFlow` 进入世界存档。
+- 旧存档缺少该字段时导入空账本，不改变主 schema 1。
+- `exportState()` 与 `createCheckpoint()` 会先结算悬空变化，避免将半配对事务写入存档。
+- 失败读档通过资源流水检查点恢复读取前记录。
+- 成功读档导入目标流水并重建影子状态。
+
+### 校验
+
+```js
+window.shengling.resourceFlowSystem.verify()
+```
+
+检查：
+
+- 重复流水 ID。
+- 非正数量。
+- 空来源、空去向或来源等于去向。
+- 人物与营地负库存。
+- 工具耐久低于 0 或高于最大耐久。
+
+### 运行时 API
+
+```js
+window.shengling.resourceFlowSystem.list({ limit: 20 })
+window.shengling.resourceFlowSystem.getSummary()
+window.shengling.resourceFlowSystem.getDailySummary(day)
+window.shengling.resourceFlowSystem.verify()
+window.shengling.resourceFlowSystem.exportState()
+```
+
+营地 UI 使用 10 FPS 调度器显示当日生产、消耗、施工、腐败和转移，不参与世界结算。
+
+`attachResourceFlowRuntime()` 必须在 `attachWorldSaveRuntime()` 前执行，保证存档系统能够发现 `runtime.resourceFlowSystem`。
 
 ## 第 30 日确定性基线
 
@@ -256,13 +325,13 @@ replay-seed-v026
 42,000 fixed ticks
 ```
 
-v0.27.3 保持的 SHA-256 世界指纹：
+v0.27.4 保持的 SHA-256 世界指纹：
 
 ```text
 20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c
 ```
 
-该回放测试不挂接浏览器工具运行时，因此用于证明工具扩展没有破坏无工具确定性内核。工具耐久、互斥占用、取消回收、存档和劳动效果由 `test/toolSystem.test.js` 的 8 项专项测试覆盖。
+资源流水是浏览器旁路事实账本，不改变原模拟结算，因此旧基线必须保持。流水配对、分类、存档和校验由 `test/resourceFlowSystem.test.js` 专项覆盖。
 
 CI 流程：
 
@@ -273,8 +342,6 @@ npm test
 第 30 日指纹提取与工件上传
 npm run build
 ```
-
-v0.27.3 首轮结果：`47/47` 测试通过，生产构建通过。
 
 ## 启动链
 
@@ -291,6 +358,7 @@ index.html
        ├─ attachStockTargetRuntime.js
        ├─ attachToolRuntime.js
        ├─ attachLaborCostRuntime.js
+       ├─ attachResourceFlowRuntime.js
        ├─ attachWorldSpeedRuntime.js
        ├─ attachWorldSaveRuntime.js
        ├─ attachMapHudRuntime.js
@@ -309,37 +377,32 @@ index.html
 | `src/modules/actions/actionPlanner.js` | 动态库存上下文、候选过滤、在途估算和行动选择。 |
 | `src/modules/actions/stockTargetModel.js` | 三日目标、容量预算、有效库存和缺口计算。 |
 | `src/modules/actions/laborCostModel.js` | 距离、负重、地形、道路、天气、体力、技能、工具和行动强度。 |
-| `src/modules/actions/actionExecutor.js` | A* 路线劳动快照、移动倍率、工作耗时和额外精力结算。 |
-| `src/modules/actions/utilityScorer.js` | 个人需求、动态库存、技能、劳动成本和社会因素评分。 |
-| `src/modules/actions/reservationLedger.js` | 统一任务、资源、容量、建材和工具预留账本。 |
-| `src/modules/tools/toolCatalog.js` | 工具定义、效果、磨损和初始工具蓝图。 |
-| `src/modules/tools/toolSystem.js` | 工具耐久、损坏、占用、修理、存档与回滚检查点。 |
-| `src/bootstrap/attachToolRuntime.js` | 工具事件生命周期、营地读数与浏览器 API。 |
-| `src/modules/map/mapSystem.js` | 地图查询与固定 tick 原始地形读取。 |
-| `src/modules/people/peopleSystem.js` | 完整人物状态与轻量运行时视图。 |
-| `src/modules/persistence/worldSaveSystem.js` | 世界快照、事务化导入、失败回滚和工具检查点。 |
-| `test/dynamicStockTargets.test.js` | 动态目标、季节、有效库存、在途与停止过采测试。 |
-| `test/laborCostModel.test.js` | 地形、道路、负重、天气、疲劳、技能与运行时能耗测试。 |
-| `test/toolSystem.test.js` | 工具目录、互斥、磨损、取消、损坏、存档、回滚和劳动效果测试。 |
+| `src/modules/actions/reservationLedger.js` | 统一任务、资源、容量、建材和工具预留。 |
+| `src/modules/tools/toolCatalog.js` | 工具定义、效果、磨损和初始蓝图。 |
+| `src/modules/tools/toolSystem.js` | 工具耐久、损坏、占用、修理、存档和检查点。 |
+| `src/modules/economy/resourceFlowSystem.js` | 账户影子、同 tick 配对、流水分类、持久化和守恒校验。 |
+| `src/bootstrap/attachResourceFlowRuntime.js` | 事件观察、每日读数与浏览器 API。 |
+| `src/modules/persistence/worldSaveSystem.js` | 世界快照、事务化导入、失败回滚、工具与流水检查点。 |
+| `test/resourceFlowSystem.test.js` | 转移配对、独立生产消费、工具耐久、存档和校验测试。 |
 | `test/deterministicKernel.test.js` | 固定步长、UI 调度、账本和第 30 日指纹。 |
 
 ## 已知限制
 
 1. 存档为浏览器本地 `localStorage`，没有跨设备云存档。
 2. 成功读档不续接路径游标、工作耗时或中途动画。
-3. 动态库存、劳动成本和工具耐久参数仍是原型值，需要第 60 日回归和长期平衡校准。
+3. 动态库存、劳动成本和工具耐久参数仍是原型值，需要第 60 日回归校准。
 4. 候选评分使用直线成本预估；实际任务使用 A* 路线精确计算。
-5. 修理与替换尚未成为需要材料、劳动时间和失败原因的正式任务。
+5. 修理与替换已进入耐久流水，但尚未成为需要材料、劳动时间和失败原因的正式任务。
 6. 石镐已进入工具目录，但采石行动和石材资源尚未实现。
-7. 统一预留账本尚未形成完整资源流水与每日收支报表。
-8. 食物分配规则除 `firstComeFirstServed` 外仍以解释和记录为主。
-9. 草棚、储物棚和农田尚未成为寻路障碍。
-10. 真实 iPhone 安全区、浏览器地址栏变化和极小屏仍需人工回归。
+7. 流水按实际账户增减记账；计划量、失败原因与完整工序批次仍需继续细化。
+8. 当前每日读数只有类别汇总，尚未完成期初期末对账、瓶颈和劳动占比。
+9. 食物分配规则除 `firstComeFirstServed` 外仍以解释和记录为主。
+10. 草棚、储物棚和农田尚未成为寻路障碍。
+11. 真实 iPhone 安全区、浏览器地址栏变化和极小屏仍需人工回归。
 
 ## v0.27 剩余顺序
 
-1. **资源流水：** 采集、搬运、施工、进食、饮水、添柴、腐败、农业和工具维修统一记账。
-2. **日报与第 60 日回归：** 日收支、瓶颈、资源守恒与多倍速一致性。
+1. **日报与第 60 日回归：** 日收支、期初期末库存、瓶颈、劳动占比、资源守恒与多倍速一致性。
 
 ## 版本更新记录（只追加）
 
@@ -362,29 +425,29 @@ index.html
 
 ### v0.27.1 · 动态目标库存
 
-- 新增未来三日水、食物和木材目标，读取人口、季节、温度、天气、腐败、储存保护、燃料和建造需求。
-- 当前容量不足时按 92% 容量预算压缩目标，储物棚完成后自动恢复完整需求。
-- 有效库存统一计算现货、人物背包、在途采集与工地/添柴承诺，避免重复接单。
-- 库存目标满足后停止非紧急过度采集；紧急个人生存需求继续保留。
-- 营地面板和 `stockTargetSystem` 暴露目标、有效库存、在途量、承诺量和容量约束。
-- 新增 5 项动态库存专项测试；第 30 日基线更新为 `c170c6ced37c5c3629112087d57dbb18ec29a8b01bce967c0c20b53716aeaa37`。
+- 新增未来三日水、食物和木材目标。
+- 有效库存统一计算现货、背包、在途采集与工地/添柴承诺。
+- 新增 5 项专项测试；第 30 日基线更新为 `c170c6ced37c5c3629112087d57dbb18ec29a8b01bce967c0c20b53716aeaa37`。
 
 ### v0.27.2 · 劳动成本模型
 
-- 新增统一劳动成本模型，覆盖距离、负重、地形、道路、天气、体力、技能和行动强度。
-- 候选评分新增 `laborCost` 因子；任务分配后按实际 A* 路线锁定精确成本快照。
-- 磨损小径与土路降低通勤成本；困难地形、重载、恶劣天气和疲劳增加耗时与能耗。
-- 额外精力在任务阶段内累计并在完成时一次结算，避免 10× 高频人物事务。
-- 新增原始地形热路径和劳动成本浏览器诊断 API。
-- 新增 6 项劳动成本专项测试；第 30 日基线更新为 `20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c`。
+- 新增距离、负重、地形、道路、天气、体力、技能和行动强度模型。
+- 候选评分新增 `laborCost`；任务分配后按实际 A* 路线锁定快照。
+- 新增 6 项专项测试；第 30 日基线更新为 `20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c`。
 
 ### v0.27.3 · 工具与耐久
 
-- 新增石斧、搬运篮、简易农具和石镐四件营地公共工具。
-- 石斧、搬运篮和农具直接进入劳动成本，影响工作耗时、额外能耗和有效负重。
-- 工具占用接入统一 `tool` 预留，同一件工具不能被多个任务同时使用。
-- 完成任务扣耐久；取消、死亡、路线失败和孤立任务释放工具且不结算完整任务磨损。
-- 工具损坏后退出候选；提供修理与替换机制 API。
-- 工具耐久进入长期存档，旧存档恢复默认工具，失败读档恢复工具检查点。
-- 营地面板显示耐久与使用状态；新增 8 项工具专项测试，首轮全量测试 `47/47` 通过。
-- 第 30 日无工具确定性内核指纹保持 `20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c`。
+- 新增石斧、搬运篮、简易农具和石镐。
+- 工具占用接入统一预留，完成任务扣耐久，取消和失败释放占用。
+- 工具耐久进入长期存档，旧存档恢复默认工具，失败读档恢复检查点。
+- 新增 8 项专项测试，全量测试 `47/47` 通过。
+
+### v0.27.4 · 统一资源流水
+
+- 新增人物、营地和工具账户影子以及同 tick 增减配对机制。
+- 搬运与运料合并成单笔内部转移；独立生产与消费不会错误抵消。
+- 采集、农业、进食、饮水、添柴、施工、腐败、工具磨损和维修进入统一分类。
+- 流水保留最近 5,000 笔并进入事务存档；旧存档从空账本开始。
+- 新增流水校验器，检查重复记录、非法流向、负库存和工具耐久越界。
+- 营地面板增加当日生产、消费、施工、腐败与转移读数。
+- 新增 7 项资源流水专项测试；第 30 日确定性指纹保持 `20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c`。
