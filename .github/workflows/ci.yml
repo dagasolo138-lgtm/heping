@@ -22,12 +22,14 @@ jobs:
           set -o pipefail
           npm test | tee test-output.log
       - name: Read day-30 fingerprint
+        if: always()
         id: fingerprint
         run: |
-          value=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' test-output.log | tail -1 | cut -d= -f2)
-          test -n "$value"
+          value=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' test-output.log 2>/dev/null | tail -1 | cut -d= -f2)
           echo "value=$value" >> "$GITHUB_OUTPUT"
+          if [ -n "$value" ]; then echo "DAY30_FINGERPRINT=$value"; fi
       - uses: actions/upload-artifact@v4
+        if: always() && steps.fingerprint.outputs.value != ''
         with:
           name: day30-${{ steps.fingerprint.outputs.value }}
           path: test-output.log
