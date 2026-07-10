@@ -1,0 +1,13 @@
+@media (max-width: 980px) {
+  .drawer-handle {
+    touch-action: pan-x;
+    overscroll-behavior: contain;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: ns-resize;
+  }
+
+  .observer-sidebar.is-swiping .drawer-handle span {
+    background: rgba(240, 207, 131, .58);
+  }
+}
