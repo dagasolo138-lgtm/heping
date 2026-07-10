@@ -1,3 +1,4 @@
+import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createFoodStorageSystem } from '../modules/storage/foodStorageSystem.js';
 
 function ensureElements() {
@@ -64,17 +65,19 @@ export function attachFoodStorageRuntime() {
     campStore: runtime.campStore,
   });
   const elements = ensureElements();
+  const ui = createUiRenderScheduler({ maxFps: 10, render: () => render(elements, foodStorageSystem) });
   render(elements, foodStorageSystem);
 
-  eventBus.on('camp:changed', () => render(elements, foodStorageSystem));
-  eventBus.on('storage:food-aged', () => render(elements, foodStorageSystem));
+  eventBus.on('simulation:tick', ({ weather }) => foodStorageSystem.sync(weather));
+  eventBus.on('camp:changed', () => ui.request('camp:changed'));
+  eventBus.on('storage:food-aged', () => ui.request('storage:food-aged'));
   eventBus.on('storage:food-spoiled', ({ spoiled }) => {
     const status = document.querySelector('#system-status');
     const text = spoiledText(spoiled);
     if (status && text) status.textContent = `${text}因储存损耗而无法食用。`;
   });
 
-  const system = Object.freeze(foodStorageSystem);
+  const system = Object.freeze({ ...foodStorageSystem, stopUi: () => ui.stop() });
   globalThis.shengling = Object.freeze({ ...runtime, foodStorageSystem: system });
   return system;
 }
