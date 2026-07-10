@@ -1,3 +1,10 @@
+import { ACTION_TYPES } from '../actions/actionTypes.js';
+import {
+  exportActionRuntimeState,
+  resolveSavedRuntimePosition,
+  sanitizePeopleSnapshotForRuntimeInterruption,
+  validateActionRuntimeState,
+} from '../actions/actionRuntimePersistence.js';
 import { migrateWorldSave } from './worldMigrations.js';
 import { WORLD_SAVE_APP_VERSION, WORLD_SAVE_DEFAULT_SLOT, WORLD_SAVE_SCHEMA_VERSION, slotKey } from './worldSaveSchema.js';
 
@@ -57,8 +64,16 @@ export function createWorldSaveSystem({
     return gameTime.stamp();
   }
 
-  function exportSnapshot() {
+  function exportSnapshot({ interruptRuntime = true } = {}) {
     const time = stamp();
+    const runtime = getRuntime?.();
+    const runtimePeople = runtime?.actionSystem?.getRenderPeople?.() ?? peopleSystem.getAlive?.() ?? [];
+    const actionRuntime = exportActionRuntimeState({ people: runtimePeople, exportedAt: time });
+    const rawPeople = maybeExport(peopleSystem);
+    const people = interruptRuntime
+      ? sanitizePeopleSnapshotForRuntimeInterruption(rawPeople, actionRuntime)
+      : rawPeople;
+
     return {
       schemaVersion: WORLD_SAVE_SCHEMA_VERSION,
       appVersion: WORLD_SAVE_APP_VERSION,
@@ -73,7 +88,8 @@ export function createWorldSaveSystem({
       },
       systems: {
         gameTime: maybeExport(gameTime),
-        people: maybeExport(peopleSystem),
+        people,
+        actionRuntime,
         map: maybeExport(mapSystem),
         camp: maybeExport(campStore),
         campRules: maybeExport(campRulesSystem),
@@ -83,7 +99,7 @@ export function createWorldSaveSystem({
         roads: maybeExport(roadSystem),
         farms: maybeExport(farmSystem),
         foodStorage: maybeExport(foodStorageSystem),
-        foodDistribution: maybeExport(getRuntime?.()?.actionSystem?.getFoodDistributionSystem?.()),
+        foodDistribution: maybeExport(runtime?.actionSystem?.getFoodDistributionSystem?.()),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
       },
@@ -138,6 +154,9 @@ export function createWorldSaveSystem({
       if (state === null || state === undefined) return;
       if (!system?.importState) throw new Error(`${label} 系统不支持读取存档。`);
     });
+    if (snapshot.systems.actionRuntime !== null && snapshot.systems.actionRuntime !== undefined) {
+      validateActionRuntimeState(snapshot.systems.actionRuntime);
+    }
   }
 
   function importSystems(snapshot, runtime) {
@@ -146,30 +165,94 @@ export function createWorldSaveSystem({
     });
   }
 
-  function refreshRuntime(runtime) {
-    runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: true });
+  function prepareRuntimeRestore(rawRuntimeSnapshot) {
+    const runtimeSnapshot = rawRuntimeSnapshot === null || rawRuntimeSnapshot === undefined
+      ? null
+      : validateActionRuntimeState(rawRuntimeSnapshot);
+    const savedAgents = new Map((runtimeSnapshot?.agents ?? []).map((agent) => [agent.personId, agent]));
+    const positions = peopleSystem.getAlive().map((person) => {
+      const savedAgent = savedAgents.get(person.id) ?? null;
+      const position = resolveSavedRuntimePosition({ savedAgent, person, mapSystem });
+      return {
+        personId: person.id,
+        x: position.x,
+        y: position.y,
+        source: position.source,
+        interruptedTask: savedAgent?.interruptedTask ?? null,
+      };
+    });
+    return {
+      policy: runtimeSnapshot?.policy ?? 'legacy-reset-and-replan',
+      positions,
+      interruptedCount: positions.filter((entry) => entry.interruptedTask).length,
+      fallbackCount: positions.filter((entry) => entry.source !== 'runtime').length,
+    };
+  }
+
+  function applyRuntimeRestore(prepared) {
+    prepared.positions.forEach((entry) => {
+      const person = peopleSystem.get(entry.personId);
+      peopleSystem.setLocation(entry.personId, { tileX: entry.x, tileY: entry.y });
+      if (person?.state?.statusTags?.includes('sleeping')) peopleSystem.removeStatusTag(entry.personId, 'sleeping');
+      if (entry.interruptedTask?.type === ACTION_TYPES.SLEEP) {
+        if (person?.state?.statusTags?.includes('sheltered')) peopleSystem.removeStatusTag(entry.personId, 'sheltered');
+        if (person?.state?.statusTags?.includes('exposed')) peopleSystem.removeStatusTag(entry.personId, 'exposed');
+      }
+      peopleSystem.setActivity(entry.personId, { status: 'idle', current: null });
+    });
+    return prepared;
+  }
+
+  function commitRuntimeRestore(runtime, prepared) {
+    runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: false });
+    eventBus.emit('actions:interrupted-by-load', {
+      policy: prepared.policy,
+      restoredCount: prepared.positions.length,
+      interruptedCount: prepared.interruptedCount,
+      fallbackCount: prepared.fallbackCount,
+      positions: clone(prepared.positions),
+      time: stamp(),
+    });
+  }
+
+  function refreshMap(runtime) {
     runtime?.mapView?.setMap?.(mapSystem.get());
     runtime?.mapView?.redraw?.();
+  }
+
+  function captureRollbackCheckpoint() {
+    return {
+      buildings: buildingSystem?.createCheckpoint?.() ?? null,
+    };
+  }
+
+  function restoreRollbackCheckpoint(checkpoint) {
+    if (checkpoint?.buildings && buildingSystem?.restoreCheckpoint) {
+      buildingSystem.restoreCheckpoint(checkpoint.buildings);
+    }
   }
 
   function importSnapshot(rawSnapshot) {
     const snapshot = migrateWorldSave(rawSnapshot);
     const runtime = getRuntime?.();
     validateImportTargets(snapshot, runtime);
-    const rollbackSnapshot = exportSnapshot();
+    const rollbackSnapshot = exportSnapshot({ interruptRuntime: false });
+    const rollbackCheckpoint = captureRollbackCheckpoint();
     const wasRunning = Boolean(runtime?.actionSystem?.isRunning?.());
     runtime?.actionSystem?.stop?.();
 
+    let preparedRuntime = null;
     try {
       importSystems(snapshot, runtime);
-      refreshRuntime(runtime);
-      eventBus.emit('save:loaded', { snapshot: clone(snapshot), time: stamp() });
-      return clone(snapshot);
+      preparedRuntime = prepareRuntimeRestore(snapshot.systems.actionRuntime);
+      refreshMap(runtime);
+      applyRuntimeRestore(preparedRuntime);
     } catch (error) {
       let rollbackError = null;
       try {
         importSystems(rollbackSnapshot, runtime);
-        refreshRuntime(runtime);
+        restoreRollbackCheckpoint(rollbackCheckpoint);
+        refreshMap(runtime);
       } catch (nextError) {
         rollbackError = nextError;
       }
@@ -187,9 +270,24 @@ export function createWorldSaveSystem({
         throw new Error(`读取世界存档失败，且恢复读取前状态失败：${failure.error.message}；回滚错误：${failure.rollbackError.message}`, { cause: error });
       }
       throw new Error(`读取世界存档失败，已恢复读取前状态：${failure.error.message}`, { cause: error });
+    }
+
+    commitRuntimeRestore(runtime, preparedRuntime);
+    try {
+      eventBus.emit('save:loaded', {
+        snapshot: clone(snapshot),
+        runtime: {
+          policy: preparedRuntime.policy,
+          restoredCount: preparedRuntime.positions.length,
+          interruptedCount: preparedRuntime.interruptedCount,
+          fallbackCount: preparedRuntime.fallbackCount,
+        },
+        time: stamp(),
+      });
     } finally {
       if (wasRunning) runtime?.actionSystem?.start?.();
     }
+    return clone(snapshot);
   }
 
   function load(slot = WORLD_SAVE_DEFAULT_SLOT) {
