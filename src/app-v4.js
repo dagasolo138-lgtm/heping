@@ -1,5 +1,6 @@
 import { createEventBus } from './core/events/eventBus.js';
 import { createGameTime } from './core/time/gameTime.js';
+import { createUiRenderScheduler } from './core/ui/uiRenderScheduler.js';
 import { createPeopleSystem } from './modules/people/peopleSystem.js';
 import { createFounders } from './modules/people/createFounders.js';
 import { createMapSystem } from './modules/map/mapSystem.js';
@@ -74,8 +75,6 @@ const diagnostics = {
   actionLoopRunning: false,
   lastSimulationError: null,
 };
-let renderFrameId = null;
-const pendingRenderReasons = new Set();
 
 const view = createMapView({
   canvas: $('#map-canvas'),
@@ -99,15 +98,8 @@ const socialEvents = createSocialEventSystem({
   gameTime: time,
   getRuntimePeople: () => actions.getRenderPeople(),
 });
-const chronicles = createChronicleSystem({
-  eventBus: bus,
-  gameTime: time,
-  peopleSystem: people,
-});
-const llmBoundary = createLlmBoundary({
-  peopleSystem: people,
-  chronicleSystem: chronicles,
-});
+const chronicles = createChronicleSystem({ eventBus: bus, gameTime: time, peopleSystem: people });
+const llmBoundary = createLlmBoundary({ peopleSystem: people, chronicleSystem: chronicles });
 
 function esc(value = '') {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -161,7 +153,7 @@ function select(id, focus = true) {
   const runtime = actions.getRenderPeople().find((person) => person.id === id) ?? people.get(id);
   view.setSelectedPerson(id);
   if (focus) view.focusPerson(runtime);
-  render();
+  uiScheduler.flush('person:selected');
   document.dispatchEvent(new CustomEvent('observer:person-selected', { detail: { personId: id } }));
 }
 
@@ -292,7 +284,7 @@ function renderChronicles() {
   const list = panel.querySelector('[data-chronicle-list]');
   const countNode = panel.querySelector('[data-chronicle-count]');
   const items = chronicles.listChronicles();
-  if (countNode) countNode.textContent = chronicles.listChronicles().length;
+  if (countNode) countNode.textContent = items.length;
   if (!list) return;
   list.innerHTML = items.length ? items.map((entry) => {
     const rows = (entry.entries ?? []).slice(0, 3).map((item) => `<li><time>${esc(item.time?.label ?? '')}</time><span>${esc(item.text)}</span></li>`).join('');
@@ -300,10 +292,11 @@ function renderChronicles() {
   }).join('') : '<li class="chronicle-entry chronicle-entry--empty"><p class="muted">尚未生成聚落纪事。建筑完成、资源危机、规则变化或每十日周期会留下不可修改的史书条目。</p></li>';
 }
 
-function render() {
+function render(reasons = []) {
   diagnostics.renderCount += 1;
   diagnostics.actionLoopRunning = actions.isRunning();
   diagnostics.lastGameTime = time.stamp();
+  diagnostics.lastRenderReason = reasons.join(', ') || diagnostics.lastRenderReason;
   renderPeople();
   renderDetail();
   renderCamp();
@@ -315,17 +308,17 @@ function render() {
   view.redraw();
 }
 
+const uiScheduler = createUiRenderScheduler({
+  maxFps: 10,
+  render: (reasons) => render(reasons),
+});
+
 function scheduleRender(reason = 'unspecified') {
-  pendingRenderReasons.add(reason);
-  if (renderFrameId) return;
   diagnostics.scheduledRenderCount += 1;
-  renderFrameId = requestAnimationFrame(() => {
-    renderFrameId = null;
-    diagnostics.lastRenderReason = [...pendingRenderReasons].join(', ');
-    pendingRenderReasons.clear();
-    render();
-  });
+  uiScheduler.request(reason);
 }
+
+diagnostics.getUiScheduler = () => uiScheduler.getDiagnostics();
 
 peopleList.addEventListener('click', (event) => {
   const row = event.target.closest('[data-person-id]');
@@ -356,26 +349,30 @@ bus.on('buildings:completed', ({ building }) => {
   }
   scheduleRender('buildings:completed');
 });
-bus.on('actions:log', ({ entry }) => { if (status) status.textContent = entry.summary; renderLog(); scheduleRender('actions:log'); });
-bus.on('history:chronicle-created', ({ chronicle }) => { if (status) status.textContent = `聚落纪事写成：${chronicle.title}`; scheduleRender('history:chronicle-created'); });
+bus.on('actions:log', ({ entry }) => {
+  if (status) status.textContent = entry.summary;
+  scheduleRender('actions:log');
+});
+bus.on('history:chronicle-created', ({ chronicle }) => {
+  if (status) status.textContent = `聚落纪事写成：${chronicle.title}`;
+  scheduleRender('history:chronicle-created');
+});
 bus.on('history:chronicles-hydrated', () => scheduleRender('history:chronicles-hydrated'));
 bus.on('environment:phase', ({ phase }) => {
   if (status) status.textContent = phase.isNight ? '夜幕降临，村民正回到营地与住所。' : `${phase.label}，起始河谷正在苏醒。`;
-  view.redraw();
+  scheduleRender('environment:phase');
 });
 bus.on('environment:weather', ({ weather: currentWeather }) => {
   if (status) status.textContent = `天气转为${currentWeather.label}，气温 ${currentWeather.temperature}℃。`;
-  renderEnvironment();
-  view.redraw();
+  scheduleRender('environment:weather');
 });
-bus.on('environment:fire', () => { renderEnvironment(); renderCamp(); view.redraw(); });
-bus.on('environment:updated', () => { renderEnvironment(); scheduleRender('environment:updated'); });
+bus.on('environment:fire', () => scheduleRender('environment:fire'));
+bus.on('environment:updated', () => scheduleRender('environment:updated'));
 bus.on('simulation:time', ({ time: stamp, phase }) => {
   diagnostics.lastTickAt = Date.now();
   diagnostics.lastGameTime = stamp;
   if (clock) clock.innerHTML = `<span class="map-overlay__dot"></span>${esc(phase?.label ?? '')} · ${esc(stamp.label)}`;
   if (topbarTime) topbarTime.textContent = stamp.label.replace(/^生灵历\s*/, '');
-  renderEnvironment();
   scheduleRender('simulation:time');
 });
 bus.on('simulation:error', ({ summary }) => {
@@ -383,7 +380,10 @@ bus.on('simulation:error', ({ summary }) => {
   diagnostics.actionLoopRunning = false;
   if (status) status.textContent = `模拟已暂停：${summary?.message ?? '未知错误'}`;
 });
-bus.on('map:changed', ({ map: nextMap }) => { view.setMap(nextMap); scheduleRender('map:changed'); });
+bus.on('map:changed', ({ map: nextMap }) => {
+  view.setMap(nextMap);
+  scheduleRender('map:changed');
+});
 
 window.shengling = Object.freeze({
   peopleSystem: people,
@@ -397,9 +397,12 @@ window.shengling = Object.freeze({
   chronicleSystem: chronicles,
   llmBoundary,
   actionSystem: actions,
+  reservationLedger: actions.getReservationLedger(),
   gameTime: time,
   mapView: view,
+  requestUiRender: scheduleRender,
+  uiScheduler,
   diagnostics,
 });
-render();
+uiScheduler.flush('initial');
 actions.start();
