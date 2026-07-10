@@ -65,6 +65,11 @@ function newestSlot(meta) {
   return null;
 }
 
+function loadFailureMessage({ error, rollbackSucceeded, rollbackError } = {}) {
+  if (rollbackSucceeded) return `读取失败，已恢复原世界：${error?.message ?? '存档内容无效'}`;
+  return `读取失败且回滚失败：${rollbackError?.message ?? error?.message ?? '未知错误'}`;
+}
+
 function ensurePanel() {
   let panel = document.querySelector('#world-save-panel');
   if (panel) return panel;
@@ -172,8 +177,13 @@ export function attachWorldSaveRuntime() {
       if (!slot) return;
       const ok = confirm(`读取${slot === AUTOSAVE_SLOT ? '自动' : '手动'}存档？当前未保存的进度会被覆盖。`);
       if (!ok) return;
-      worldSaveSystem.load(slot);
-      renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: '读取存档完成' });
+      try {
+        worldSaveSystem.load(slot);
+        renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: '读取存档完成' });
+      } catch (error) {
+        console.error('[shengling:save-load-error]', error);
+        renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: error?.message ?? '读取存档失败' });
+      }
       return;
     }
 
@@ -197,6 +207,9 @@ export function attachWorldSaveRuntime() {
     renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: slot === AUTOSAVE_SLOT ? '自动保存完成' : '手动保存完成' });
   });
   eventBus.on('save:loaded', () => renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: '读取存档完成' }));
+  eventBus.on('save:load-failed', (failure) => {
+    renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: loadFailureMessage(failure) });
+  });
   eventBus.on('save:cleared', () => renderPanel(panel, worldSaveSystem, { autosaveEnabled, message: '存档已清除' }));
   eventBus.on('simulation:time', ({ time }) => {
     const dayKey = `${time.year}:${time.day}`;
