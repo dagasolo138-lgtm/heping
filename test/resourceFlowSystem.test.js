@@ -90,7 +90,7 @@ test('领取同一批物资时支持匹配且不重复计算', () => {
   harness.setTick(12);
   harness.camps[0].items.wood = 0;
   observeCamp(harness, 'construction:collect');
-  harness.people[0].inventory.items.wood = 3;
+  harness.people[0].inventory.items.wood = 5;
   harness.people[0].activity.current = { id: 'delivery-1', type: 'deliverMaterials' };
   observePerson(harness);
   const entries = harness.system.flush();
