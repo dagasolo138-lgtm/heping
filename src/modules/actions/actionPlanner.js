@@ -3,6 +3,7 @@ import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 import { availableCampStorage } from './storageGuard.js';
 import { buildDesireModel } from './desireModel.js';
 import { makeActionCandidate } from './actionCandidates.js';
+import { buildDynamicStockTargets, stockResourceForAction } from './stockTargetModel.js';
 import { scoreUtilityCandidates } from './utilityScorer.js';
 
 const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
@@ -25,6 +26,10 @@ const ROLE_PRIORITY = Object.freeze({
 
 function amount(items, itemId) {
   return Number(items?.[itemId] ?? 0);
+}
+
+function addAmount(target, itemId, value) {
+  target[itemId] = Number(target[itemId] ?? 0) + Math.max(0, Number(value) || 0);
 }
 
 function locationOf(person) {
@@ -55,8 +60,83 @@ function carriedAmount(items) {
   return Object.values(items).reduce((total, value) => total + Math.max(0, Number(value) || 0), 0);
 }
 
+function aggregateCarried(people = []) {
+  const carried = {};
+  people.forEach((person) => {
+    Object.entries(person.inventory?.items ?? {}).forEach(([itemId, value]) => addAmount(carried, itemId, value));
+  });
+  return carried;
+}
+
+function currentSeasonId() {
+  return globalThis.shengling?.seasonSystem?.get?.().id ?? 'spring';
+}
+
+function berryYieldMultiplier() {
+  return ({ spring: 1, summer: 1, autumn: 0.65, winter: 0.25 }[currentSeasonId()] ?? 1);
+}
+
+function estimateIncoming(actionCounts = {}) {
+  return {
+    water: Number(actionCounts[ACTION_TYPES.FETCH_WATER] ?? 0) * 3,
+    food: Number(actionCounts[ACTION_TYPES.GATHER_BERRIES] ?? 0) * Math.max(1, Math.round(3 * berryYieldMultiplier())),
+    wood: Number(actionCounts[ACTION_TYPES.CHOP_TREE] ?? 0) * 5,
+  };
+}
+
+function buildingPipeline() {
+  const buildingSystem = globalThis.shengling?.buildingSystem;
+  const committed = {};
+  const constructionNeed = {};
+  if (!buildingSystem?.list) return { committed, constructionNeed };
+
+  buildingSystem.list({ includeCompleted: false }).forEach((building) => {
+    (building.materials?.reservations ?? []).forEach((reservation) => addAmount(committed, reservation.itemId, reservation.amount));
+    const need = buildingSystem.getMaterialNeed?.(building.id) ?? {};
+    Object.entries(need).forEach(([itemId, value]) => addAmount(constructionNeed, itemId, value));
+  });
+  return { committed, constructionNeed };
+}
+
+export function buildPlanningStockTargets(context = {}) {
+  const runtime = globalThis.shengling ?? {};
+  const pipeline = buildingPipeline();
+  addAmount(pipeline.committed, 'wood', Number(context.actionCounts?.[ACTION_TYPES.TEND_FIRE] ?? 0));
+  return buildDynamicStockTargets({
+    population: context.population ?? context.people?.length ?? 0,
+    camp: context.camp,
+    storage: context.storage,
+    seasonId: currentSeasonId(),
+    weather: runtime.weatherSystem?.get?.() ?? null,
+    carried: aggregateCarried(context.people ?? []),
+    incoming: estimateIncoming(context.actionCounts),
+    committed: pipeline.committed,
+    constructionNeed: pipeline.constructionNeed,
+  });
+}
+
 function utilitySummary({ score, reason, factors = {}, candidates = [], socialTargets = [] }) {
   return { planner: 'utility', score, reason, factors, candidates, socialTargets };
+}
+
+function stockTargetSummary(type, stockTargets) {
+  const resource = stockResourceForAction(type);
+  if (!resource || !stockTargets) return null;
+  return {
+    resource,
+    goal: Number(stockTargets.goals?.[resource] ?? 0),
+    rawGoal: Number(stockTargets.rawGoals?.[resource] ?? 0),
+    effective: Number(stockTargets.amounts?.effective?.[resource] ?? 0),
+    shortage: Number(stockTargets.shortageUnits?.[resource] ?? 0),
+    capacityConstrained: Boolean(stockTargets.capacity?.constrained),
+    horizonDays: Number(stockTargets.horizonDays ?? 0),
+  };
+}
+
+function attachStockTarget(task, stockTargets) {
+  const stockTarget = stockTargetSummary(task?.type, stockTargets);
+  if (!task || !stockTarget) return task;
+  return { ...task, data: { ...(task.data ?? {}), stockTarget } };
 }
 
 function makeHaulTask(person, camp, storage) {
@@ -81,14 +161,6 @@ function makeWaterTask(person, mapSystem) {
   const access = mapSystem.findNearestWaterAccess(from.x, from.y);
   if (!access) return null;
   return createTask(ACTION_TYPES.FETCH_WATER, access, { yield: 3 }, ACTION_META[ACTION_TYPES.FETCH_WATER].workDuration * workerFactor(person, 'fishing'));
-}
-
-function currentSeasonId() {
-  return globalThis.shengling?.seasonSystem?.get?.().id ?? 'spring';
-}
-
-function berryYieldMultiplier() {
-  return ({ spring: 1, summer: 1, autumn: 0.65, winter: 0.25 }[currentSeasonId()] ?? 1);
 }
 
 function makeBerryTask(person, mapSystem, reservedFeatureIds) {
@@ -147,17 +219,33 @@ function attachUtilityDebug(task, scoring, scored = []) {
   };
 }
 
+function needsResource(type, context, person) {
+  const resource = stockResourceForAction(type);
+  if (!resource) return true;
+  const shortage = Number(context.stockTargets?.shortageUnits?.[resource] ?? 0);
+  if (shortage > 0) return true;
+  if (type === ACTION_TYPES.FETCH_WATER) return person.state.thirst >= 68;
+  if (type === ACTION_TYPES.GATHER_BERRIES) return person.state.hunger >= 68;
+  return false;
+}
+
 function createUtilityCandidates(context) {
   const { person, camp, mapSystem, reservedFeatureIds } = context;
   const candidates = [];
-  const water = makeWaterTask(person, mapSystem);
-  if (water) candidates.push(makeActionCandidate({ task: water, person, source: 'nearestWater', target: { itemId: 'water' } }));
+  if (needsResource(ACTION_TYPES.FETCH_WATER, context, person)) {
+    const water = attachStockTarget(makeWaterTask(person, mapSystem), context.stockTargets);
+    if (water) candidates.push(makeActionCandidate({ task: water, person, source: 'nearestWater', target: { itemId: 'water' } }));
+  }
 
-  const berries = makeBerryTask(person, mapSystem, reservedFeatureIds);
-  if (berries) candidates.push(makeActionCandidate({ task: berries, person, source: 'nearestBerryBush', target: { itemId: 'berries', featureId: berries.data.featureId } }));
+  if (needsResource(ACTION_TYPES.GATHER_BERRIES, context, person)) {
+    const berries = attachStockTarget(makeBerryTask(person, mapSystem, reservedFeatureIds), context.stockTargets);
+    if (berries) candidates.push(makeActionCandidate({ task: berries, person, source: 'nearestBerryBush', target: { itemId: 'berries', featureId: berries.data.featureId } }));
+  }
 
-  const wood = makeChopTask(person, mapSystem, reservedFeatureIds);
-  if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId } }));
+  if (needsResource(ACTION_TYPES.CHOP_TREE, context, person)) {
+    const wood = attachStockTarget(makeChopTask(person, mapSystem, reservedFeatureIds), context.stockTargets);
+    if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId } }));
+  }
 
   if (person.state.energy <= 60) {
     const rest = makeRestTask(camp);
@@ -177,14 +265,15 @@ function canAssign(type, context, person) {
 
 function makeByType(type, context) {
   const { person, mapSystem, reservedFeatureIds } = context;
-  if (type === ACTION_TYPES.FETCH_WATER) return makeWaterTask(person, mapSystem);
-  if (type === ACTION_TYPES.GATHER_BERRIES) return makeBerryTask(person, mapSystem, reservedFeatureIds);
-  if (type === ACTION_TYPES.CHOP_TREE) return makeChopTask(person, mapSystem, reservedFeatureIds);
-  return null;
+  let task = null;
+  if (type === ACTION_TYPES.FETCH_WATER) task = makeWaterTask(person, mapSystem);
+  if (type === ACTION_TYPES.GATHER_BERRIES) task = makeBerryTask(person, mapSystem, reservedFeatureIds);
+  if (type === ACTION_TYPES.CHOP_TREE) task = makeChopTask(person, mapSystem, reservedFeatureIds);
+  return attachStockTarget(task, context.stockTargets);
 }
 
 function legacyPlanNextAction(context) {
-  const { person, camp, population, storage } = context;
+  const { person, camp, storage } = context;
   if (!person.identity.alive) return null;
 
   const carried = carriedItems(person);
@@ -192,14 +281,10 @@ function legacyPlanNextAction(context) {
 
   if (person.state.energy <= 28) return makeRestTask(camp);
 
-  const waterGoal = Math.max(12, population * 3);
-  const foodGoal = Math.max(10, population * 2);
-  const woodGoal = Math.max(18, population * 2.5);
-  const foodAmount = amount(camp.items, 'berries') + amount(camp.items, 'millet');
   const shortages = {
-    water: amount(camp.items, 'water') < waterGoal,
-    food: foodAmount < foodGoal,
-    wood: amount(camp.items, 'wood') < woodGoal,
+    water: Number(context.stockTargets?.shortageUnits?.water ?? 0) > 0,
+    food: Number(context.stockTargets?.shortageUnits?.food ?? 0) > 0,
+    wood: Number(context.stockTargets?.shortageUnits?.wood ?? 0) > 0,
   };
 
   const urgentTypes = [];
@@ -222,10 +307,11 @@ function legacyPlanNextAction(context) {
   return null;
 }
 
-
-export function planNextAction(context) {
-  const { person, camp, population, storage } = context;
+export function planNextAction(inputContext) {
+  const { person, camp, population, storage } = inputContext;
   if (!person.identity.alive) return null;
+  const stockTargets = inputContext.stockTargets ?? buildPlanningStockTargets(inputContext);
+  const context = { ...inputContext, stockTargets };
 
   const carried = carriedItems(person);
   if (Object.keys(carried).length) return makeHaulTask(person, camp, storage);
@@ -246,7 +332,16 @@ export function planNextAction(context) {
   const candidates = createUtilityCandidates(context);
   if (candidates.length) {
     const desire = buildDesireModel({ person, camp });
-    const scored = scoreUtilityCandidates({ person, desire, candidates, camp, population, actionCounts: context.actionCounts, allPeople: context.people ?? [] });
+    const scored = scoreUtilityCandidates({
+      person,
+      desire,
+      candidates,
+      camp,
+      population,
+      actionCounts: context.actionCounts,
+      allPeople: context.people ?? [],
+      stockTargets,
+    });
     const selected = scored[0];
     if (selected?.score >= 24) return attachUtilityDebug(selected.candidate.createTask(), selected, scored);
   }
