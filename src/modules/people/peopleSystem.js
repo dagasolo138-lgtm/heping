@@ -13,6 +13,23 @@ function clone(value) {
   return structuredClone(value);
 }
 
+function runtimeView(person) {
+  if (!person) return null;
+  return clone({
+    id: person.id,
+    identity: person.identity,
+    location: person.location,
+    work: person.work,
+    state: person.state,
+    activity: person.activity,
+    traits: person.traits,
+    family: person.family,
+    relations: person.relations,
+    inventory: person.inventory,
+    extensions: person.extensions,
+  });
+}
+
 function migrateSnapshot(rawSnapshot) {
   if (!rawSnapshot || !Array.isArray(rawSnapshot.people)) return rawSnapshot;
   const snapshot = clone(rawSnapshot);
@@ -118,9 +135,11 @@ export function createPeopleSystem({ eventBus, gameTime }) {
   return Object.freeze({
     create,
     get: (id) => getPerson(people, id),
+    getRuntime: (id) => runtimeView(people.get(id)),
     list: (options) => listPeople(people, options),
     getMany: (ids) => getPeopleByIds(people, ids),
     getAlive: () => getAlivePeople(people),
+    getAliveRuntime: () => [...people.values()].filter((person) => person.identity.alive).map(runtimeView),
     count: () => people.size,
     connect,
     exportState,
