@@ -8,11 +8,7 @@ export const SEASON_DEFINITIONS = Object.freeze([
     startDay: 1,
     endDay: 90,
     temperatureModifier: 2,
-    agriculture: {
-      crops: {
-        millet: { canSow: true, growthMultiplier: 1, waitingLabel: '可播种' },
-      },
-    },
+    agriculture: { crops: { millet: { canSow: true, growthMultiplier: 1, waitingLabel: '可播种' } } },
   },
   {
     id: 'summer',
@@ -20,11 +16,7 @@ export const SEASON_DEFINITIONS = Object.freeze([
     startDay: 91,
     endDay: 180,
     temperatureModifier: 7,
-    agriculture: {
-      crops: {
-        millet: { canSow: false, growthMultiplier: 1.25, waitingLabel: '等待春播' },
-      },
-    },
+    agriculture: { crops: { millet: { canSow: false, growthMultiplier: 1.25, waitingLabel: '等待春播' } } },
   },
   {
     id: 'autumn',
@@ -32,11 +24,7 @@ export const SEASON_DEFINITIONS = Object.freeze([
     startDay: 181,
     endDay: 270,
     temperatureModifier: -1,
-    agriculture: {
-      crops: {
-        millet: { canSow: false, growthMultiplier: 0.62, waitingLabel: '等待春播' },
-      },
-    },
+    agriculture: { crops: { millet: { canSow: false, growthMultiplier: 0.62, waitingLabel: '等待春播' } } },
   },
   {
     id: 'winter',
@@ -44,17 +32,11 @@ export const SEASON_DEFINITIONS = Object.freeze([
     startDay: 271,
     endDay: 360,
     temperatureModifier: -8,
-    agriculture: {
-      crops: {
-        millet: { canSow: false, growthMultiplier: 0, waitingLabel: '等待春播' },
-      },
-    },
+    agriculture: { crops: { millet: { canSow: false, growthMultiplier: 0, waitingLabel: '等待春播' } } },
   },
 ]);
 
-function clone(value) {
-  return structuredClone(value);
-}
+function clone(value) { return structuredClone(value); }
 
 function normalizeDay(day) {
   const value = Math.floor(Number(day) || 1);
@@ -77,9 +59,7 @@ function buildSeason(time) {
 export function createSeasonSystem({ eventBus, gameTime }) {
   let current = buildSeason(gameTime.now());
 
-  function get() {
-    return clone(buildSeason(gameTime.now()));
-  }
+  function get() { return clone(buildSeason(gameTime.now())); }
 
   function getCropRule(cropId) {
     const season = get();
@@ -101,7 +81,7 @@ export function createSeasonSystem({ eventBus, gameTime }) {
     return clone(current);
   }
 
-  eventBus.on('simulation:time', sync);
+  eventBus.on('simulation:pre-tick', sync);
 
   return Object.freeze({
     get,
