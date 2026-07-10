@@ -1,3 +1,5 @@
+import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
+
 const SECOND_FIELD_ID = 'second-millet-field';
 
 function ensureReadout() {
@@ -38,6 +40,13 @@ export function attachFarmExpansionRuntime() {
   if (runtime.farmExpansionRuntime) return runtime.farmExpansionRuntime;
 
   const readout = ensureReadout();
+  const ui = createUiRenderScheduler({
+    maxFps: 10,
+    render: () => {
+      renderReadout(readout, runtime.farmSystem);
+      runtime.mapView.redraw();
+    },
+  });
   renderReadout(readout, runtime.farmSystem);
 
   eventBus.on('farms:changed', ({ reason, field }) => {
@@ -49,11 +58,13 @@ export function attachFarmExpansionRuntime() {
         if (status) status.textContent = '第一块粟田完成首次收获，村民开始规划第二块人工扩田。';
       }
     }
-    renderReadout(readout, runtime.farmSystem);
-    runtime.mapView.redraw();
+    ui.request(`farms:${reason ?? 'changed'}`);
   });
 
-  const api = Object.freeze({ render: () => renderReadout(readout, runtime.farmSystem) });
+  const api = Object.freeze({
+    render: () => ui.flush('manual'),
+    stop: () => ui.stop(),
+  });
   globalThis.shengling = Object.freeze({ ...runtime, farmExpansionRuntime: api });
   return api;
 }
