@@ -47,6 +47,7 @@ export function exportActionRuntimeState({ agents, people, exportedAt } = {}) {
     exportedAt: clone(exportedAt ?? null),
     agents: list
       .map(normalizeRuntimeEntry)
+      .filter((agent) => agent.personId && Number.isFinite(agent.x) && Number.isFinite(agent.y))
       .sort((first, second) => String(first.personId).localeCompare(String(second.personId))),
   };
 }
@@ -79,6 +80,7 @@ export function sanitizePeopleSnapshotForRuntimeInterruption(rawPeopleSnapshot, 
   const snapshot = clone(rawPeopleSnapshot);
 
   snapshot.people = snapshot.people.map((person) => {
+    if (!person || typeof person !== 'object' || !person.id) return clone(person);
     const agent = agents.get(person.id);
     const interruptedSleep = agent?.interruptedTask?.type === ACTION_TYPES.SLEEP;
     const statusTags = (person.state?.statusTags ?? [])
@@ -90,12 +92,10 @@ export function sanitizePeopleSnapshotForRuntimeInterruption(rawPeopleSnapshot, 
       location: agent
         ? { ...person.location, tileX: Number(agent.x), tileY: Number(agent.y) }
         : clone(person.location),
-      state: { ...person.state, statusTags },
-      activity: {
-        ...person.activity,
-        status: 'idle',
-        current: null,
-      },
+      state: person.state ? { ...person.state, statusTags } : person.state,
+      activity: person.activity
+        ? { ...person.activity, status: 'idle', current: null }
+        : person.activity,
     };
   });
   return snapshot;
