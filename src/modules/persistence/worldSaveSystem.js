@@ -1,4 +1,5 @@
 import { migrateWorldSave } from './worldMigrations.js';
+import { exportActionRuntimeSnapshot, restoreActionRuntimeSnapshot, validateActionRuntimeCoordinates } from './actionRuntimeSnapshot.js';
 import { WORLD_SAVE_APP_VERSION, WORLD_SAVE_DEFAULT_SLOT, WORLD_SAVE_SCHEMA_VERSION, slotKey } from './worldSaveSchema.js';
 
 function clone(value) {
@@ -59,6 +60,7 @@ export function createWorldSaveSystem({
 
   function exportSnapshot() {
     const time = stamp();
+    const runtime = getRuntime?.();
     return {
       schemaVersion: WORLD_SAVE_SCHEMA_VERSION,
       appVersion: WORLD_SAVE_APP_VERSION,
@@ -83,9 +85,14 @@ export function createWorldSaveSystem({
         roads: maybeExport(roadSystem),
         farms: maybeExport(farmSystem),
         foodStorage: maybeExport(foodStorageSystem),
-        foodDistribution: maybeExport(getRuntime?.()?.actionSystem?.getFoodDistributionSystem?.()),
+        foodDistribution: maybeExport(runtime?.actionSystem?.getFoodDistributionSystem?.()),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
+        actionRuntime: exportActionRuntimeSnapshot({
+          actionSystem: runtime?.actionSystem,
+          peopleSystem,
+          exportedAt: time,
+        }),
       },
     };
   }
@@ -138,6 +145,7 @@ export function createWorldSaveSystem({
       if (state === null || state === undefined) return;
       if (!system?.importState) throw new Error(`${label} 系统不支持读取存档。`);
     });
+    validateActionRuntimeCoordinates(snapshot.systems.actionRuntime, snapshot.systems.map);
   }
 
   function importSystems(snapshot, runtime) {
@@ -146,10 +154,16 @@ export function createWorldSaveSystem({
     });
   }
 
-  function refreshRuntime(runtime) {
-    runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: true });
+  function refreshRuntime(runtime, snapshot) {
+    const actionRuntime = restoreActionRuntimeSnapshot({
+      snapshot: snapshot.systems.actionRuntime,
+      peopleSystem,
+      mapSystem,
+    });
+    runtime?.actionSystem?.resetRuntimeAgents?.({ clearActivities: false });
     runtime?.mapView?.setMap?.(mapSystem.get());
     runtime?.mapView?.redraw?.();
+    return actionRuntime;
   }
 
   function importSnapshot(rawSnapshot) {
@@ -162,14 +176,14 @@ export function createWorldSaveSystem({
 
     try {
       importSystems(snapshot, runtime);
-      refreshRuntime(runtime);
-      eventBus.emit('save:loaded', { snapshot: clone(snapshot), time: stamp() });
+      const actionRuntime = refreshRuntime(runtime, snapshot);
+      eventBus.emit('save:loaded', { snapshot: clone(snapshot), actionRuntime: clone(actionRuntime), time: stamp() });
       return clone(snapshot);
     } catch (error) {
       let rollbackError = null;
       try {
         importSystems(rollbackSnapshot, runtime);
-        refreshRuntime(runtime);
+        refreshRuntime(runtime, rollbackSnapshot);
       } catch (nextError) {
         rollbackError = nextError;
       }
