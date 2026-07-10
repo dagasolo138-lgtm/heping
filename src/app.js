@@ -8,6 +8,7 @@ import { attachFoodStorageRuntime } from './bootstrap/attachFoodStorageRuntime.j
 import { attachStockTargetRuntime } from './bootstrap/attachStockTargetRuntime.js';
 import { attachToolRuntime } from './bootstrap/attachToolRuntime.js';
 import { attachLaborCostRuntime } from './bootstrap/attachLaborCostRuntime.js';
+import { attachResourceFlowRuntime } from './bootstrap/attachResourceFlowRuntime.js';
 import { attachWorldSpeedRuntime } from './bootstrap/attachWorldSpeedRuntime.js';
 import { attachWorldSaveRuntime } from './bootstrap/attachWorldSaveRuntime.js';
 import { attachMapHudRuntime } from './bootstrap/attachMapHudRuntime.js';
@@ -23,6 +24,7 @@ attachFoodStorageRuntime();
 attachStockTargetRuntime();
 attachToolRuntime();
 attachLaborCostRuntime();
+attachResourceFlowRuntime();
 attachWorldSpeedRuntime();
 attachWorldSaveRuntime();
 attachMapHudRuntime();
