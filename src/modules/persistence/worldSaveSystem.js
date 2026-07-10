@@ -86,6 +86,7 @@ export function createWorldSaveSystem({
         farms: maybeExport(farmSystem),
         foodStorage: maybeExport(foodStorageSystem),
         foodDistribution: maybeExport(runtime?.actionSystem?.getFoodDistributionSystem?.()),
+        tools: maybeExport(runtime?.toolSystem),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
         actionRuntime: exportActionRuntimeSnapshot({
@@ -134,6 +135,7 @@ export function createWorldSaveSystem({
       ['farms', '农田', farmSystem],
       ['foodStorage', '食物储存', foodStorageSystem],
       ['foodDistribution', '食物分配', runtime?.actionSystem?.getFoodDistributionSystem?.()],
+      ['tools', '工具', runtime?.toolSystem],
       ['socialEvents', '社会事件', socialEventSystem],
       ['chronicles', '史书', chronicleSystem],
     ];
@@ -152,6 +154,9 @@ export function createWorldSaveSystem({
     importTargets(runtime).forEach(([key, label, system]) => {
       maybeImport(system, snapshot.systems[key], label);
     });
+    if (snapshot.systems.tools === null || snapshot.systems.tools === undefined) {
+      runtime?.toolSystem?.resetToDefaults?.();
+    }
   }
 
   function refreshMap(runtime) {
@@ -170,15 +175,19 @@ export function createWorldSaveSystem({
     return actionRuntime;
   }
 
-  function captureRollbackCheckpoint() {
+  function captureRollbackCheckpoint(runtime) {
     return {
       buildings: buildingSystem?.createCheckpoint?.() ?? null,
+      tools: runtime?.toolSystem?.createCheckpoint?.() ?? null,
     };
   }
 
-  function restoreRollbackCheckpoint(checkpoint) {
+  function restoreRollbackCheckpoint(checkpoint, runtime) {
     if (checkpoint?.buildings && buildingSystem?.restoreCheckpoint) {
       buildingSystem.restoreCheckpoint(checkpoint.buildings);
+    }
+    if (checkpoint?.tools && runtime?.toolSystem?.restoreCheckpoint) {
+      runtime.toolSystem.restoreCheckpoint(checkpoint.tools);
     }
   }
 
@@ -187,7 +196,7 @@ export function createWorldSaveSystem({
     const runtime = getRuntime?.();
     validateImportTargets(snapshot, runtime);
     const rollbackSnapshot = exportSnapshot();
-    const rollbackCheckpoint = captureRollbackCheckpoint();
+    const rollbackCheckpoint = captureRollbackCheckpoint(runtime);
     const wasRunning = Boolean(runtime?.actionSystem?.isRunning?.());
     runtime?.actionSystem?.stop?.();
 
@@ -200,7 +209,7 @@ export function createWorldSaveSystem({
       let rollbackError = null;
       try {
         importSystems(rollbackSnapshot, runtime);
-        restoreRollbackCheckpoint(rollbackCheckpoint);
+        restoreRollbackCheckpoint(rollbackCheckpoint, runtime);
         refreshMap(runtime);
       } catch (nextError) {
         rollbackError = nextError;

@@ -50,12 +50,7 @@ const TERRAIN_SPEED = Object.freeze({
   [TERRAIN.FARMLAND]: 0.92,
 });
 
-const ITEM_WEIGHT = Object.freeze({
-  water: 1.1,
-  wood: 1.4,
-  berries: 0.35,
-  millet: 0.45,
-});
+const ITEM_WEIGHT = Object.freeze({ water: 1.1, wood: 1.4, berries: 0.35, millet: 0.45 });
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, Number(value) || 0));
@@ -142,8 +137,27 @@ function skillEnergyMultiplier(person, taskType) {
   return clamp(1 - skillLevel(person, taskType) * 0.035, 0.65, 1);
 }
 
-function extraEnergyRate({ intensity, loadEnergy, terrainEnergy, roadEnergy, weatherEnergy, fatigueEnergy, skillEnergy }) {
-  const combined = intensity * loadEnergy * terrainEnergy * roadEnergy * weatherEnergy * fatigueEnergy * skillEnergy;
+function resolveTool(task) {
+  const system = globalThis.shengling?.toolSystem;
+  const explicit = task?.data?.tool ?? task?.data?.laborCost?.tool ?? null;
+  if (explicit?.id) {
+    const live = system?.get?.(explicit.id);
+    if (live?.status === 'usable') return { ...explicit, durability: live.durability, maxDurability: live.maxDurability };
+    if (!system) return explicit;
+  }
+  return system?.previewForAction?.(task?.type) ?? null;
+}
+
+function toolEffects(tool) {
+  return {
+    work: clamp(tool?.effects?.workDurationMultiplier ?? 1, 0.4, 1.2),
+    energy: clamp(tool?.effects?.energyMultiplier ?? 1, 0.45, 1.2),
+    load: clamp(tool?.effects?.loadWeightMultiplier ?? 1, 0.35, 1.2),
+  };
+}
+
+function extraEnergyRate({ intensity, loadEnergy, terrainEnergy, roadEnergy, weatherEnergy, fatigueEnergy, skillEnergy, toolEnergy }) {
+  const combined = intensity * loadEnergy * terrainEnergy * roadEnergy * weatherEnergy * fatigueEnergy * skillEnergy * toolEnergy;
   return Math.max(0, combined * 0.035 - 0.02);
 }
 
@@ -153,11 +167,12 @@ export function isLaborAction(type) {
 
 export function movementLaborMultiplier({ person, task, agent, mapSystem, roadSystem } = {}) {
   if (!isLaborAction(task?.type)) return 1;
-  const weight = Number(task?.data?.laborCost?.loadWeight ?? carriedWeight(person));
+  const profile = task?.data?.laborCost;
+  const effectiveWeight = Number(profile?.effectiveLoadWeight ?? profile?.loadWeight ?? carriedWeight(person));
   return round(
     terrainSpeedAt(mapSystem, agent?.x ?? 0, agent?.y ?? 0)
       * roadSpeedAt(roadSystem, agent?.x ?? 0, agent?.y ?? 0)
-      * loadSpeedMultiplier(weight),
+      * loadSpeedMultiplier(effectiveWeight),
     5,
   );
 }
@@ -165,21 +180,25 @@ export function movementLaborMultiplier({ person, task, agent, mapSystem, roadSy
 export function buildLaborCostProfile({ person, task, position, route = [], mapSystem, roadSystem, weather } = {}) {
   if (!isLaborAction(task?.type)) return null;
   const distance = routeDistance(position, route);
+  const tool = resolveTool(task);
+  const toolFactor = toolEffects(tool);
   const weight = carriedWeight(person);
+  const effectiveLoadWeight = weight * toolFactor.load;
   const terrainFactor = averageAlongRoute(position, route, (point) => terrainSpeedAt(mapSystem, point.x, point.y));
   const roadFactor = averageAlongRoute(position, route, (point) => roadSpeedAt(roadSystem, point.x, point.y));
-  const loadFactor = loadSpeedMultiplier(weight);
+  const loadFactor = loadSpeedMultiplier(effectiveLoadWeight);
   const weatherMove = weatherMovement(weather);
   const energySpeed = fatigueSpeedMultiplier(person);
   const movementFactor = terrainFactor * roadFactor * loadFactor * weatherMove * energySpeed;
   const travelSeconds = distance / Math.max(0.25, 1.34 * movementFactor);
-  const workDurationMultiplier = fatigueWorkMultiplier(person);
+  const fatigueWork = fatigueWorkMultiplier(person);
+  const workDurationMultiplier = fatigueWork * toolFactor.work;
   const baseWorkDuration = Math.max(0, Number(task?.workDuration ?? 0));
   const effectiveWorkDuration = baseWorkDuration * workDurationMultiplier;
   const intensity = Number(ACTION_INTENSITY[task.type] ?? 1);
   const terrainEnergy = 1 / Math.max(0.55, terrainFactor);
   const roadEnergy = 1 / Math.max(1, roadFactor);
-  const loadEnergy = loadEnergyMultiplier(weight);
+  const loadEnergy = loadEnergyMultiplier(effectiveLoadWeight);
   const fatigueEnergy = fatigueEnergyMultiplier(person);
   const skillEnergy = skillEnergyMultiplier(person, task.type);
   const movementExtraEnergyRate = extraEnergyRate({
@@ -190,6 +209,7 @@ export function buildLaborCostProfile({ person, task, position, route = [], mapS
     weatherEnergy: 1 / weatherMove,
     fatigueEnergy,
     skillEnergy,
+    toolEnergy: toolFactor.energy,
   });
   const workExtraEnergyRate = extraEnergyRate({
     intensity,
@@ -199,18 +219,29 @@ export function buildLaborCostProfile({ person, task, position, route = [], mapS
     weatherEnergy: 1 / weatherWork(weather),
     fatigueEnergy,
     skillEnergy,
+    toolEnergy: toolFactor.energy,
   });
   const expectedEnergy = travelSeconds * (0.12 + movementExtraEnergyRate)
     + effectiveWorkDuration * (0.12 + workExtraEnergyRate);
 
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
     actionType: task.type,
     skill: ACTION_SKILL[task.type] ?? null,
     skillLevel: round(skillLevel(person, task.type)),
     intensity: round(intensity),
     distance: round(distance),
     loadWeight: round(weight),
+    effectiveLoadWeight: round(effectiveLoadWeight),
+    tool: tool ? Object.freeze({
+      id: tool.id,
+      typeId: tool.typeId,
+      label: tool.label,
+      durability: round(tool.durability),
+      maxDurability: round(tool.maxDurability),
+      effects: Object.freeze({ ...toolFactor }),
+      wear: round(tool.wear ?? 0),
+    }) : null,
     factors: Object.freeze({
       terrain: round(terrainFactor),
       road: round(roadFactor),
@@ -218,8 +249,11 @@ export function buildLaborCostProfile({ person, task, position, route = [], mapS
       weatherMovement: round(weatherMove),
       weatherWork: round(weatherWork(weather)),
       fatigueSpeed: round(energySpeed),
-      fatigueWork: round(workDurationMultiplier),
+      fatigueWork: round(fatigueWork),
       skillEnergy: round(skillEnergy),
+      toolWork: round(toolFactor.work),
+      toolEnergy: round(toolFactor.energy),
+      toolLoad: round(toolFactor.load),
     }),
     baseWorkDuration: round(baseWorkDuration),
     workDurationMultiplier: round(workDurationMultiplier),
@@ -234,18 +268,7 @@ export function buildLaborCostProfile({ person, task, position, route = [], mapS
 
 export function estimatePlannedLaborCost({ person, task, mapSystem, roadSystem, weather } = {}) {
   if (!isLaborAction(task?.type)) return null;
-  const position = {
-    x: Number(person?.location?.tileX ?? 0),
-    y: Number(person?.location?.tileY ?? 0),
-  };
+  const position = { x: Number(person?.location?.tileX ?? 0), y: Number(person?.location?.tileY ?? 0) };
   const destination = task?.destination ?? position;
-  return buildLaborCostProfile({
-    person,
-    task,
-    position,
-    route: [destination],
-    mapSystem,
-    roadSystem,
-    weather,
-  });
+  return buildLaborCostProfile({ person, task, position, route: [destination], mapSystem, roadSystem, weather });
 }
