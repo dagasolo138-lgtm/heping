@@ -31,7 +31,7 @@ export function attachRoadRuntime() {
   if (runtime.roadSystem) return runtime.roadSystem;
 
   const roadSystem = createRoadSystem({ eventBus, gameTime: runtime.gameTime });
-  const sampler = createRoadTickSampler({ roadSystem, getPeople: () => runtime.actionSystem.getRenderPeople() });
+  const sampler = createRoadTickSampler({ roadSystem, getPeople: () => runtime.actionSystem.getMovementPeople() });
   const readout = ensureReadout();
   const ui = createUiRenderScheduler({
     maxFps: 10,
