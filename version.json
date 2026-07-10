@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.25.0",
-  "buildId": "v0.25.0-map-first-observer-20260709-01",
-  "sourceCommit": "1b26c1b4f178c16f3f5f26843b64a46aee35f7bf",
+  "version": "v0.25.1",
+  "buildId": "v0.25.1-save-transaction-20260710-01",
+  "sourceCommit": "e1be82e140f98f68eacbb6ef5bd3dc9acd50bfca",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "The publishing workflow creates the code commit first, then backfills its SHA here in a metadata-only commit before the pull request is merged."
+    "sourceCommitPolicy": "sourceCommit points to the final functional commit for the transactional save-load implementation; later documentation and manifest commits may follow it."
   }
 }
