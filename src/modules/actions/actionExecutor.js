@@ -15,15 +15,19 @@ function runtimeContext(personId) {
   };
 }
 
-function settleLaborEnergy(agent, task, deltaSeconds, phase, { force = false } = {}) {
+function accumulateLaborEnergy(task, deltaSeconds, phase) {
   const profile = task?.data?.laborCost;
   if (!profile) return 0;
   const rate = phase === 'moving'
     ? Number(profile.movementExtraEnergyRate ?? 0)
     : Number(profile.workExtraEnergyRate ?? 0);
-  task.laborEnergyPending = Number(task.laborEnergyPending ?? 0) + Math.max(0, rate) * Math.max(0, deltaSeconds);
-  if (!force && task.laborEnergyPending < 0.25) return 0;
-  const amount = task.laborEnergyPending;
+  const amount = Math.max(0, rate) * Math.max(0, deltaSeconds);
+  task.laborEnergyPending = Number(task.laborEnergyPending ?? 0) + amount;
+  return amount;
+}
+
+function settleLaborEnergy(agent, task) {
+  const amount = Math.max(0, Number(task?.laborEnergyPending ?? 0));
   task.laborEnergyPending = 0;
   const { peopleSystem, person } = runtimeContext(agent.personId);
   if (!peopleSystem || !person?.identity?.alive || amount <= 0) return 0;
@@ -91,7 +95,7 @@ export function advanceRuntimeTask(agent, deltaSeconds, speedTilesPerSecond) {
         remaining = 0;
       }
     }
-    settleLaborEnergy(agent, task, deltaSeconds, 'moving');
+    accumulateLaborEnergy(task, deltaSeconds, 'moving');
     if (task.routeIndex >= task.route.length) {
       task.phase = 'working';
       return { kind: 'arrived', task };
@@ -101,9 +105,9 @@ export function advanceRuntimeTask(agent, deltaSeconds, speedTilesPerSecond) {
 
   if (task.phase === 'working') {
     task.workElapsed += deltaSeconds;
-    settleLaborEnergy(agent, task, deltaSeconds, 'working');
+    accumulateLaborEnergy(task, deltaSeconds, 'working');
     if (task.workElapsed >= task.workDuration) {
-      settleLaborEnergy(agent, task, 0, 'working', { force: true });
+      settleLaborEnergy(agent, task);
       return { kind: 'completed', task };
     }
     return { kind: 'working', task };
