@@ -87,6 +87,7 @@ export function createWorldSaveSystem({
         foodStorage: maybeExport(foodStorageSystem),
         foodDistribution: maybeExport(runtime?.actionSystem?.getFoodDistributionSystem?.()),
         tools: maybeExport(runtime?.toolSystem),
+        resourceFlow: maybeExport(runtime?.resourceFlowSystem),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
         actionRuntime: exportActionRuntimeSnapshot({
@@ -136,6 +137,7 @@ export function createWorldSaveSystem({
       ['foodStorage', '食物储存', foodStorageSystem],
       ['foodDistribution', '食物分配', runtime?.actionSystem?.getFoodDistributionSystem?.()],
       ['tools', '工具', runtime?.toolSystem],
+      ['resourceFlow', '资源流水', runtime?.resourceFlowSystem],
       ['socialEvents', '社会事件', socialEventSystem],
       ['chronicles', '史书', chronicleSystem],
     ];
@@ -156,6 +158,9 @@ export function createWorldSaveSystem({
     });
     if (snapshot.systems.tools === null || snapshot.systems.tools === undefined) {
       runtime?.toolSystem?.resetToDefaults?.();
+    }
+    if (snapshot.systems.resourceFlow === null || snapshot.systems.resourceFlow === undefined) {
+      runtime?.resourceFlowSystem?.importState?.({ schemaVersion: 1, sequence: 0, entries: [] });
     }
   }
 
@@ -179,6 +184,7 @@ export function createWorldSaveSystem({
     return {
       buildings: buildingSystem?.createCheckpoint?.() ?? null,
       tools: runtime?.toolSystem?.createCheckpoint?.() ?? null,
+      resourceFlow: runtime?.resourceFlowSystem?.createCheckpoint?.() ?? null,
     };
   }
 
@@ -188,6 +194,9 @@ export function createWorldSaveSystem({
     }
     if (checkpoint?.tools && runtime?.toolSystem?.restoreCheckpoint) {
       runtime.toolSystem.restoreCheckpoint(checkpoint.tools);
+    }
+    if (checkpoint?.resourceFlow && runtime?.resourceFlowSystem?.restoreCheckpoint) {
+      runtime.resourceFlowSystem.restoreCheckpoint(checkpoint.resourceFlow);
     }
   }
 
