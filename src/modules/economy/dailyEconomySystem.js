@@ -164,13 +164,13 @@ function buildBalances(opening, closing, summary) {
   return balances;
 }
 
-function detectBottlenecks({ flow, labor, denials, targets, balances }) {
+function detectBottlenecks({ flow, labor, denials, stockTargets, balances }) {
   const bottlenecks = [];
   if (denials.total > 0) {
     bottlenecks.push({ type: 'survival-shortage', severity: 'high', value: denials.total, label: `生存物资请求被拒 ${denials.total} 次` });
   }
 
-  Object.entries(stockGaps(targets)).forEach(([itemId, gap]) => {
+  Object.entries(stockGaps(stockTargets)).forEach(([itemId, gap]) => {
     if (gap > 0.01) bottlenecks.push({ type: 'stock-gap', severity: gap >= 5 ? 'high' : 'medium', itemId, value: gap, label: `${itemId} 距三日目标仍差 ${gap}` });
   });
 
