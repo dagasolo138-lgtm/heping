@@ -119,7 +119,7 @@ test('工具磨损和修理进入耐久流水', () => {
   assert.equal(entries[1].amount, 3);
 });
 
-test('存档往返保留顺序与记录，瞬时队列由检查点恢复', () => {
+test('存档往返保留顺序与记录，检查点先结算悬空变化', () => {
   const harness = createHarness();
   harness.people[0].inventory.items.wood = 1;
   observePerson(harness);
@@ -133,10 +133,10 @@ test('存档往返保留顺序与记录，瞬时队列由检查点恢复', () =>
   harness.setTick(14);
   harness.people[0].inventory.items.water = 1;
   observePerson(harness);
-  const withPending = harness.system.createCheckpoint();
-  harness.system.flush();
-  harness.system.restoreCheckpoint(withPending);
-  assert.equal(harness.system.getSummary({ skipFlush: true }).pending, 1);
+  const settledCheckpoint = harness.system.createCheckpoint();
+  assert.equal(settledCheckpoint.pending.length, 0);
+  assert.equal(harness.system.getSummary({ skipFlush: true }).pending, 0);
+  assert.ok(settledCheckpoint.state.entries.some((entry) => entry.itemId === 'water'));
 
   harness.system.restoreCheckpoint(checkpoint);
   assert.equal(harness.system.verify().ok, true);
