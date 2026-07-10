@@ -2,6 +2,7 @@ import { createId } from '../../core/ids/createId.js';
 
 export const RESOURCE_FLOW_SCHEMA_VERSION = 1;
 const DEFAULT_MAX_ENTRIES = 5000;
+const TRANSFER_ACTIONS = new Set(['haulToCamp', 'deliverMaterials']);
 
 function clone(value) {
   return structuredClone(value);
@@ -66,6 +67,14 @@ function categoryFor(from, to, kind) {
   return 'transfer';
 }
 
+function canPair(negative, positive) {
+  if (negative.taskId && positive.taskId && negative.taskId === positive.taskId) return true;
+  const campPerson = (negative.account.startsWith('camp:') && positive.account.startsWith('person:'))
+    || (negative.account.startsWith('person:') && positive.account.startsWith('camp:'));
+  const actionType = positive.actionType ?? negative.actionType;
+  return campPerson && TRANSFER_ACTIONS.has(actionType);
+}
+
 export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () => globalThis.shengling, maxEntries = DEFAULT_MAX_ENTRIES } = {}) {
   const entries = [];
   const pending = [];
@@ -103,7 +112,7 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
     });
     entries.push(entry);
     if (entries.length > maxEntries) entries.splice(0, entries.length - maxEntries);
-    eventBus?.emit?.('resource-flow:recorded', { entry: clone(entry), summary: getSummary() });
+    eventBus?.emit?.('resource-flow:recorded', { entry: clone(entry), summary: getSummary({ skipFlush: true }) });
     return clone(entry);
   }
 
@@ -134,7 +143,7 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
     for (const negative of negatives) {
       for (const positive of positives) {
         if (negative.remaining <= 0) break;
-        if (positive.remaining <= 0) continue;
+        if (positive.remaining <= 0 || !canPair(negative, positive)) continue;
         const amount = round(Math.min(negative.remaining, positive.remaining));
         append({
           itemId: negative.itemId,
