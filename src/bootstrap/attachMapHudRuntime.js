@@ -25,20 +25,13 @@ export function attachMapHudRuntime() {
   const mapWrap = document.querySelector('.map-canvas-wrap');
   if (!mapWrap) throw new Error('地图信息模块启动失败：找不到地图容器。');
   const toggle = ensureToggle(mapWrap);
-  const mobileQuery = window.matchMedia('(max-width: 820px)');
-  let collapsed = mobileQuery.matches;
+  let collapsed = true;
 
   applyState(mapWrap, toggle, collapsed);
   toggle.addEventListener('click', () => {
     collapsed = !collapsed;
     applyState(mapWrap, toggle, collapsed);
   });
-
-  const onViewportChange = (event) => {
-    if (event.matches) collapsed = true;
-    applyState(mapWrap, toggle, collapsed);
-  };
-  mobileQuery.addEventListener?.('change', onViewportChange);
 
   const api = Object.freeze({
     isCollapsed: () => collapsed,

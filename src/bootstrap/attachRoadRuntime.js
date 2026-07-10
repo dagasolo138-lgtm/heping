@@ -3,15 +3,6 @@ import { createRoadSystem } from '../modules/roads/roadSystem.js';
 const BASE_SAMPLE_INTERVAL_MS = 240;
 const MIN_SAMPLE_INTERVAL_MS = 16;
 
-function updatePhaseCopy() {
-  const eyebrow = document.querySelector('.eyebrow');
-  const subtitle = document.querySelector('.subtitle');
-  const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 09';
-  if (subtitle) subtitle.textContent = '起始河谷 · 生存、建造与聚落路径原型';
-  if (note) note.innerHTML = '<strong>第九阶段：</strong>村民反复走过同一片土地，会留下踩踏痕迹；痕迹累积后形成土路。成型土路让行走速度提高 16%。';
-}
-
 function ensureReadout() {
   let readout = document.querySelector('#road-readout');
   if (readout) return readout;
@@ -77,7 +68,6 @@ export function attachRoadRuntime() {
     });
   }
 
-  updatePhaseCopy();
   renderReadout(readout, roadSystem);
   eventBus.on('roads:changed', ({ changed }) => {
     renderReadout(readout, roadSystem);

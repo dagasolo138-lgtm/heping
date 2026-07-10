@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.24.2",
-  "buildId": "v0.24.2-day4-stability-20260709-01",
-  "sourceCommit": "d07ef47a64511d929e297b00b494c83b64975efe",
+  "version": "v0.25.0",
+  "buildId": "v0.25.0-map-first-observer-20260709-01",
+  "sourceCommit": "1b26c1b4f178c16f3f5f26843b64a46aee35f7bf",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {

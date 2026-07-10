@@ -13,15 +13,6 @@ function ensureStylesheet() {
   return stylesheet;
 }
 
-function updatePhaseCopy() {
-  const eyebrow = document.querySelector('.eyebrow');
-  const subtitle = document.querySelector('.subtitle');
-  const note = document.querySelector('.phase-note');
-  if (eyebrow) eyebrow.textContent = 'SHENGLING / FOUNDATION 16';
-  if (subtitle) subtitle.textContent = '起始河谷 · 荒野手账与聚落观察器';
-  if (note) note.innerHTML = '<strong>第十六阶段：</strong>界面整理为聚落观察器。地图成为主观察窗口，存档、倍速、天气与系统状态收进顶部手账栏；模拟规则保持不变。';
-}
-
 function render({ buttons, status }, speed) {
   buttons.forEach((button) => {
     const active = Number(button.dataset.worldSpeed) === speed.value;
@@ -38,7 +29,6 @@ export function attachWorldSpeedRuntime() {
   if (runtime.worldSpeedRuntime) return runtime.worldSpeedRuntime;
 
   ensureStylesheet();
-  updatePhaseCopy();
   const worldSpeedSystem = runtime.worldSpeedSystem ?? createWorldSpeedSystem({
     eventBus,
     gameTime: runtime.gameTime,
