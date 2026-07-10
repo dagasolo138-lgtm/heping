@@ -22,7 +22,7 @@ function settleLaborEnergy(agent, task, deltaSeconds, phase, { force = false } =
     ? Number(profile.movementExtraEnergyRate ?? 0)
     : Number(profile.workExtraEnergyRate ?? 0);
   task.laborEnergyPending = Number(task.laborEnergyPending ?? 0) + Math.max(0, rate) * Math.max(0, deltaSeconds);
-  if (!force && task.laborEnergyPending < 0.05) return 0;
+  if (!force && task.laborEnergyPending < 0.25) return 0;
   const amount = task.laborEnergyPending;
   task.laborEnergyPending = 0;
   const { peopleSystem, person } = runtimeContext(agent.personId);
