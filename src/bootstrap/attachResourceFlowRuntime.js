@@ -38,6 +38,7 @@ export function attachResourceFlowRuntime() {
   if (runtime.resourceFlowSystem) return runtime.resourceFlowSystem;
 
   const resourceFlowSystem = createResourceFlowSystem({
+    eventBus,
     gameTime: runtime.gameTime,
     getRuntime: () => globalThis.shengling,
   });
@@ -48,6 +49,8 @@ export function attachResourceFlowRuntime() {
   });
 
   eventBus.on('*', ({ eventName, payload }) => resourceFlowSystem.observe(eventName, payload));
+  eventBus.on('resource-flow:recorded', () => scheduler.request('resource-flow:recorded'));
+  eventBus.on('resource-flow:hydrated', () => scheduler.request('resource-flow:hydrated'));
   eventBus.on('simulation:time', () => scheduler.request('simulation:time'));
   eventBus.on('save:loaded', () => {
     resourceFlowSystem.baseline();
