@@ -59,7 +59,7 @@ function explain(factors) {
     .slice(0, 3)
     .map(([key]) => ({
       personalNeed: '个人需求',
-      campScarcity: '营地稀缺',
+      campScarcity: '动态库存缺口',
       skillFit: '技能适配',
       roleFit: '职业倾向',
       traitBias: '性格倾向',
@@ -70,8 +70,8 @@ function explain(factors) {
     .join('、');
 }
 
-export function scoreUtilityCandidates({ person, desire, candidates, camp, population, actionCounts, allPeople = [] }) {
-  const scarcity = campScarcity({ camp, population });
+export function scoreUtilityCandidates({ person, desire, candidates, camp, population, actionCounts, allPeople = [], stockTargets = null }) {
+  const scarcity = campScarcity({ camp, population, stockTargets });
   return candidates.map((candidate) => {
     const social = scoreSocialUtility({ person, candidate, allPeople });
     const factors = {
