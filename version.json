@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.25.2",
-  "buildId": "v0.25.2-mobile-drawer-gesture-20260710-01",
-  "sourceCommit": "16fc6f6157c13c50554b2b36e22d0d8695dc7ad4",
+  "version": "v0.25.3",
+  "buildId": "v0.25.3-runtime-position-save-20260710-01",
+  "sourceCommit": "ddbf7940c70f742aecb83bfffe1e894679e1b340",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional commit for the v0.25.2 mobile drawer gesture implementation; later documentation and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the final functional commit for the v0.25.3 interrupted-task save and runtime-position restore implementation; later tests, documentation and manifest commits may follow it."
   }
 }
