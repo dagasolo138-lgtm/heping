@@ -126,7 +126,7 @@ export function createFoodDistributionSystem({ eventBus, gameTime, campStore, ca
       emitDenied(result);
       return result;
     }
-    const taken = campStore.take(campId, choice.itemId, 1, 'eat');
+    const taken = campStore.take(campId, choice.itemId, 1, 'food:consume');
     if (taken <= 0) {
       result.deniedReason = 'takeFailed';
       emitDenied(result);
