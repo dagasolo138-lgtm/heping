@@ -17,6 +17,8 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     const resourceFlow = world.resourceFlow.verify();
     const resourceFlowContexts = world.resourceFlowTaskContextGuard.verify();
     const economy = world.dailyEconomy.verify();
+    const maintenance = world.tools.verifyMaintenance();
+    const maintenanceRuntime = world.toolMaintenanceRuntime.verify();
     const alivePeople = world.people.getAliveRuntime();
     const activeTasks = world.taskLifecycle.list({ status: 'active' });
     const activeTaskIds = new Set(activeTasks.map((record) => record.taskId));
@@ -24,12 +26,16 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     const reservations = world.reservationLedger.list();
     const reservationIds = reservations.map((entry) => entry.id);
     const toolAssignments = world.tools.getAssignments();
+    const maintenanceReservations = world.toolMaintenanceRuntime.listReservations();
 
     assert.equal(diagnostics.lastSimulationError, null);
     assert.equal(lifecycle.ok, true, JSON.stringify(lifecycle.issues));
     assert.equal(resourceFlow.ok, true, JSON.stringify(resourceFlow.issues));
     assert.equal(resourceFlowContexts.ok, true, JSON.stringify(resourceFlowContexts.issues));
     assert.equal(economy.ok, true, JSON.stringify(economy.issues));
+    assert.equal(maintenance.ok, true, JSON.stringify(maintenance.errors));
+    assert.equal(maintenanceRuntime.ok, true, JSON.stringify(maintenanceRuntime.issues));
+    assert.ok(maintenanceReservations.length <= 1, '同时存在多个维修任务');
     assert.ok(resourceFlowContexts.tracked <= alivePeople.length);
     assert.ok(activeTasks.length <= alivePeople.length);
     assert.equal(new Set(activePersonIds).size, activePersonIds.length, '同一人物存在多个活动任务');
@@ -38,6 +44,10 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     reservations.forEach((entry) => {
       if (entry.taskId) assert.ok(activeTaskIds.has(entry.taskId), `发现孤立预留：${entry.id}`);
       assert.ok(Number(entry.amount) > 0, `预留数量无效：${entry.id}`);
+      if (entry.type === 'camp-item') {
+        const [campId, itemId] = entry.key.split(':');
+        assert.ok(Number(world.camp.get(campId)?.items?.[itemId] ?? 0) >= Number(entry.amount), `维修材料预留超过库存：${entry.id}`);
+      }
     });
 
     activeTasks.forEach((record) => {
@@ -51,6 +61,14 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
         reservations.some((entry) => entry.id === assignment.reservationId && entry.type === 'tool'),
         `工具占用缺少预留：${assignment.taskId}`,
       );
+    });
+
+    maintenanceReservations.forEach((bundle) => {
+      assert.ok(activeTaskIds.has(bundle.taskId), `发现孤立维修任务：${bundle.taskId}`);
+      assert.ok(reservations.some((entry) => entry.id === bundle.targetReservationId && entry.type === 'tool'), `维修任务缺少目标工具预留：${bundle.taskId}`);
+      bundle.materialReservations.forEach((material) => {
+        assert.ok(reservations.some((entry) => entry.id === material.reservationId && entry.type === 'camp-item'), `维修任务缺少材料预留：${material.reservationId}`);
+      });
     });
 
     world.tools.list().forEach((tool) => {
