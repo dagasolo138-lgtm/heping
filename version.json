@@ -3,12 +3,12 @@
   "project": "生灵",
   "version": "v0.27.6",
   "buildId": "v0.27.6-survival-economy-audit-20260711-01",
-  "sourceCommit": "1b8f0fc42a1cce92a8f8b7253f52a935c56550a2",
+  "sourceCommit": "91794cef9ad2835926b86f34e842b6562d68ea43",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional v0.27.6 commit containing task lifecycle accounting, two-stage material delivery labor, corrected economic metrics, year-aware resource flow queries, the real Chromium mobile smoke test, CI wiring, compact speed status and world-save app version; later README, ROADMAP, CODEX and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the final functional v0.27.6 commit containing task lifecycle accounting, two-stage material delivery labor, corrected economic metrics, year-aware resource flow queries, the real Chromium mobile smoke test and its strict cleanup wrapper, CI wiring, compact speed status and world-save app version; later README, ROADMAP, CODEX and manifest commits may follow it."
   }
 }
