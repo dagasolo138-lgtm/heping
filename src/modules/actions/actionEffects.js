@@ -10,10 +10,15 @@ function itemText(items) {
     .join('、');
 }
 
+function activeEcologySystem(explicit) {
+  return explicit ?? globalThis.shengling?.ecologySystem ?? null;
+}
+
 export function completeAction({ agent, task, peopleSystem, mapSystem, campStore, ecologySystem, gameTime, campId }) {
   const person = peopleSystem.get(agent.personId);
   if (!person) return null;
   const stamp = gameTime.stamp();
+  const ecology = activeEcologySystem(ecologySystem);
   let summary = '';
   let details = { taskId: task.id, action: task.type };
 
@@ -27,7 +32,7 @@ export function completeAction({ agent, task, peopleSystem, mapSystem, campStore
     const harvested = mapSystem.removeFeature(task.data.featureId);
     if (harvested) {
       const value = Number(task.data.yield ?? 2);
-      const renewal = ecologySystem?.registerDepletion(harvested);
+      const renewal = ecology?.registerDepletion(harvested);
       peopleSystem.changeItem(person.id, 'berries', value);
       summary = `${person.identity.name}采下了 ${value} 份浆果，灌丛将随季节恢复。`;
       details = { ...details, featureId: harvested.id, resource: 'berries', renewalAtTick: renewal?.regrowAtTick ?? null };
@@ -38,7 +43,7 @@ export function completeAction({ agent, task, peopleSystem, mapSystem, campStore
     const felled = mapSystem.removeFeature(task.data.featureId);
     if (felled) {
       const value = Number(task.data.yield ?? 4);
-      const renewal = ecologySystem?.registerDepletion(felled);
+      const renewal = ecology?.registerDepletion(felled);
       peopleSystem.changeItem(person.id, 'wood', value);
       summary = `${person.identity.name}砍倒了一棵树，获得 ${value} 份木材；树桩留下等待新芽。`;
       details = { ...details, featureId: felled.id, resource: 'wood', renewalAtTick: renewal?.regrowAtTick ?? null };
