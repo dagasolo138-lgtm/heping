@@ -189,6 +189,7 @@ export function createWorldSaveSystem({
     return {
       buildings: buildingSystem?.createCheckpoint?.() ?? null,
       tools: runtime?.toolSystem?.createCheckpoint?.() ?? null,
+      toolMaintenance: runtime?.toolMaintenanceRuntime?.createCheckpoint?.() ?? null,
       resourceFlow: runtime?.resourceFlowSystem?.createCheckpoint?.() ?? null,
       dailyEconomy: runtime?.dailyEconomySystem?.createCheckpoint?.() ?? null,
       actionRuntime: runtime?.actionSystem?.createRuntimeCheckpoint?.() ?? null,
@@ -210,6 +211,9 @@ export function createWorldSaveSystem({
     }
     if (checkpoint?.actionRuntime && runtime?.actionSystem?.restoreRuntimeCheckpoint) {
       runtime.actionSystem.restoreRuntimeCheckpoint(checkpoint.actionRuntime);
+    }
+    if (checkpoint?.toolMaintenance && runtime?.toolMaintenanceRuntime?.restoreCheckpoint) {
+      runtime.toolMaintenanceRuntime.restoreCheckpoint(checkpoint.toolMaintenance);
     }
   }
 
