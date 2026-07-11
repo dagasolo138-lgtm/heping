@@ -70,7 +70,7 @@ function finalWorldStateDigest(world) {
 }
 
 function compactIssues(result) {
-  return (result?.issues ?? []).slice(0, 12);
+  return (result?.issues ?? result?.errors ?? []).slice(0, 12);
 }
 
 function auditCheckpoint(world, expectedDay, historicalDigests) {
@@ -80,10 +80,12 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   const flowVerification = world.resourceFlow.verify();
   const taskContextVerification = world.resourceFlowTaskContextGuard.verify();
   const economyVerification = world.dailyEconomy.verify();
+  const maintenanceVerification = world.tools.verifyMaintenance();
   const activeTasks = world.taskLifecycle.list({ status: 'active' });
   const activeTaskIds = new Set(activeTasks.map((record) => record.taskId));
   const reservations = world.reservationLedger.list();
   const toolAssignments = world.tools.getAssignments();
+  const maintenanceDemands = world.tools.listMaintenanceDemands();
   const alive = world.people.getAliveRuntime().length;
   const reports = world.dailyEconomy.listReports();
   const currentKey = `${now.year}:${now.day}`;
@@ -105,6 +107,9 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.equal(flowVerification.ok, true, JSON.stringify(compactIssues(flowVerification)));
   assert.equal(taskContextVerification.ok, true, JSON.stringify(compactIssues(taskContextVerification)));
   assert.equal(economyVerification.ok, true, JSON.stringify(compactIssues(economyVerification)));
+  assert.equal(maintenanceVerification.ok, true, JSON.stringify(compactIssues(maintenanceVerification)));
+  assert.equal(maintenanceVerification.demandCount, maintenanceDemands.length);
+  assert.ok(maintenanceDemands.length <= world.tools.list().length, 'Maintenance demands exceed tool count');
   assert.equal(reports.length, expectedDay, `Expected ${expectedDay} reports, got ${reports.length}`);
   assert.ok(activeTasks.length <= alive, `Active tasks ${activeTasks.length} exceed alive people ${alive}`);
   assert.ok(taskContextVerification.tracked <= alive, `Task contexts ${taskContextVerification.tracked} exceed alive people ${alive}`);
@@ -143,6 +148,11 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
     },
     reservations: world.reservationLedger.getSummary(),
     toolSummary: world.tools.getSummary(),
+    maintenance: {
+      demands: maintenanceDemands.length,
+      urgent: maintenanceDemands.filter((demand) => demand.priority === 'high').length,
+      verification: maintenanceVerification.ok,
+    },
     flowEntries: flowEntries.length,
     reports: reports.length,
     finalizedReports: finalizedReports.length,
@@ -152,6 +162,7 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
       resourceFlow: flowVerification.ok,
       resourceFlowTaskContexts: taskContextVerification.ok,
       dailyEconomy: economyVerification.ok,
+      toolMaintenance: maintenanceVerification.ok,
       simulationError: actionDiagnostics.lastSimulationError,
       orphanReservations: orphanReservations.length,
       orphanTools: orphanTools.length,
@@ -228,7 +239,7 @@ try {
       `STABILITY_CHECKPOINT day=${day} batch=${BATCH_SIZE} `
       + `ticksPerSecond=${snapshot.segment.ticksPerSecond} heap=${snapshot.heapUsedBytes} `
       + `active=${snapshot.activeTasks} reservations=${snapshot.reservations.total} `
-      + `taskContexts=${snapshot.resourceFlowTaskContexts.tracked}`,
+      + `maintenance=${snapshot.maintenance.demands} taskContexts=${snapshot.resourceFlowTaskContexts.tracked}`,
     );
   }
 
