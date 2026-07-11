@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,15 +21,6 @@ jobs:
         run: |
           set -o pipefail
           npm test | tee test-output.log
-      - name: Run mobile browser smoke
-        run: npm run test:mobile-smoke
-      - name: Upload mobile smoke artifacts
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('.artifacts/*') != ''
-        with:
-          name: mobile-browser-smoke
-          path: .artifacts/
-          retention-days: 7
       - name: Read deterministic fingerprints
         if: always()
         id: fingerprints
@@ -53,3 +44,34 @@ jobs:
           path: test-output.log
           retention-days: 7
       - run: npm run build
+
+  mobile-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --check scripts/mobileBrowserSmoke.js
+      - name: Run mobile browser smoke
+        run: |
+          set +e
+          npm run test:mobile-smoke
+          status=$?
+          if [ -f .artifacts/mobile-smoke-failure.json ]; then
+            echo '--- mobile-smoke-failure.json ---'
+            cat .artifacts/mobile-smoke-failure.json
+          fi
+          exit $status
+      - name: Upload mobile smoke artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-browser-smoke
+          path: .artifacts/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
