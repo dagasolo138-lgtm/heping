@@ -286,6 +286,7 @@ try {
     && window.shengling?.taskLifecycleSystem
     && window.shengling?.dailyEconomySystem
     && window.shengling?.resourceFlowSystem
+    && window.shengling?.worldSaveRuntime
     && document.querySelector('#people-list')?.children.length === 10
   )`);
 
@@ -309,6 +310,7 @@ try {
         window.shengling?.taskLifecycleSystem
         && window.shengling?.dailyEconomySystem
         && window.shengling?.resourceFlowSystem
+        && window.shengling?.worldSaveRuntime
       ),
       simulationError: window.shengling?.actionSystem?.getDiagnostics?.().lastSimulationError ?? null,
     };
@@ -383,6 +385,81 @@ try {
   assert.equal(dragMode.disabled.pressed, 'false');
   assert.match(dragMode.disabled.touchAction, /pan-y/);
 
+  const saveLoad = await evaluate(client, `(async () => {
+    const runtime = window.shengling;
+    const actionSystem = runtime.actionSystem;
+    const saveRuntime = runtime.worldSaveRuntime;
+    const systemMenu = document.querySelector('.system-menu');
+    const saveButton = document.querySelector('[data-save-action="save"]');
+    const loadButton = document.querySelector('[data-save-action="load"]');
+    const status = document.querySelector('[data-save-status]');
+    const wasRunning = actionSystem.isRunning();
+
+    saveRuntime.setAutosaveEnabled(false);
+    actionSystem.stop();
+    systemMenu.open = true;
+    const savedTick = runtime.gameTime.stamp().tick;
+    saveButton.click();
+    const savedStatus = status.textContent.trim();
+    const hasManualSave = runtime.worldSaveSystem.hasSave('manual');
+
+    actionSystem.advanceTicks(30, { publishUi: true });
+    const advancedTick = runtime.gameTime.stamp().tick;
+    window.confirm = () => true;
+    loadButton.click();
+    const firstLoadedTick = runtime.gameTime.stamp().tick;
+    const firstStatus = status.textContent.trim();
+    const firstVerification = {
+      lifecycle: runtime.taskLifecycleSystem.verify().ok,
+      resourceFlow: runtime.resourceFlowSystem.verify().ok,
+      economy: runtime.dailyEconomySystem.verify().ok,
+      simulationError: actionSystem.getDiagnostics().lastSimulationError,
+    };
+
+    loadButton.click();
+    const secondLoadedTick = runtime.gameTime.stamp().tick;
+    const secondStatus = status.textContent.trim();
+    const secondVerification = {
+      lifecycle: runtime.taskLifecycleSystem.verify().ok,
+      resourceFlow: runtime.resourceFlowSystem.verify().ok,
+      economy: runtime.dailyEconomySystem.verify().ok,
+      simulationError: actionSystem.getDiagnostics().lastSimulationError,
+    };
+    const scrollWidth = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth);
+    systemMenu.open = false;
+    if (wasRunning) actionSystem.start();
+
+    return {
+      savedTick,
+      advancedTick,
+      firstLoadedTick,
+      secondLoadedTick,
+      savedStatus,
+      firstStatus,
+      secondStatus,
+      hasManualSave,
+      firstVerification,
+      secondVerification,
+      scrollWidth,
+    };
+  })()`);
+
+  assert.equal(saveLoad.hasManualSave, true);
+  assert.ok(saveLoad.advancedTick >= saveLoad.savedTick + 30);
+  assert.equal(saveLoad.firstLoadedTick, saveLoad.savedTick);
+  assert.equal(saveLoad.secondLoadedTick, saveLoad.savedTick);
+  assert.match(saveLoad.savedStatus, /保存完成|最近存档/);
+  assert.match(saveLoad.firstStatus, /读取存档完成/);
+  assert.match(saveLoad.secondStatus, /读取存档完成/);
+  assert.deepEqual(saveLoad.firstVerification, {
+    lifecycle: true,
+    resourceFlow: true,
+    economy: true,
+    simulationError: null,
+  });
+  assert.deepEqual(saveLoad.secondVerification, saveLoad.firstVerification);
+  assert.ok(saveLoad.scrollWidth <= 391, `Open system menu overflows horizontally: ${saveLoad.scrollWidth}px`);
+
   await evaluate(client, `document.querySelector('[data-world-speed="10"]').click()`);
   await delay(650);
   const running = await evaluate(client, `(() => ({
@@ -400,7 +477,7 @@ try {
 
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true });
   await writeFile(join(ARTIFACT_DIR, 'mobile-smoke.png'), Buffer.from(screenshot.data, 'base64'));
-  await writeFile(join(ARTIFACT_DIR, 'mobile-smoke-state.json'), `${JSON.stringify({ initial, campState, dragMode, running, browserErrors }, null, 2)}\n`);
+  await writeFile(join(ARTIFACT_DIR, 'mobile-smoke-state.json'), `${JSON.stringify({ initial, campState, dragMode, saveLoad, running, browserErrors }, null, 2)}\n`);
   console.log('MOBILE_BROWSER_SMOKE=PASS');
 } catch (error) {
   const failure = {

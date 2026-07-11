@@ -191,6 +191,7 @@ export function createWorldSaveSystem({
       tools: runtime?.toolSystem?.createCheckpoint?.() ?? null,
       resourceFlow: runtime?.resourceFlowSystem?.createCheckpoint?.() ?? null,
       dailyEconomy: runtime?.dailyEconomySystem?.createCheckpoint?.() ?? null,
+      actionRuntime: runtime?.actionSystem?.createRuntimeCheckpoint?.() ?? null,
     };
   }
 
@@ -206,6 +207,9 @@ export function createWorldSaveSystem({
     }
     if (checkpoint?.dailyEconomy && runtime?.dailyEconomySystem?.restoreCheckpoint) {
       runtime.dailyEconomySystem.restoreCheckpoint(checkpoint.dailyEconomy);
+    }
+    if (checkpoint?.actionRuntime && runtime?.actionSystem?.restoreRuntimeCheckpoint) {
+      runtime.actionSystem.restoreRuntimeCheckpoint(checkpoint.actionRuntime);
     }
   }
 

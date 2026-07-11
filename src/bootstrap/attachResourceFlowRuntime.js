@@ -1,5 +1,6 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createResourceFlowSystem } from '../modules/economy/resourceFlowSystem.js';
+import { attachResourceFlowTaskContextGuard } from '../modules/economy/resourceFlowTaskContextGuard.js';
 import { createYearAwareResourceFlowView } from '../modules/economy/yearAwareResourceFlowView.js';
 
 function ensureReadout() {
@@ -44,6 +45,11 @@ export function attachResourceFlowRuntime() {
     gameTime: runtime.gameTime,
     getRuntime: () => globalThis.shengling,
   });
+  const resourceFlowTaskContextGuard = attachResourceFlowTaskContextGuard({
+    eventBus,
+    resourceFlowSystem: baseResourceFlowSystem,
+    getRuntime: () => globalThis.shengling,
+  });
   const resourceFlowSystem = createYearAwareResourceFlowView({
     resourceFlowSystem: baseResourceFlowSystem,
     gameTime: runtime.gameTime,
@@ -63,7 +69,11 @@ export function attachResourceFlowRuntime() {
     scheduler.request('save:loaded');
   });
 
-  globalThis.shengling = Object.freeze({ ...runtime, resourceFlowSystem });
+  globalThis.shengling = Object.freeze({
+    ...runtime,
+    resourceFlowSystem,
+    resourceFlowTaskContextGuard,
+  });
   scheduler.flush('initial');
   return resourceFlowSystem;
 }

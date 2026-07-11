@@ -82,10 +82,38 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
   const campShadow = new Map();
   const toolShadow = new Map();
   const taskContext = new Map();
+  const rollingByItem = {};
+  const rollingByCategory = {};
   let sequence = 0;
 
   function stamp() {
     return clone(gameTime?.stamp?.() ?? { tick: 0, year: 1, day: 1, minute: 0, label: '未知时间' });
+  }
+
+  function adjustRolling(bucket, key, delta) {
+    const next = round(Number(bucket[key] ?? 0) + Number(delta ?? 0));
+    if (Math.abs(next) < 0.0005) delete bucket[key];
+    else bucket[key] = next;
+  }
+
+  function applyRolling(entry, direction = 1) {
+    adjustRolling(rollingByItem, entry.itemId, Number(entry.amount) * direction);
+    adjustRolling(rollingByCategory, entry.category, Number(entry.amount) * direction);
+  }
+
+  function resetRolling() {
+    Object.keys(rollingByItem).forEach((key) => delete rollingByItem[key]);
+    Object.keys(rollingByCategory).forEach((key) => delete rollingByCategory[key]);
+    entries.forEach((entry) => applyRolling(entry));
+  }
+
+  function rollingSummary() {
+    return {
+      totalEntries: entries.length,
+      pending: pending.length,
+      byItem: clone(rollingByItem),
+      byCategory: clone(rollingByCategory),
+    };
   }
 
   function append(input) {
@@ -111,8 +139,12 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
       metadata: clone(input.metadata ?? {}),
     });
     entries.push(entry);
-    if (entries.length > maxEntries) entries.splice(0, entries.length - maxEntries);
-    eventBus?.emit?.('resource-flow:recorded', { entry: clone(entry), summary: getSummary({ skipFlush: true }) });
+    applyRolling(entry);
+    if (entries.length > maxEntries) {
+      const evicted = entries.splice(0, entries.length - maxEntries);
+      evicted.forEach((removed) => applyRolling(removed, -1));
+    }
+    eventBus?.emit?.('resource-flow:recorded', { entry: clone(entry), summary: rollingSummary() });
     return clone(entry);
   }
 
@@ -208,17 +240,24 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
     if (!ready.length) return [];
     const readyIds = new Set(ready.map((entry) => entry.id));
     const groups = new Map();
+    const appended = [];
     ready.forEach((entry) => {
       const key = `${entry.tick}:${entry.itemId}:${entry.unit}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(entry);
     });
-    const before = entries.length;
+    const previousSequence = sequence;
     groups.forEach(flushGroup);
+    if (sequence > previousSequence) {
+      const firstSequence = previousSequence + 1;
+      entries.forEach((entry) => {
+        if (entry.sequence >= firstSequence) appended.push(clone(entry));
+      });
+    }
     for (let index = pending.length - 1; index >= 0; index -= 1) {
       if (readyIds.has(pending[index].id)) pending.splice(index, 1);
     }
-    return entries.slice(before).map(clone);
+    return appended;
   }
 
   function diffItems(account, previous = {}, next = {}, context = {}) {
@@ -314,20 +353,36 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
     }
   }
 
-  function list(filter = {}) {
-    flush();
+  function selectEntries(filter = {}) {
     return entries
       .filter((entry) => !filter.itemId || entry.itemId === filter.itemId)
       .filter((entry) => !filter.category || entry.category === filter.category)
       .filter((entry) => !filter.personId || entry.personId === filter.personId)
       .filter((entry) => filter.day === undefined || Number(entry.time?.day) === Number(filter.day))
       .filter((entry) => filter.sinceTick === undefined || entry.tick >= Number(filter.sinceTick))
-      .slice(filter.limit ? -Math.max(0, Number(filter.limit)) : 0)
-      .map(clone);
+      .slice(filter.limit ? -Math.max(0, Number(filter.limit)) : 0);
+  }
+
+  function list(filter = {}) {
+    flush();
+    return selectEntries(filter).map(clone);
+  }
+
+  function hasSummaryFilter(filter = {}) {
+    return Boolean(
+      filter.itemId
+      || filter.category
+      || filter.personId
+      || filter.day !== undefined
+      || filter.sinceTick !== undefined
+      || filter.limit,
+    );
   }
 
   function getSummary(filter = {}) {
-    const selected = filter.skipFlush ? entries : list(filter);
+    if (!filter.skipFlush) flush();
+    if (!hasSummaryFilter(filter)) return rollingSummary();
+    const selected = selectEntries(filter);
     const byItem = {};
     const byCategory = {};
     selected.forEach((entry) => {
@@ -378,10 +433,11 @@ export function createResourceFlowSystem({ eventBus, gameTime, getRuntime = () =
       if (!entry?.id || !(Number(entry.amount) > 0) || !entry.from || !entry.to) throw new Error('资源流水包含无效记录。');
       entries.push(Object.freeze(clone(entry)));
     });
+    resetRolling();
     sequence = Math.max(Number(snapshot.sequence ?? 0), ...entries.map((entry) => Number(entry.sequence ?? 0)), 0);
     pending.length = 0;
     baseline();
-    eventBus?.emit?.('resource-flow:hydrated', { count: entries.length, summary: getSummary({ skipFlush: true }) });
+    eventBus?.emit?.('resource-flow:hydrated', { count: entries.length, summary: rollingSummary() });
     return list();
   }
 
