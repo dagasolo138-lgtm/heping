@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +21,15 @@ jobs:
         run: |
           set -o pipefail
           npm test | tee test-output.log
+      - name: Run mobile browser smoke
+        run: npm run test:mobile-smoke
+      - name: Upload mobile smoke artifacts
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('.artifacts/*') != ''
+        with:
+          name: mobile-browser-smoke
+          path: .artifacts/
+          retention-days: 7
       - name: Read deterministic fingerprints
         if: always()
         id: fingerprints
