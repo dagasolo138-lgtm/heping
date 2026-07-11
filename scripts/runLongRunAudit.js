@@ -47,6 +47,27 @@ function finalizedReportDigest(report) {
   });
 }
 
+function finalWorldStateDigest(world) {
+  return digest({
+    time: world.time.now(),
+    people: world.people.list({ sortBy: 'birth' }),
+    camp: world.camp.exportState(),
+    buildings: world.buildings.exportState(),
+    fire: world.fire.exportState(),
+    farms: world.farms.exportState(),
+    ecology: world.ecology.exportState(),
+    roads: world.roads.exportState(),
+    foodStorage: world.foodStorage.exportState(),
+    tools: world.tools.exportState(),
+    socialEvents: world.socialEvents.exportState(),
+    chronicles: world.chronicles.exportState(),
+    reservations: world.reservationLedger.list(),
+    taskLifecycle: world.taskLifecycle.exportState(),
+    resourceFlow: world.resourceFlow.exportState(),
+    dailyEconomy: world.dailyEconomy.exportState(),
+  });
+}
+
 function compactIssues(result) {
   return (result?.issues ?? []).slice(0, 12);
 }
@@ -152,9 +173,27 @@ const historicalDigests = new Map();
 const checkpoints = [];
 const startedAt = performance.now();
 let previousTick = world.time.now().tick;
-let failure = null;
+
+async function persistProgress(status, extra = {}) {
+  const elapsedMs = performance.now() - startedAt;
+  const report = {
+    status,
+    seed: SEED,
+    targetDay: TARGET_DAY,
+    targetMinute: TARGET_MINUTE,
+    batchSize: BATCH_SIZE,
+    totalTicks: targetTick(TARGET_DAY),
+    elapsedMs: Math.round(elapsedMs),
+    historicalReportsTracked: historicalDigests.size,
+    checkpoints,
+    ...extra,
+  };
+  await writeFile(artifactPath, `${JSON.stringify(report, null, 2)}\n`);
+  return report;
+}
 
 try {
+  await persistProgress('running');
   for (const day of checkpointDays(TARGET_DAY)) {
     const expectedTick = targetTick(day);
     const delta = expectedTick - previousTick;
@@ -174,6 +213,7 @@ try {
     );
     checkpoints.push(snapshot);
     previousTick = expectedTick;
+    await persistProgress('running', { completedThroughDay: day });
     console.log(
       `STABILITY_CHECKPOINT day=${day} batch=${BATCH_SIZE} `
       + `ticksPerSecond=${snapshot.segment.ticksPerSecond} heap=${snapshot.heapUsedBytes} `
@@ -182,33 +222,21 @@ try {
   }
 
   const elapsedMs = performance.now() - startedAt;
-  const report = {
-    status: 'pass',
-    seed: SEED,
-    targetDay: TARGET_DAY,
-    targetMinute: TARGET_MINUTE,
-    batchSize: BATCH_SIZE,
-    totalTicks: targetTick(TARGET_DAY),
+  const finalStateDigest = finalWorldStateDigest(world);
+  const report = await persistProgress('pass', {
     elapsedMs: Math.round(elapsedMs),
     ticksPerSecond: Math.round(targetTick(TARGET_DAY) / Math.max(0.001, elapsedMs / 1000)),
-    historicalReportsTracked: historicalDigests.size,
-    checkpoints,
-  };
-  await writeFile(artifactPath, `${JSON.stringify(report, null, 2)}\n`);
+    finalStateDigest,
+  });
   console.log(`STABILITY_AUDIT=PASS day=${TARGET_DAY} batch=${BATCH_SIZE}`);
+  console.log(`STABILITY_FINAL_DIGEST=${report.finalStateDigest}`);
   console.log(`STABILITY_AUDIT_ARTIFACT=${artifactPath}`);
 } catch (error) {
-  failure = {
-    status: 'fail',
-    seed: SEED,
-    targetDay: TARGET_DAY,
-    batchSize: BATCH_SIZE,
+  await persistProgress('fail', {
     message: error?.message ?? String(error),
     stack: error?.stack ?? null,
     currentTime: world.time.now(),
-    checkpoints,
-  };
-  await writeFile(artifactPath, `${JSON.stringify(failure, null, 2)}\n`);
+  });
   throw error;
 } finally {
   world.restoreGlobals();
