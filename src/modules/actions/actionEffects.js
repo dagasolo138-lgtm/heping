@@ -1,5 +1,6 @@
 import { CAMP_ITEM_LABELS } from '../settlements/campStore.js';
 import { ACTION_TYPES } from './actionTypes.js';
+import { completeToolMaintenance } from './toolMaintenanceEffects.js';
 
 const RESOURCE_IDS = ['wood', 'berries', 'millet', 'water'];
 
@@ -8,6 +9,17 @@ function itemText(items) {
     .filter(([, value]) => value > 0)
     .map(([id, value]) => `${CAMP_ITEM_LABELS[id] ?? id}×${value}`)
     .join('、');
+}
+
+function emitFailure({ personId, task, reason, details, time }) {
+  globalThis.__shenglingEventBus?.emit?.('actions:failed', {
+    personId,
+    taskId: task.id,
+    task: structuredClone(task),
+    reason,
+    details: structuredClone(details ?? {}),
+    time: structuredClone(time),
+  });
 }
 
 export function completeAction({ agent, task, peopleSystem, mapSystem, campStore, ecologySystem, gameTime, campId }) {
@@ -68,6 +80,31 @@ export function completeAction({ agent, task, peopleSystem, mapSystem, campStore
     details = { ...details, delivered };
   }
 
+  if (task.type === ACTION_TYPES.REPAIR_TOOL) {
+    const result = completeToolMaintenance({ agent, task, peopleSystem, campStore, gameTime });
+    summary = result.summary;
+    details = { ...details, ...result.details, outcome: result.ok ? 'completed' : 'failed', failureReason: result.ok ? null : result.reason };
+    if (!result.ok) {
+      peopleSystem.setLocation(person.id, { tileX: Math.round(agent.x), tileY: Math.round(agent.y) });
+      peopleSystem.addLifeEvent(person.id, {
+        type: `action:${task.type}:failed`,
+        summary,
+        relatedPersonIds: [],
+        details,
+        time: stamp,
+      });
+      const after = peopleSystem.get(person.id);
+      peopleSystem.setActivity(person.id, {
+        status: 'idle',
+        current: null,
+        lastFailed: { type: task.type, label: task.label, reason: result.reason, time: stamp },
+        failedCount: Number(after.activity.failedCount ?? 0) + 1,
+      });
+      emitFailure({ personId: person.id, task, reason: result.reason, details, time: stamp });
+      return null;
+    }
+  }
+
   if (task.type === ACTION_TYPES.REST) {
     const current = peopleSystem.get(person.id);
     peopleSystem.patchState(person.id, {
@@ -92,5 +129,5 @@ export function completeAction({ agent, task, peopleSystem, mapSystem, campStore
     lastCompleted: { type: task.type, label: task.label, time: stamp },
     completedCount: Number(after.activity.completedCount ?? 0) + 1,
   });
-  return { summary, personId: person.id };
+  return { summary, personId: person.id, details };
 }
