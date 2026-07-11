@@ -148,7 +148,9 @@ export function createTaskLifecycleEconomyView({
     return decorateReport(dailyEconomySystem.rollover(...args), taskLifecycleSystem, laborSnapshots);
   }
 
-  eventBus?.on?.('simulation:pre-tick', ({ time } = {}) => captureClosedDay(time));
+  eventBus?.on?.('*', ({ eventName, payload } = {}) => {
+    if (eventName === 'simulation:pre-tick') captureClosedDay(payload?.time);
+  });
 
   return Object.freeze({
     observe,
