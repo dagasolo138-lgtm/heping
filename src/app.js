@@ -7,6 +7,7 @@ import { attachFarmExpansionRuntime } from './bootstrap/attachFarmExpansionRunti
 import { attachFoodStorageRuntime } from './bootstrap/attachFoodStorageRuntime.js';
 import { attachStockTargetRuntime } from './bootstrap/attachStockTargetRuntime.js';
 import { attachToolRuntime } from './bootstrap/attachToolRuntime.js';
+import { attachToolMaintenanceRuntime } from './bootstrap/attachToolMaintenanceRuntime.js';
 import { attachLaborCostRuntime } from './bootstrap/attachLaborCostRuntime.js';
 import { attachResourceFlowRuntime } from './bootstrap/attachResourceFlowRuntime.js';
 import { attachTaskLifecycleRuntime } from './bootstrap/attachTaskLifecycleRuntime.js';
@@ -25,6 +26,7 @@ attachFarmExpansionRuntime();
 attachFoodStorageRuntime();
 attachStockTargetRuntime();
 attachToolRuntime();
+attachToolMaintenanceRuntime();
 attachLaborCostRuntime();
 attachResourceFlowRuntime();
 attachTaskLifecycleRuntime();
