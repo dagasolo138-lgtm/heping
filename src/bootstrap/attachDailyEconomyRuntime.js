@@ -1,5 +1,6 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createDailyEconomySystem } from '../modules/economy/dailyEconomySystem.js';
+import { createEconomicMetricsAuditView } from '../modules/economy/economicMetricsAuditView.js';
 import { createTaskLifecycleEconomyView } from '../modules/economy/taskLifecycleEconomyView.js';
 
 function ensureReadout() {
@@ -53,9 +54,12 @@ export function attachDailyEconomyRuntime() {
     resourceFlowSystem: runtime.resourceFlowSystem,
     getRuntime: () => globalThis.shengling,
   });
-  const dailyEconomySystem = createTaskLifecycleEconomyView({
+  const lifecycleDailyEconomySystem = createTaskLifecycleEconomyView({
     dailyEconomySystem: baseDailyEconomySystem,
     taskLifecycleSystem: runtime.taskLifecycleSystem,
+  });
+  const dailyEconomySystem = createEconomicMetricsAuditView({
+    dailyEconomySystem: lifecycleDailyEconomySystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
