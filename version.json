@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.28.0",
-  "buildId": "v0.28.0-tool-maintenance-model-20260711-01",
-  "sourceCommit": "f3aa25081d802d751c119cea4554d6df0e3aa1d3",
+  "version": "v0.28.1",
+  "buildId": "v0.28.1-tool-maintenance-economy-20260712-01",
+  "sourceCommit": "c35ff483259406b1d35f84cbc3e3f07dfe397061",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional v0.28.0 commit containing tool schema v2, condition states, persistent maintenance demands, legacy tool-save migration, maintenance verification, long-run maintenance conservation checks and the world-save app-version bump; later documentation and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the functional v0.28.1 commit containing persistent maintenance demands, real repair tasks, target-tool and material reservations, repair labor and failures, repair resource-flow accounting, daily reconciliation, long-run conservation checks and precise failed-load rollback for active repair tasks; later version and documentation commits may follow it."
   }
 }
