@@ -7,6 +7,7 @@ on:
       - '.github/workflows/stability-audit.yml'
       - 'scripts/longRunAuditWorld.js'
       - 'scripts/runLongRunAudit.js'
+      - 'scripts/compareStabilityReports.js'
       - 'src/core/**'
       - 'src/modules/actions/**'
       - 'src/modules/economy/**'
@@ -52,10 +53,27 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  compare-day60:
+    name: Compare day-60 batch digests
+    needs: day60-batches
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stability-day60-batch*
+          path: .artifacts/day60
+          merge-multiple: true
+      - run: node --check scripts/compareStabilityReports.js
+      - run: node scripts/compareStabilityReports.js .artifacts/day60
+
   day120:
     name: Day 120 · batch 10
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
