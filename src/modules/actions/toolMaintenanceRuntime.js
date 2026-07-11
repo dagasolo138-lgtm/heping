@@ -190,6 +190,33 @@ export function createToolMaintenanceRuntime({
     return [...failures.values()].sort((first, second) => String(first.taskId).localeCompare(String(second.taskId))).map(clone);
   }
 
+  function createCheckpoint() {
+    return {
+      reservations: listReservations(),
+      failures: listFailures(),
+    };
+  }
+
+  function restoreCheckpoint(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.reservations) || !Array.isArray(snapshot.failures ?? [])) {
+      throw new Error('维修运行时检查点无效。');
+    }
+    reservations.clear();
+    snapshot.reservations.forEach((bundle) => {
+      if (!bundle?.taskId || !bundle?.toolId || !Array.isArray(bundle.reservationIds)) {
+        throw new Error('维修运行时检查点包含无效预留。');
+      }
+      reservations.set(bundle.taskId, clone(bundle));
+    });
+    failures.clear();
+    (snapshot.failures ?? []).forEach((failure) => {
+      if (!failure?.taskId || !failure?.reason) throw new Error('维修运行时检查点包含无效失败记录。');
+      failures.set(failure.taskId, clone(failure));
+    });
+    emit('maintenance:checkpoint-restored');
+    return createCheckpoint();
+  }
+
   function verify() {
     const issues = [];
     const ledgerEntries = reservationLedger?.list?.() ?? [];
@@ -243,6 +270,8 @@ export function createToolMaintenanceRuntime({
     getFailure,
     listReservations,
     listFailures,
+    createCheckpoint,
+    restoreCheckpoint,
     verify,
   });
 }
