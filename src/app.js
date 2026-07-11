@@ -9,6 +9,7 @@ import { attachStockTargetRuntime } from './bootstrap/attachStockTargetRuntime.j
 import { attachToolRuntime } from './bootstrap/attachToolRuntime.js';
 import { attachLaborCostRuntime } from './bootstrap/attachLaborCostRuntime.js';
 import { attachResourceFlowRuntime } from './bootstrap/attachResourceFlowRuntime.js';
+import { attachTaskLifecycleRuntime } from './bootstrap/attachTaskLifecycleRuntime.js';
 import { attachDailyEconomyRuntime } from './bootstrap/attachDailyEconomyRuntime.js';
 import { attachWorldSpeedRuntime } from './bootstrap/attachWorldSpeedRuntime.js';
 import { attachWorldSaveRuntime } from './bootstrap/attachWorldSaveRuntime.js';
@@ -26,6 +27,7 @@ attachStockTargetRuntime();
 attachToolRuntime();
 attachLaborCostRuntime();
 attachResourceFlowRuntime();
+attachTaskLifecycleRuntime();
 attachDailyEconomyRuntime();
 attachWorldSpeedRuntime();
 attachWorldSaveRuntime();
