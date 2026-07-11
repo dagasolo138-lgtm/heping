@@ -75,37 +75,40 @@ export function createTaskLifecycleSystem({
   }
 
   function elapsedSeconds(record, closedAt = stamp()) {
-    return round(Math.max(0, Number(closedAt?.tick ?? 0) - Number(record?.assignedAt?.tick ?? 0)) * SIMULATION_SECONDS_PER_WORLD_MINUTE);
+    const elapsedTicks = Math.max(0, Number(closedAt?.tick ?? 0) - Number(record?.assignedAt?.tick ?? 0));
+    return round(elapsedTicks * SIMULATION_SECONDS_PER_WORLD_MINUTE);
   }
 
   function isOverdue(record, at = stamp()) {
     const expected = Math.max(0, Number(record?.expected?.seconds ?? 0));
-    const threshold = Math.max(30, expected * 2);
-    return elapsedSeconds(record, at) > threshold;
+    return elapsedSeconds(record, at) > Math.max(30, expected * 2);
   }
 
-  function closeRecord(taskId, status, reason, payload = {}) {
+  function closeRecord(taskId, status, reason, { details = null, closedAt: suppliedClosedAt = null } = {}) {
     const current = active.get(taskId);
     if (!current) return null;
-    const closedAt = stamp();
+    const closedAt = clone(suppliedClosedAt ?? stamp());
+    const elapsedWorldMinutes = Math.max(0, Number(closedAt.tick ?? 0) - Number(current.assignedAt?.tick ?? 0));
     const record = {
       ...clone(current),
       sequence: ++sequence,
       status,
-      outcome: {
-        reason: reason ?? status,
-        details: clone(payload.details ?? null),
-      },
+      outcome: { reason: reason ?? status, details: clone(details) },
       closedAt,
-      elapsedWorldMinutes: Math.max(0, Number(closedAt.tick ?? 0) - Number(current.assignedAt?.tick ?? 0)),
-      actualSeconds: elapsedSeconds(current, closedAt),
+      elapsedWorldMinutes,
+      actualSeconds: round(elapsedWorldMinutes * SIMULATION_SECONDS_PER_WORLD_MINUTE),
       spansDays: !sameDay(current.assignedAt, closedAt),
     };
     active.delete(taskId);
     if (activeByPerson.get(current.personId) === taskId) activeByPerson.delete(current.personId);
     pendingIdle.delete(current.personId);
     append(record);
-    eventBus?.emit?.('task-lifecycle:closed', { record: clone(record), status, reason: record.outcome.reason, time: closedAt });
+    eventBus?.emit?.('task-lifecycle:closed', {
+      record: clone(record),
+      status,
+      reason: record.outcome.reason,
+      time: clone(closedAt),
+    });
     return clone(record);
   }
 
@@ -116,10 +119,12 @@ export function createTaskLifecycleSystem({
 
     const existingTaskId = activeByPerson.get(personId);
     if (existingTaskId && existingTaskId !== task.id) {
-      closeRecord(existingTaskId, 'cancelled', 'superseded-by-new-task', { details: { replacementTaskId: task.id } });
+      closeRecord(existingTaskId, 'cancelled', 'superseded-by-new-task', {
+        details: { replacementTaskId: task.id },
+      });
     }
-
     if (active.has(task.id)) return clone(active.get(task.id));
+
     const assignedAt = stamp();
     const record = {
       schemaVersion: TASK_LIFECYCLE_SCHEMA_VERSION,
@@ -169,39 +174,46 @@ export function createTaskLifecycleSystem({
     return clone(next);
   }
 
+  function runtimePerson(personId) {
+    const runtime = getRuntime?.() ?? {};
+    return runtime.peopleSystem?.getRuntime?.(personId) ?? runtime.peopleSystem?.get?.(personId) ?? null;
+  }
+
   function resolvePendingIdle(now = stamp()) {
     [...pendingIdle.entries()].forEach(([personId, pending]) => {
-      if (Number(pending.observedTick ?? 0) >= Number(now.tick ?? 0)) return;
+      if (Number(pending.observedAt?.tick ?? 0) >= Number(now.tick ?? 0)) return;
       const task = active.get(pending.taskId);
       if (!task) {
         pendingIdle.delete(personId);
         return;
       }
-      const person = getRuntime?.()?.peopleSystem?.getRuntime?.(personId)
-        ?? getRuntime?.()?.peopleSystem?.get?.(personId)
-        ?? null;
-      if (activeTaskId(person) === pending.taskId) {
+      if (activeTaskId(runtimePerson(personId)) === pending.taskId) {
         pendingIdle.delete(personId);
         return;
       }
-      closeRecord(pending.taskId, pending.status, pending.reason, { details: { inferredFrom: 'people:changed' } });
+      closeRecord(pending.taskId, pending.status, pending.reason, {
+        details: { inferredFrom: 'people:changed' },
+        closedAt: pending.observedAt,
+      });
     });
   }
 
   function capturePreviousDay(now) {
     if (dayKey(now) === dayKey(observedDay)) return;
     const activeRecords = [...active.values()];
-    daySnapshots.set(dayKey(observedDay), {
+    const previousSnapshot = {
       year: Number(observedDay.year),
       day: Number(observedDay.day),
       capturedAt: clone(now),
       carriedOutTaskIds: activeRecords.map((record) => record.taskId),
       overdueTaskIds: activeRecords.filter((record) => isOverdue(record, now)).map((record) => record.taskId),
-    });
+    };
+    daySnapshots.set(dayKey(observedDay), previousSnapshot);
+    const currentDay = { year: Number(now.year), day: Number(now.day) };
     observedDay = clone(now);
     eventBus?.emit?.('task-lifecycle:day-rolled', {
-      previous: clone(daySnapshots.get(dayKey({ year: Number(observedDay.year), day: Number(observedDay.day) })) ?? null),
-      current: { year: Number(now.year), day: Number(now.day) },
+      previous: clone(previousSnapshot),
+      current: currentDay,
       time: clone(now),
     });
   }
@@ -227,7 +239,9 @@ export function createTaskLifecycleSystem({
       return;
     }
     if (eventName === 'actions:completed') {
-      closeRecord(payload.task?.id, 'completed', 'action-completed', { details: { result: payload.result ?? null } });
+      closeRecord(payload.task?.id, 'completed', 'action-completed', {
+        details: { result: payload.result ?? null },
+      });
       return;
     }
     if (eventName === 'actions:cancelled') {
@@ -239,16 +253,17 @@ export function createTaskLifecycleSystem({
       return;
     }
     if (eventName === 'people:changed' && payload.person?.id) {
-      const taskId = activeByPerson.get(payload.person.id);
+      const personId = payload.person.id;
+      const taskId = activeByPerson.get(personId);
       if (!taskId) return;
       if (activeTaskId(payload.person) === taskId) {
-        pendingIdle.delete(payload.person.id);
+        pendingIdle.delete(personId);
         return;
       }
       const alive = payload.person.identity?.alive !== false;
-      pendingIdle.set(payload.person.id, {
+      pendingIdle.set(personId, {
         taskId,
-        observedTick: Number(stamp().tick ?? 0),
+        observedAt: stamp(),
         status: alive ? 'cancelled' : 'failed',
         reason: alive ? 'activity-cleared' : 'person-died',
       });
@@ -286,16 +301,17 @@ export function createTaskLifecycleSystem({
     const started = selected.filter((record) => dayOrdinal(record.assignedAt) === targetOrdinal);
     const closed = records.filter((record) => dayOrdinal(record.closedAt) === targetOrdinal);
     const carriedIn = selected.filter((record) => {
-      const assigned = dayOrdinal(record.assignedAt);
+      const assignedDay = dayOrdinal(record.assignedAt);
       const closedDay = record.closedAt ? dayOrdinal(record.closedAt) : Infinity;
-      return assigned < targetOrdinal && closedDay >= targetOrdinal;
+      return assignedDay < targetOrdinal && closedDay >= targetOrdinal;
     });
     const storedSnapshot = daySnapshots.get(dayKey(target));
     const targetIsCurrent = dayKey(target) === dayKey(at);
-    const carriedOutIds = storedSnapshot?.carriedOutTaskIds
-      ?? (targetIsCurrent ? [...active.keys()] : []);
+    const carriedOutIds = storedSnapshot?.carriedOutTaskIds ?? (targetIsCurrent ? [...active.keys()] : []);
     const overdueIds = storedSnapshot?.overdueTaskIds
-      ?? (targetIsCurrent ? [...active.values()].filter((record) => isOverdue(record, at)).map((record) => record.taskId) : []);
+      ?? (targetIsCurrent
+        ? [...active.values()].filter((record) => isOverdue(record, at)).map((record) => record.taskId)
+        : []);
     const carriedOut = selected.filter((record) => carriedOutIds.includes(record.taskId));
     const overdue = selected.filter((record) => overdueIds.includes(record.taskId));
     const completed = closed.filter((record) => record.status === 'completed');
@@ -353,12 +369,18 @@ export function createTaskLifecycleSystem({
       if (!record.taskId || !record.personId) issues.push({ type: 'invalid-record', record: clone(record) });
       if (taskIds.has(record.taskId)) issues.push({ type: 'duplicate-task-id', taskId: record.taskId });
       taskIds.add(record.taskId);
-      if (record.status !== 'active' && !CLOSED_STATUSES.has(record.status)) issues.push({ type: 'invalid-status', taskId: record.taskId, status: record.status });
-      if (record.closedAt && Number(record.closedAt.tick ?? 0) < Number(record.assignedAt?.tick ?? 0)) issues.push({ type: 'negative-duration', taskId: record.taskId });
+      if (record.status !== 'active' && !CLOSED_STATUSES.has(record.status)) {
+        issues.push({ type: 'invalid-status', taskId: record.taskId, status: record.status });
+      }
+      if (record.closedAt && Number(record.closedAt.tick ?? 0) < Number(record.assignedAt?.tick ?? 0)) {
+        issues.push({ type: 'negative-duration', taskId: record.taskId });
+      }
     });
     activeByPerson.forEach((taskId, personId) => {
       const record = active.get(taskId);
-      if (!record || record.personId !== personId) issues.push({ type: 'active-person-index-mismatch', personId, taskId });
+      if (!record || record.personId !== personId) {
+        issues.push({ type: 'active-person-index-mismatch', personId, taskId });
+      }
     });
     return { ok: issues.length === 0, issues, ...getSummary() };
   }
