@@ -1,6 +1,6 @@
 import { ACTION_TYPES } from '../actions/actionTypes.js';
 
-export const TOOL_SCHEMA_VERSION = 1;
+export const TOOL_SCHEMA_VERSION = 2;
 
 export const TOOL_TYPES = Object.freeze({
   STONE_AXE: 'stoneAxe',
@@ -66,9 +66,23 @@ export function createToolInstance({ id, typeId, ownerId = 'starting-camp' } = {
     durability: definition.maxDurability,
     maxDurability: definition.maxDurability,
     status: 'usable',
+    condition: 'healthy',
+    maintenance: {
+      schemaVersion: 1,
+      state: 'none',
+      demandId: null,
+      requestedAt: null,
+      reason: null,
+      priority: null,
+      targetDurability: null,
+      materials: {},
+      workMinutes: 0,
+      skill: null,
+    },
     owner: { type: 'camp', id: ownerId },
     location: { type: 'camp', id: ownerId },
     repairedCount: 0,
+    replacedCount: 0,
     totalWear: 0,
   };
 }
