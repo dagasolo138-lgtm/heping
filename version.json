@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.27.7",
-  "buildId": "v0.27.7-stability-continuity-20260711-01",
-  "sourceCommit": "4deb19cd3832e1c335a600baca6efd789b6bed36",
+  "version": "v0.28.0",
+  "buildId": "v0.28.0-tool-maintenance-model-20260711-01",
+  "sourceCommit": "20ff0fe3aca7729bba9aada8d44b9d7160e270e5",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional v0.27.7 commit containing long-run stability guards, resource-flow task-context cleanup, construction handoff protection, full action-runtime rollback continuity and the world-save app-version bump; later README, ROADMAP, CODEX and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the final functional v0.28.0 commit containing tool schema v2, condition states, persistent maintenance demands, legacy tool-save migration, maintenance verification and the world-save app-version bump; later documentation and manifest commits may follow it."
   }
 }
