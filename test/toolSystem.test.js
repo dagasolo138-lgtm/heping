@@ -244,7 +244,7 @@ test('v1 工具存档可迁移并重建维修需求', () => {
     delete legacy.maintenance;
     delete legacy.replacedCount;
     if (legacy.id === 'tool-stone-axe-1') {
-      legacy.durability = 12;
+      legacy.durability = 10;
       legacy.status = 'usable';
     }
     return legacy;
