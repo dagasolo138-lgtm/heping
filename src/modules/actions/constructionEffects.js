@@ -19,6 +19,11 @@ function saveAction({ personId, task, gameTime, peopleSystem, agent, summary, de
   });
 }
 
+function clearFailedAction({ personId, peopleSystem, agent }) {
+  peopleSystem.setLocation(personId, { tileX: Math.round(agent.x), tileY: Math.round(agent.y) });
+  peopleSystem.setActivity(personId, { status: 'idle', current: null });
+}
+
 function siteLabel(buildingSystem, siteId) {
   return buildingSystem.get(siteId)?.label ?? '工地';
 }
@@ -95,14 +100,34 @@ export function collectConstructionMaterial({ agent, task, peopleSystem, campSto
 
 export function deliverConstructionMaterial({ agent, task, peopleSystem, buildingSystem, gameTime }) {
   const person = peopleSystem.get(agent.personId);
-  if (!person) return null;
+  if (!person) {
+    emitDeliveryFailure({ agent, task, reason: 'delivery-person-missing', details: { stage: 'deliver' } });
+    return null;
+  }
   const carried = Math.min(Number(task.data.carriedAmount ?? 0), Number(person.inventory.items[task.data.materialId] ?? 0));
   const delivered = buildingSystem.deliverReservation(task.data.siteId, task.data.reservationId, carried);
-  if (carried > 0) peopleSystem.changeItem(person.id, task.data.materialId, -carried);
+  const deliveredAmount = Math.max(0, Number(delivered?.amount ?? 0));
+  if (deliveredAmount <= 0) {
+    emitDeliveryFailure({
+      agent,
+      task,
+      reason: 'delivery-handoff-failed',
+      details: {
+        stage: 'deliver',
+        siteId: task.data.siteId,
+        reservationId: task.data.reservationId,
+        materialId: task.data.materialId,
+        carriedAmount: carried,
+      },
+    });
+    clearFailedAction({ personId: person.id, peopleSystem, agent });
+    return null;
+  }
+  peopleSystem.changeItem(person.id, task.data.materialId, -deliveredAmount);
   const label = siteLabel(buildingSystem, task.data.siteId);
   const itemLabel = CAMP_ITEM_LABELS[task.data.materialId] ?? task.data.materialId;
-  const summary = delivered?.amount ? `${person.identity.name}把 ${delivered.amount} 份${itemLabel}送到了${label}。` : `${person.identity.name}抵达${label}时，建材交接没有完成。`;
-  saveAction({ agent, peopleSystem, personId: person.id, task, gameTime, summary, details: { siteId: task.data.siteId, materialId: task.data.materialId, amount: delivered?.amount ?? 0 } });
+  const summary = `${person.identity.name}把 ${deliveredAmount} 份${itemLabel}送到了${label}。`;
+  saveAction({ agent, peopleSystem, personId: person.id, task, gameTime, summary, details: { siteId: task.data.siteId, materialId: task.data.materialId, amount: deliveredAmount } });
   return { summary, personId: person.id };
 }
 
