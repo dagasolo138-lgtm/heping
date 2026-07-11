@@ -15,6 +15,7 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     const diagnostics = world.actions.getDiagnostics();
     const lifecycle = world.taskLifecycle.verify();
     const resourceFlow = world.resourceFlow.verify();
+    const resourceFlowContexts = world.resourceFlowTaskContextGuard.verify();
     const economy = world.dailyEconomy.verify();
     const alivePeople = world.people.getAliveRuntime();
     const activeTasks = world.taskLifecycle.list({ status: 'active' });
@@ -27,7 +28,9 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     assert.equal(diagnostics.lastSimulationError, null);
     assert.equal(lifecycle.ok, true, JSON.stringify(lifecycle.issues));
     assert.equal(resourceFlow.ok, true, JSON.stringify(resourceFlow.issues));
+    assert.equal(resourceFlowContexts.ok, true, JSON.stringify(resourceFlowContexts.issues));
     assert.equal(economy.ok, true, JSON.stringify(economy.issues));
+    assert.ok(resourceFlowContexts.tracked <= alivePeople.length);
     assert.ok(activeTasks.length <= alivePeople.length);
     assert.equal(new Set(activePersonIds).size, activePersonIds.length, '同一人物存在多个活动任务');
     assert.equal(new Set(reservationIds).size, reservationIds.length, '存在重复预留 ID');
