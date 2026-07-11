@@ -1,5 +1,6 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createResourceFlowSystem } from '../modules/economy/resourceFlowSystem.js';
+import { createYearAwareResourceFlowView } from '../modules/economy/yearAwareResourceFlowView.js';
 
 function ensureReadout() {
   const host = document.querySelector('.camp-stock');
@@ -19,7 +20,8 @@ function formatAmount(value) {
 
 function render(readout, system, gameTime) {
   if (!readout) return;
-  const summary = system.getDailySummary(gameTime.now().day);
+  const now = gameTime.now();
+  const summary = system.getDailySummary(now.year, now.day);
   const category = summary.byCategory;
   readout.textContent = [
     `今日流水 ${summary.totalEntries} 笔`,
@@ -37,10 +39,14 @@ export function attachResourceFlowRuntime() {
   if (!runtime || !eventBus) throw new Error('资源流水模块启动失败：世界运行时尚未初始化。');
   if (runtime.resourceFlowSystem) return runtime.resourceFlowSystem;
 
-  const resourceFlowSystem = createResourceFlowSystem({
+  const baseResourceFlowSystem = createResourceFlowSystem({
     eventBus,
     gameTime: runtime.gameTime,
     getRuntime: () => globalThis.shengling,
+  });
+  const resourceFlowSystem = createYearAwareResourceFlowView({
+    resourceFlowSystem: baseResourceFlowSystem,
+    gameTime: runtime.gameTime,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
@@ -48,12 +54,12 @@ export function attachResourceFlowRuntime() {
     render: () => render(readout, resourceFlowSystem, runtime.gameTime),
   });
 
-  eventBus.on('*', ({ eventName, payload }) => resourceFlowSystem.observe(eventName, payload));
+  eventBus.on('*', ({ eventName, payload }) => baseResourceFlowSystem.observe(eventName, payload));
   eventBus.on('resource-flow:recorded', () => scheduler.request('resource-flow:recorded'));
   eventBus.on('resource-flow:hydrated', () => scheduler.request('resource-flow:hydrated'));
   eventBus.on('simulation:time', () => scheduler.request('simulation:time'));
   eventBus.on('save:loaded', () => {
-    resourceFlowSystem.baseline();
+    baseResourceFlowSystem.baseline();
     scheduler.request('save:loaded');
   });
 
