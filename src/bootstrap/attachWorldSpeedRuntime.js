@@ -19,7 +19,7 @@ function render({ buttons, status }, speed) {
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-pressed', String(active));
   });
-  if (status) status.textContent = `世界速度 ${speed.label}`;
+  if (status) status.textContent = speed.label;
 }
 
 export function attachWorldSpeedRuntime() {
