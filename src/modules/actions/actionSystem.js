@@ -136,6 +136,47 @@ export function createActionSystem({
     });
   }
 
+  function createRuntimeCheckpoint() {
+    ensureAgents();
+    return {
+      agents: [...agents.values()].map(copy),
+      reservations: ledger.createCheckpoint?.() ?? { reservations: ledger.list() },
+      logs: logs.map(copy),
+      plannerTimer,
+      needsTimer,
+      phaseId,
+      lastError: lastError ? copy(lastError) : null,
+      lastTickAt,
+      lastGameTime: lastGameTime ? copy(lastGameTime) : null,
+    };
+  }
+
+  function restoreRuntimeCheckpoint(snapshot) {
+    if (!snapshot || !Array.isArray(snapshot.agents)) throw new Error('行动运行时检查点无效。');
+    agents.clear();
+    snapshot.agents.forEach((agent) => {
+      if (!agent?.personId || !Number.isFinite(agent.x) || !Number.isFinite(agent.y)) {
+        throw new Error('行动运行时检查点包含无效代理。');
+      }
+      agents.set(agent.personId, copy(agent));
+    });
+    if (ledger.restoreCheckpoint) ledger.restoreCheckpoint(snapshot.reservations);
+    else {
+      ledger.clear();
+      (snapshot.reservations?.reservations ?? []).forEach((entry) => {
+        ledger.reserve({ ...copy(entry), capacity: Infinity });
+      });
+    }
+    logs.splice(0, logs.length, ...(snapshot.logs ?? []).map(copy));
+    plannerTimer = Number(snapshot.plannerTimer ?? plannerTimer);
+    needsTimer = Number(snapshot.needsTimer ?? needsTimer);
+    phaseId = snapshot.phaseId ?? phaseId;
+    lastError = snapshot.lastError ? copy(snapshot.lastError) : null;
+    lastTickAt = snapshot.lastTickAt ?? null;
+    lastGameTime = snapshot.lastGameTime ? copy(snapshot.lastGameTime) : gameTime.stamp();
+    return createRuntimeCheckpoint();
+  }
+
   function renderPeople() {
     ensureAgents();
     return peopleSystem.getAlive().map((person) => {
@@ -696,6 +737,8 @@ export function createActionSystem({
     getFoodDistributionSystem: () => foodDistribution,
     getReservationLedger: () => ledger,
     resetRuntimeAgents,
+    createRuntimeCheckpoint,
+    restoreRuntimeCheckpoint,
     getLastError,
     getDiagnostics,
     isRunning: () => running,
