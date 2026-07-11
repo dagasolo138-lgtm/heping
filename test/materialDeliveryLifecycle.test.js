@@ -35,12 +35,14 @@ function withRuntime(run) {
 }
 
 function deliveryTask(overrides = {}) {
+  const { data: dataOverrides = {}, ...taskOverrides } = overrides;
   return {
     id: 'delivery-1',
     type: ACTION_TYPES.DELIVER_MATERIALS,
     label: '运送建材',
     destination: { x: 1, y: 1 },
     workDuration: 20,
+    ...taskOverrides,
     data: {
       stage: 'collect',
       siteId: 'site-1',
@@ -53,9 +55,8 @@ function deliveryTask(overrides = {}) {
           effects: { workDurationMultiplier: 0.9, energyMultiplier: 0.85, loadWeightMultiplier: 0.65 },
         },
       },
-      ...(overrides.data ?? {}),
+      ...dataOverrides,
     },
-    ...overrides,
   };
 }
 
