@@ -107,16 +107,17 @@ export function completeToolMaintenance({ agent, task, peopleSystem, campStore, 
     });
   }
 
+  const flowContext = `${task.id}:${tool.id}:${person.id}`;
   const consumed = {};
   for (const [itemId, amount] of Object.entries(materials)) {
-    const taken = campStore.take(campId, itemId, amount, 'tool:maintenance');
+    const taken = campStore.take(campId, itemId, amount, `tool:maintenance:${flowContext}`);
     if (taken !== amount) {
       throw new Error(`维修材料原子扣除失败：${itemId} 需要 ${amount}，实际 ${taken}`);
     }
     consumed[itemId] = taken;
   }
 
-  const repaired = toolSystem.repair(tool.id, restoreAmount, 'tool:maintenance-completed');
+  const repaired = toolSystem.repair(tool.id, restoreAmount, `tool:maintenance-completed:${flowContext}`);
   const restored = Math.max(0, Number(repaired?.durability ?? tool.durability) - tool.durability);
   const stamp = gameTime?.stamp?.() ?? null;
   return {
