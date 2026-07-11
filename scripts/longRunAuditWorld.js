@@ -8,6 +8,7 @@ import { createResourceRenewalSystem } from '../src/modules/ecology/resourceRene
 import { createDailyEconomySystem } from '../src/modules/economy/dailyEconomySystem.js';
 import { createEconomicMetricsAuditView } from '../src/modules/economy/economicMetricsAuditView.js';
 import { createResourceFlowSystem } from '../src/modules/economy/resourceFlowSystem.js';
+import { attachResourceFlowTaskContextGuard } from '../src/modules/economy/resourceFlowTaskContextGuard.js';
 import { createTaskLifecycleEconomyView } from '../src/modules/economy/taskLifecycleEconomyView.js';
 import { createTaskLifecycleStageCostView } from '../src/modules/economy/taskLifecycleStageCostView.js';
 import { createTaskLifecycleSystem } from '../src/modules/economy/taskLifecycleSystem.js';
@@ -144,11 +145,17 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     gameTime: time,
     getRuntime: () => runtime,
   });
+  const resourceFlowTaskContextGuard = attachResourceFlowTaskContextGuard({
+    eventBus: bus,
+    resourceFlowSystem: baseResourceFlow,
+    getRuntime: () => runtime,
+  });
   const resourceFlow = createYearAwareResourceFlowView({
     resourceFlowSystem: baseResourceFlow,
     gameTime: time,
   });
   runtime.resourceFlowSystem = resourceFlow;
+  runtime.resourceFlowTaskContextGuard = resourceFlowTaskContextGuard;
   bus.on('*', ({ eventName, payload }) => baseResourceFlow.observe(eventName, payload));
 
   const baseTaskLifecycle = createTaskLifecycleSystem({
@@ -239,6 +246,7 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     socialEvents,
     chronicles,
     resourceFlow,
+    resourceFlowTaskContextGuard,
     taskLifecycle,
     dailyEconomy,
     restoreGlobals,
