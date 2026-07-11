@@ -23,15 +23,57 @@ function siteLabel(buildingSystem, siteId) {
   return buildingSystem.get(siteId)?.label ?? '工地';
 }
 
+function emitDeliveryFailure({ agent, task, reason, details = {} }) {
+  globalThis.__shenglingEventBus?.emit?.('actions:failed', {
+    personId: agent?.personId ?? null,
+    taskId: task?.id ?? null,
+    task: structuredClone(task ?? null),
+    reason,
+    details: structuredClone(details),
+    time: globalThis.shengling?.gameTime?.stamp?.() ?? null,
+  });
+}
+
 export function collectConstructionMaterial({ agent, task, peopleSystem, campStore, buildingSystem, campId }) {
   const person = peopleSystem.get(agent.personId);
-  if (!person) return { nextTask: null, summary: '' };
+  if (!person) {
+    emitDeliveryFailure({ agent, task, reason: 'delivery-person-missing', details: { stage: 'collect' } });
+    return { nextTask: null, failureReason: 'delivery-person-missing', summary: '' };
+  }
   const reservation = buildingSystem.beginDelivery(task.data.siteId, task.data.reservationId);
-  if (!reservation) return { nextTask: null, summary: `${person.identity.name}的建材调拨失效。` };
+  if (!reservation) {
+    emitDeliveryFailure({
+      agent,
+      task,
+      reason: 'material-reservation-invalid',
+      details: { stage: 'collect', siteId: task.data.siteId, reservationId: task.data.reservationId },
+    });
+    return {
+      nextTask: null,
+      failureReason: 'material-reservation-invalid',
+      summary: `${person.identity.name}的建材调拨失效。`,
+    };
+  }
   const carried = campStore.take(campId, reservation.itemId, reservation.amount, 'construction-pickup');
   if (carried <= 0) {
     buildingSystem.cancelReservation(task.data.siteId, reservation.id);
-    return { nextTask: null, summary: `${person.identity.name}来到营地时，所需建材已不足。` };
+    emitDeliveryFailure({
+      agent,
+      task,
+      reason: 'construction-material-insufficient',
+      details: {
+        stage: 'collect',
+        siteId: task.data.siteId,
+        reservationId: reservation.id,
+        materialId: reservation.itemId,
+        requestedAmount: reservation.amount,
+      },
+    });
+    return {
+      nextTask: null,
+      failureReason: 'construction-material-insufficient',
+      summary: `${person.identity.name}来到营地时，所需建材已不足。`,
+    };
   }
   peopleSystem.changeItem(person.id, reservation.itemId, carried);
   return {
@@ -39,8 +81,14 @@ export function collectConstructionMaterial({ agent, task, peopleSystem, campSto
       ...task,
       destination: task.data.siteDestination,
       workDuration: ACTION_META[ACTION_TYPES.DELIVER_MATERIALS].workDuration,
-      data: { ...task.data, stage: 'deliver', carriedAmount: carried },
+      data: {
+        ...task.data,
+        previousStage: task.data?.stage ?? 'collect',
+        stage: 'deliver',
+        carriedAmount: carried,
+      },
     },
+    failureReason: null,
     summary: `${person.identity.name}从营地领走了 ${carried} 份${CAMP_ITEM_LABELS[reservation.itemId] ?? reservation.itemId}，正送往${siteLabel(buildingSystem, task.data.siteId)}。`,
   };
 }

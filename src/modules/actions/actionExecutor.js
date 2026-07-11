@@ -1,5 +1,6 @@
 import { findPath } from './pathfinding.js';
 import { buildLaborCostProfile, movementLaborMultiplier } from './laborCostModel.js';
+import { ACTION_TYPES } from './actionTypes.js';
 
 function distance(first, second) {
   return Math.hypot(second.x - first.x, second.y - first.y);
@@ -13,6 +14,21 @@ function runtimeContext(personId) {
     roadSystem: runtime.roadSystem ?? null,
     weather: runtime.weatherSystem?.get?.() ?? null,
   };
+}
+
+function eventTime() {
+  return globalThis.shengling?.gameTime?.stamp?.() ?? null;
+}
+
+function emitActionEvent(eventName, payload) {
+  globalThis.__shenglingEventBus?.emit?.(eventName, {
+    ...structuredClone(payload),
+    time: structuredClone(payload.time ?? eventTime()),
+  });
+}
+
+function isDeliveryStage(task) {
+  return task?.type === ACTION_TYPES.DELIVER_MATERIALS && task?.data?.stage === 'deliver';
 }
 
 function accumulateLaborEnergy(task, deltaSeconds, phase) {
@@ -38,7 +54,21 @@ function settleLaborEnergy(agent, task) {
 
 export function createRuntimeTask(task, position, mapSystem) {
   const route = findPath({ start: position, goal: task.destination, isWalkable: mapSystem.isWalkable });
-  if (route === null) return null;
+  if (route === null) {
+    if (isDeliveryStage(task)) {
+      emitActionEvent('actions:failed', {
+        personId: position.personId ?? null,
+        taskId: task.id,
+        task,
+        reason: 'delivery-route-blocked',
+        details: {
+          stage: task.data?.stage ?? 'deliver',
+          destination: task.destination ?? null,
+        },
+      });
+    }
+    return null;
+  }
   const context = runtimeContext(position.personId);
   const laborCost = buildLaborCostProfile({
     person: context.person,
@@ -50,7 +80,7 @@ export function createRuntimeTask(task, position, mapSystem) {
     weather: context.weather,
   });
   const workDuration = laborCost?.effectiveWorkDuration ?? Number(task.workDuration ?? 0);
-  return {
+  const runtimeTask = {
     ...structuredClone(task),
     workDuration,
     data: {
@@ -64,6 +94,18 @@ export function createRuntimeTask(task, position, mapSystem) {
     laborEnergyPending: 0,
     laborEnergySpent: 0,
   };
+
+  if (isDeliveryStage(runtimeTask)) {
+    emitActionEvent('actions:stage-transition', {
+      personId: position.personId ?? null,
+      taskId: runtimeTask.id,
+      task: runtimeTask,
+      fromStage: runtimeTask.data?.previousStage ?? 'collect',
+      toStage: runtimeTask.data?.stage ?? 'deliver',
+      reason: 'construction-material-collected',
+    });
+  }
+  return runtimeTask;
 }
 
 export function advanceRuntimeTask(agent, deltaSeconds, speedTilesPerSecond) {
