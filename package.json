@@ -7,7 +7,7 @@
     "build": "vite build",
     "check": "find src test scripts -name '*.js' -print0 | xargs -0 -n1 node --check",
     "test": "node --test",
-    "test:mobile-smoke": "node scripts/mobileBrowserSmoke.js"
+    "test:mobile-smoke": "node scripts/runMobileBrowserSmoke.js"
   },
   "devDependencies": {
     "vite": "^7.0.0"
