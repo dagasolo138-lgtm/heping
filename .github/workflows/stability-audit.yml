@@ -1,0 +1,81 @@
+name: Stability Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/stability-audit.yml'
+      - 'scripts/longRunAuditWorld.js'
+      - 'scripts/runLongRunAudit.js'
+      - 'src/core/**'
+      - 'src/modules/actions/**'
+      - 'src/modules/economy/**'
+      - 'src/modules/persistence/**'
+      - 'src/modules/tools/**'
+      - 'package.json'
+      - 'package-lock.json'
+
+concurrency:
+  group: stability-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  day60-batches:
+    name: Day 60 · batch ${{ matrix.batch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        batch: [1, 5, 10]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --check scripts/longRunAuditWorld.js
+      - run: node --check scripts/runLongRunAudit.js
+      - name: Run day-60 stability audit
+        env:
+          AUDIT_TARGET_DAY: 60
+          AUDIT_BATCH_SIZE: ${{ matrix.batch }}
+          AUDIT_CHECKPOINT_DAYS: 15
+        run: node scripts/runLongRunAudit.js
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stability-day60-batch${{ matrix.batch }}
+          path: .artifacts/stability-day60-batch${{ matrix.batch }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  day120:
+    name: Day 120 · batch 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --check scripts/longRunAuditWorld.js
+      - run: node --check scripts/runLongRunAudit.js
+      - name: Run day-120 stability audit
+        env:
+          AUDIT_TARGET_DAY: 120
+          AUDIT_BATCH_SIZE: 10
+          AUDIT_CHECKPOINT_DAYS: 15
+        run: node scripts/runLongRunAudit.js
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stability-day120-batch10
+          path: .artifacts/stability-day120-batch10.json
+          if-no-files-found: error
+          retention-days: 14
