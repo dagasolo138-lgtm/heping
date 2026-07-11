@@ -87,6 +87,21 @@ test('活动被清空且没有完成事件时在下一 tick 记为取消', () =>
   assert.equal(record.outcome.reason, 'activity-cleared');
 });
 
+test('午夜前被清空的任务即使在次日判定，也保留前一日取消时间', () => {
+  const harness = createHarness();
+  const task = harness.assign();
+  harness.setTime({ day: 1, minute: 1439, tick: 20, label: '第 1 日 23:59' });
+  harness.setActivity(null);
+  harness.setTime({ day: 2, minute: 0, tick: 21, label: '第 2 日 00:00' });
+  harness.system.observe('simulation:pre-tick', {});
+
+  const record = harness.system.get(task.id);
+  assert.equal(record.closedAt.day, 1);
+  assert.equal(harness.system.getDailySummary(1, 1).cancelled, 1);
+  assert.equal(harness.system.getDailySummary(1, 1).carriedOut, 0);
+  assert.equal(harness.system.getDailySummary(1, 2).carriedIn, 0);
+});
+
 test('人物死亡会把活动任务记为失败', () => {
   const harness = createHarness();
   const task = harness.assign();
