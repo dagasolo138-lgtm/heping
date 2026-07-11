@@ -1,5 +1,6 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createDailyEconomySystem } from '../modules/economy/dailyEconomySystem.js';
+import { createTaskLifecycleEconomyView } from '../modules/economy/taskLifecycleEconomyView.js';
 
 function ensureReadout() {
   const host = document.querySelector('.camp-stock');
@@ -26,12 +27,15 @@ function render(readout, system) {
   if (!readout) return;
   const report = system.getCurrentReport();
   const bottleneck = report.bottlenecks?.[0]?.label ?? '暂无明显瓶颈';
+  const laborStatus = report.labor.cancelled || report.labor.failed
+    ? `${report.labor.completed}/${report.labor.started}，中断 ${report.labor.cancelled + report.labor.failed}`
+    : `${report.labor.completed}/${report.labor.started}`;
   readout.textContent = [
     `第 ${report.day} 日经济`,
     `食物 ${signed(foodDelta(report))}`,
     `水 ${signed(report.balances?.water?.actualDelta)}`,
     `木材 ${signed(report.balances?.wood?.actualDelta)}`,
-    `劳动 ${report.labor.completed}/${report.labor.assigned}`,
+    `劳动 ${laborStatus}`,
     bottleneck,
   ].join(' · ');
 }
@@ -40,13 +44,18 @@ export function attachDailyEconomyRuntime() {
   const runtime = globalThis.shengling;
   const eventBus = globalThis.__shenglingEventBus;
   if (!runtime || !eventBus || !runtime.resourceFlowSystem) throw new Error('每日经济摘要启动失败：资源流水尚未初始化。');
+  if (!runtime.taskLifecycleSystem) throw new Error('每日经济摘要启动失败：任务生命周期账本尚未初始化。');
   if (runtime.dailyEconomySystem) return runtime.dailyEconomySystem;
 
-  const dailyEconomySystem = createDailyEconomySystem({
+  const baseDailyEconomySystem = createDailyEconomySystem({
     eventBus,
     gameTime: runtime.gameTime,
     resourceFlowSystem: runtime.resourceFlowSystem,
     getRuntime: () => globalThis.shengling,
+  });
+  const dailyEconomySystem = createTaskLifecycleEconomyView({
+    dailyEconomySystem: baseDailyEconomySystem,
+    taskLifecycleSystem: runtime.taskLifecycleSystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
@@ -54,8 +63,8 @@ export function attachDailyEconomyRuntime() {
     render: () => render(readout, dailyEconomySystem),
   });
 
-  eventBus.on('*', ({ eventName, payload }) => dailyEconomySystem.observe(eventName, payload));
-  ['simulation:time', 'resource-flow:recorded', 'daily-economy:finalized', 'daily-economy:hydrated']
+  eventBus.on('*', ({ eventName, payload }) => baseDailyEconomySystem.observe(eventName, payload));
+  ['simulation:time', 'resource-flow:recorded', 'task-lifecycle:closed', 'daily-economy:finalized', 'daily-economy:hydrated']
     .forEach((eventName) => eventBus.on(eventName, () => scheduler.request(eventName)));
   eventBus.on('save:loaded', () => scheduler.request('save:loaded'));
 
