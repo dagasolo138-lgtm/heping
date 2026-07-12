@@ -1,12 +1,18 @@
 import { ACTION_TYPES } from '../actions/actionTypes.js';
 
-export const TOOL_SCHEMA_VERSION = 2;
+export const TOOL_SCHEMA_VERSION = 3;
 
 export const TOOL_TYPES = Object.freeze({
   STONE_AXE: 'stoneAxe',
   CARRYING_BASKET: 'carryingBasket',
   SIMPLE_FARM_TOOL: 'simpleFarmTool',
   STONE_PICK: 'stonePick',
+});
+
+export const MINIMUM_PUBLIC_TOOL_COUNTS = Object.freeze({
+  [TOOL_TYPES.STONE_AXE]: 1,
+  [TOOL_TYPES.CARRYING_BASKET]: 1,
+  [TOOL_TYPES.SIMPLE_FARM_TOOL]: 1,
 });
 
 export const TOOL_DEFINITIONS = Object.freeze({
@@ -68,11 +74,13 @@ export function createToolInstance({ id, typeId, ownerId = 'starting-camp' } = {
     status: 'usable',
     condition: 'healthy',
     maintenance: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       state: 'none',
+      mode: null,
       demandId: null,
       requestedAt: null,
       reason: null,
+      replacementReason: null,
       priority: null,
       targetDurability: null,
       materials: {},
@@ -81,9 +89,12 @@ export function createToolInstance({ id, typeId, ownerId = 'starting-camp' } = {
     },
     owner: { type: 'camp', id: ownerId },
     location: { type: 'camp', id: ownerId },
+    generation: 1,
     repairedCount: 0,
+    repairsSinceReplacement: 0,
     replacedCount: 0,
     totalWear: 0,
+    wearSinceReplacement: 0,
   };
 }
 

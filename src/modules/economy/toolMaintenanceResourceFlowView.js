@@ -9,9 +9,24 @@ function round(value) {
 function maintenanceContext(reason) {
   const parts = String(reason ?? '').split(':');
   if (parts[0] !== 'tool' || !['maintenance', 'maintenance-completed'].includes(parts[1])) return null;
+
+  const phase = parts[1] === 'maintenance-completed' ? 'durability-restored' : 'material-consumed';
+  const hasExplicitMode = ['repair', 'replace'].includes(parts[2]);
+  if (hasExplicitMode) {
+    if (!parts[3] || !parts[4]) return null;
+    return {
+      phase,
+      mode: parts[2],
+      taskId: parts[3],
+      toolId: parts[4],
+      personId: parts[5] ?? null,
+    };
+  }
+
   if (!parts[2] || !parts[3]) return null;
   return {
-    phase: parts[1] === 'maintenance-completed' ? 'durability-restored' : 'material-consumed',
+    phase,
+    mode: 'repair',
     taskId: parts[2],
     toolId: parts[3],
     personId: parts[4] ?? null,
@@ -22,18 +37,24 @@ function correctedEntry(entry) {
   const context = maintenanceContext(entry?.reason);
   if (!context) return clone(entry);
   const durability = String(entry.itemId ?? '').startsWith('durability:');
+  const replacement = context.mode === 'replace';
   return {
     ...clone(entry),
-    from: durability ? entry.from : entry.from,
-    to: durability ? entry.to : `maintenance:tool:${context.toolId}`,
-    category: 'repair',
-    reason: context.phase === 'durability-restored' ? 'tool:maintenance-completed' : 'tool:maintenance',
+    from: entry.from,
+    to: durability
+      ? entry.to
+      : `${replacement ? 'replacement' : 'maintenance'}:tool:${context.toolId}`,
+    category: replacement ? 'replacement' : 'repair',
+    reason: context.phase === 'durability-restored'
+      ? `tool:${replacement ? 'replacement' : 'maintenance'}-completed`
+      : `tool:${replacement ? 'replacement' : 'maintenance'}`,
     taskId: context.taskId,
     personId: context.personId ?? entry.personId ?? null,
     metadata: {
       ...(clone(entry.metadata ?? {})),
-      actionType: 'repairTool',
+      actionType: replacement ? 'replaceTool' : 'repairTool',
       toolId: context.toolId,
+      maintenanceMode: context.mode,
       maintenancePhase: context.phase,
     },
   };
@@ -80,9 +101,15 @@ export function createToolMaintenanceResourceFlowView({ resourceFlowSystem } = {
   function verify() {
     const base = resourceFlowSystem.verify();
     const issues = [...(base.issues ?? [])];
-    list().filter((entry) => entry.category === 'repair').forEach((entry) => {
-      if (!entry.taskId) issues.push({ type: 'repair-flow-missing-task', id: entry.id });
-      if (!entry.metadata?.toolId) issues.push({ type: 'repair-flow-missing-tool', id: entry.id });
+    list().filter((entry) => entry.metadata?.maintenanceMode || entry.category === 'replacement').forEach((entry) => {
+      if (!entry.taskId) issues.push({ type: 'tool-maintenance-flow-missing-task', id: entry.id });
+      if (!entry.metadata?.toolId) issues.push({ type: 'tool-maintenance-flow-missing-tool', id: entry.id });
+      if (!['repair', 'replace'].includes(entry.metadata?.maintenanceMode)) {
+        issues.push({ type: 'tool-maintenance-flow-invalid-mode', id: entry.id, mode: entry.metadata?.maintenanceMode });
+      }
+      if (entry.category === 'replacement' && entry.metadata?.actionType !== 'replaceTool') {
+        issues.push({ type: 'replacement-flow-action-mismatch', id: entry.id });
+      }
     });
     return { ...base, ok: issues.length === 0, issues };
   }

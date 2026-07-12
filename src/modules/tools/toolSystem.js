@@ -1,4 +1,10 @@
-import { INITIAL_TOOL_BLUEPRINTS, TOOL_SCHEMA_VERSION, createToolInstance, toolDefinition } from './toolCatalog.js';
+import {
+  INITIAL_TOOL_BLUEPRINTS,
+  MINIMUM_PUBLIC_TOOL_COUNTS,
+  TOOL_SCHEMA_VERSION,
+  createToolInstance,
+  toolDefinition,
+} from './toolCatalog.js';
 import { maintenanceDemandView, synchronizeMaintenance, verifyToolMaintenance } from './toolMaintenanceModel.js';
 
 function clone(value) {
@@ -8,8 +14,12 @@ function clone(value) {
 function normalizedTool(raw, time = null) {
   const definition = toolDefinition(raw?.typeId);
   if (!raw?.id || !definition) throw new Error('工具存档包含未知工具。');
+  const sourceSchemaVersion = Number(raw.schemaVersion ?? 1);
   const maximum = Math.max(1, Number(raw.maxDurability ?? definition.maxDurability));
   const durability = Math.max(0, Math.min(maximum, Number(raw.durability ?? maximum)));
+  const repairedCount = Math.max(0, Number(raw.repairedCount ?? 0));
+  const replacedCount = Math.max(0, Number(raw.replacedCount ?? 0));
+  const totalWear = Math.max(0, Number(raw.totalWear ?? 0));
   const base = {
     schemaVersion: TOOL_SCHEMA_VERSION,
     id: String(raw.id),
@@ -20,9 +30,12 @@ function normalizedTool(raw, time = null) {
     status: durability > 0 ? 'usable' : 'broken',
     owner: clone(raw.owner ?? { type: 'camp', id: 'starting-camp' }),
     location: clone(raw.location ?? { type: 'camp', id: 'starting-camp' }),
-    repairedCount: Math.max(0, Number(raw.repairedCount ?? 0)),
-    replacedCount: Math.max(0, Number(raw.replacedCount ?? 0)),
-    totalWear: Math.max(0, Number(raw.totalWear ?? 0)),
+    generation: Math.max(1, Number(raw.generation ?? replacedCount + 1)),
+    repairedCount,
+    repairsSinceReplacement: sourceSchemaVersion >= 3 ? Math.max(0, Number(raw.repairsSinceReplacement ?? 0)) : 0,
+    replacedCount,
+    totalWear,
+    wearSinceReplacement: sourceSchemaVersion >= 3 ? Math.max(0, Number(raw.wearSinceReplacement ?? 0)) : 0,
   };
   const synchronized = synchronizeMaintenance(base, raw.maintenance ?? null, time);
   return { ...base, condition: synchronized.condition, maintenance: synchronized.maintenance };
@@ -64,6 +77,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
       ...clone(payload),
       tools: list(),
       maintenanceDemands: listMaintenanceDemands(),
+      coverage: getCoverage(),
       summary: getSummary(),
       time: stamp(),
     });
@@ -88,26 +102,88 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     return tool ? clone(tool) : null;
   }
 
-  function listMaintenanceDemands({ priority = null } = {}) {
+  function rawMaintenanceDemands() {
     return [...tools.values()]
       .map(maintenanceDemandView)
       .filter(Boolean)
-      .filter((demand) => !priority || demand.priority === priority)
       .sort((first, second) => {
         if (first.priority !== second.priority) return first.priority === 'high' ? -1 : 1;
+        return first.toolId.localeCompare(second.toolId);
+      });
+  }
+
+  function coverageSnapshot(demands = rawMaintenanceDemands()) {
+    return Object.entries(MINIMUM_PUBLIC_TOOL_COUNTS).map(([typeId, required]) => {
+      const matching = [...tools.values()].filter((tool) => tool.typeId === typeId);
+      const usable = matching.filter((tool) => tool.status === 'usable' && tool.durability > 0).length;
+      const available = matching.filter((tool) => tool.status === 'usable' && tool.durability > 0 && !isReserved(tool.id)).length;
+      const gap = Math.max(0, Number(required) - usable);
+      const recoveryDemands = demands.filter((demand) => demand.typeId === typeId);
+      return Object.freeze({
+        typeId,
+        label: toolDefinition(typeId)?.label ?? typeId,
+        required: Number(required),
+        total: matching.length,
+        usable,
+        available,
+        gap,
+        recoveryDemandCount: recoveryDemands.length,
+        protected: gap === 0 || recoveryDemands.length > 0,
+      });
+    });
+  }
+
+  function getCoverage() {
+    return coverageSnapshot().map(clone);
+  }
+
+  function listMaintenanceDemands({ priority = null, mode = null } = {}) {
+    const raw = rawMaintenanceDemands();
+    const coverage = new Map(coverageSnapshot(raw).map((entry) => [entry.typeId, entry]));
+    return raw
+      .map((demand) => {
+        const guarantee = coverage.get(demand.typeId) ?? null;
+        const guaranteeGap = Number(guarantee?.gap ?? 0) > 0;
+        return {
+          ...clone(demand),
+          state: guaranteeGap ? 'urgent' : demand.state,
+          priority: guaranteeGap ? 'high' : demand.priority,
+          guaranteeGap,
+          guarantee: guarantee ? clone(guarantee) : null,
+        };
+      })
+      .filter((demand) => !priority || demand.priority === priority)
+      .filter((demand) => !mode || demand.mode === mode)
+      .sort((first, second) => {
+        if (first.guaranteeGap !== second.guaranteeGap) return first.guaranteeGap ? -1 : 1;
+        if (first.priority !== second.priority) return first.priority === 'high' ? -1 : 1;
+        if (first.mode !== second.mode) return first.mode === 'replace' ? -1 : 1;
         return first.toolId.localeCompare(second.toolId);
       })
       .map(clone);
   }
 
   function getMaintenanceDemand(toolId) {
-    const tool = tools.get(toolId);
-    const demand = maintenanceDemandView(tool);
+    const demand = listMaintenanceDemands().find((entry) => entry.toolId === toolId);
     return demand ? clone(demand) : null;
   }
 
   function verifyMaintenance() {
-    return verifyToolMaintenance(list());
+    const base = verifyToolMaintenance(list());
+    const demands = listMaintenanceDemands();
+    const coverage = coverageSnapshot(demands);
+    const errors = [...base.errors];
+    coverage.forEach((entry) => {
+      if (entry.gap > 0 && entry.recoveryDemandCount <= 0) errors.push(`${entry.typeId}:unprotected-guarantee-gap`);
+    });
+    return Object.freeze({
+      ok: errors.length === 0,
+      errors: Object.freeze(errors),
+      demandCount: base.demandCount,
+      replacementDemandCount: demands.filter((demand) => demand.mode === 'replace').length,
+      guaranteeGapCount: coverage.filter((entry) => entry.gap > 0).length,
+      coverage: Object.freeze(coverage.map(clone)),
+    });
   }
 
   function isReserved(toolId) {
@@ -134,6 +210,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
       id: tool.id,
       typeId: tool.typeId,
       label: tool.label,
+      generation: tool.generation,
       durability: tool.durability,
       maxDurability: tool.maxDurability,
       condition: tool.maxDurability > 0 ? tool.durability / tool.maxDurability : 0,
@@ -208,6 +285,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     const applied = Math.min(tool.durability, Math.max(0, Number(amount) || 0));
     tool.durability = Math.max(0, tool.durability - applied);
     tool.totalWear += applied;
+    tool.wearSinceReplacement += applied;
     tool.status = tool.durability > 0 ? 'usable' : 'broken';
     synchronizeTool(tool);
     tools.set(tool.id, tool);
@@ -259,21 +337,26 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     tool.durability += restored;
     tool.status = 'usable';
     tool.repairedCount += 1;
+    tool.repairsSinceReplacement += 1;
     synchronizeTool(tool);
     tools.set(tool.id, tool);
     emit(reason, { tool: clone(tool), amount: restored, maintenanceCleared: !tool.maintenance?.demandId });
     return clone(tool);
   }
 
-  function replace(toolId) {
+  function replace(toolId, reason = 'tool:replaced') {
     const tool = tools.get(toolId);
     if (!tool) return null;
+    const previous = clone(tool);
     tool.durability = tool.maxDurability;
     tool.status = 'usable';
+    tool.generation += 1;
     tool.replacedCount += 1;
+    tool.repairsSinceReplacement = 0;
+    tool.wearSinceReplacement = 0;
     synchronizeTool(tool);
     tools.set(tool.id, tool);
-    emit('tool:replaced', { tool: clone(tool), maintenanceCleared: true });
+    emit(reason, { tool: clone(tool), previous, maintenanceCleared: true });
     return clone(tool);
   }
 
@@ -283,7 +366,8 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
 
   function getSummary() {
     const values = [...tools.values()];
-    const demands = values.map(maintenanceDemandView).filter(Boolean);
+    const demands = listMaintenanceDemands();
+    const coverage = coverageSnapshot(demands);
     return {
       total: values.length,
       usable: values.filter((tool) => tool.status === 'usable').length,
@@ -292,6 +376,8 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
       critical: values.filter((tool) => tool.condition === 'critical').length,
       maintenanceNeeded: demands.length,
       urgentMaintenance: demands.filter((demand) => demand.priority === 'high').length,
+      replacementNeeded: demands.filter((demand) => demand.mode === 'replace').length,
+      guaranteeGaps: coverage.filter((entry) => entry.gap > 0).length,
       reserved: assignments.size,
       averageCondition: values.length
         ? values.reduce((total, tool) => total + tool.durability / tool.maxDurability, 0) / values.length
@@ -304,7 +390,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
   }
 
   function importState(snapshot) {
-    if (![1, TOOL_SCHEMA_VERSION].includes(Number(snapshot?.schemaVersion)) || !Array.isArray(snapshot.tools)) {
+    if (![1, 2, TOOL_SCHEMA_VERSION].includes(Number(snapshot?.schemaVersion)) || !Array.isArray(snapshot.tools)) {
       throw new Error('工具存档格式不兼容。');
     }
     const next = new Map();
@@ -347,6 +433,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     list,
     get,
     getSummary,
+    getCoverage,
     getAssignments,
     listMaintenanceDemands,
     getMaintenanceDemand,

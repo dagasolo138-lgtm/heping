@@ -8,6 +8,7 @@ import { scoreUtilityCandidates } from './utilityScorer.js';
 import { planToolMaintenanceAction } from './toolMaintenancePlanner.js';
 
 const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
+const MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
 const ACTION_CAPS = Object.freeze({
   [ACTION_TYPES.FETCH_WATER]: 3,
   [ACTION_TYPES.GATHER_BERRIES]: 3,
@@ -107,7 +108,7 @@ function maintenancePipeline() {
   (runtime.toolSystem?.listMaintenanceDemands?.() ?? []).forEach((demand) => {
     const active = reservations.some((entry) => entry.type === 'tool'
       && entry.key === demand.toolId
-      && entry.metadata?.actionType === ACTION_TYPES.REPAIR_TOOL);
+      && MAINTENANCE_ACTIONS.has(entry.metadata?.actionType));
     Object.entries(demand.materials ?? {}).forEach(([itemId, value]) => {
       addAmount(active ? committed : constructionNeed, itemId, value);
     });

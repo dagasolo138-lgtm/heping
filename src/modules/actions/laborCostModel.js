@@ -12,6 +12,7 @@ const LABOR_ACTIONS = new Set([
   ACTION_TYPES.SOW_MILLET,
   ACTION_TYPES.HARVEST_MILLET,
   ACTION_TYPES.REPAIR_TOOL,
+  ACTION_TYPES.REPLACE_TOOL,
   ACTION_TYPES.TEND_FIRE,
 ]);
 
@@ -26,6 +27,7 @@ const ACTION_SKILL = Object.freeze({
   [ACTION_TYPES.SOW_MILLET]: 'gathering',
   [ACTION_TYPES.HARVEST_MILLET]: 'gathering',
   [ACTION_TYPES.REPAIR_TOOL]: 'building',
+  [ACTION_TYPES.REPLACE_TOOL]: 'building',
   [ACTION_TYPES.TEND_FIRE]: 'gathering',
 });
 
@@ -40,6 +42,7 @@ const ACTION_INTENSITY = Object.freeze({
   [ACTION_TYPES.SOW_MILLET]: 0.9,
   [ACTION_TYPES.HARVEST_MILLET]: 1.25,
   [ACTION_TYPES.REPAIR_TOOL]: 1.18,
+  [ACTION_TYPES.REPLACE_TOOL]: 1.35,
   [ACTION_TYPES.TEND_FIRE]: 1,
 });
 
@@ -84,7 +87,7 @@ function carriedWeight(person) {
 }
 
 function actionSkill(task) {
-  if (task?.type === ACTION_TYPES.REPAIR_TOOL && task?.data?.skill) return task.data.skill;
+  if ([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL].includes(task?.type) && task?.data?.skill) return task.data.skill;
   return ACTION_SKILL[task?.type] ?? null;
 }
 
@@ -146,7 +149,7 @@ function skillEnergyMultiplier(person, task) {
 }
 
 function resolveTool(task) {
-  if (task?.type === ACTION_TYPES.REPAIR_TOOL) return null;
+  if ([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL].includes(task?.type)) return null;
   const system = globalThis.shengling?.toolSystem;
   const explicit = task?.data?.tool ?? task?.data?.laborCost?.tool ?? null;
   if (explicit?.id) {

@@ -3,6 +3,7 @@ import { ACTION_TYPES } from './actionTypes.js';
 import { completeToolMaintenance } from './toolMaintenanceEffects.js';
 
 const RESOURCE_IDS = ['wood', 'berries', 'millet', 'water'];
+const TOOL_MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
 
 function itemText(items) {
   return Object.entries(items)
@@ -80,7 +81,7 @@ export function completeAction({ agent, task, peopleSystem, mapSystem, campStore
     details = { ...details, delivered };
   }
 
-  if (task.type === ACTION_TYPES.REPAIR_TOOL) {
+  if (TOOL_MAINTENANCE_ACTIONS.has(task.type)) {
     const result = completeToolMaintenance({ agent, task, peopleSystem, campStore, gameTime });
     summary = result.summary;
     details = { ...details, ...result.details, outcome: result.ok ? 'completed' : 'failed', failureReason: result.ok ? null : result.reason };

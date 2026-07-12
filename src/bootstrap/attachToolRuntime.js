@@ -12,8 +12,10 @@ function ensureReadout() {
   return readout;
 }
 
-function conditionLabel(tool, assignment, maintenanceReservation) {
+function conditionLabel(tool, assignment, maintenanceReservation, demand) {
+  if (maintenanceReservation?.mode === 'replace') return '替换制作中';
   if (maintenanceReservation) return tool.status === 'broken' ? '维修中·原已损坏' : '维修中';
+  if (demand?.mode === 'replace') return demand.guaranteeGap ? '保障缺口·急需替换' : '达到寿命·待替换';
   if (tool.status === 'broken') return '损坏·急需维修';
   if (assignment) return tool.condition === 'critical' ? '使用中·严重磨损' : tool.condition === 'worn' ? '使用中·低耐久' : '使用中';
   if (tool.condition === 'critical') return '严重磨损·急需维修';
@@ -34,19 +36,24 @@ function render(readout, toolSystem) {
   const tools = toolSystem.list();
   const assignments = new Map(toolSystem.getAssignments().map((entry) => [entry.toolId, entry]));
   const demands = new Map(toolSystem.listMaintenanceDemands().map((entry) => [entry.toolId, entry]));
+  const coverage = new Map(toolSystem.getCoverage().map((entry) => [entry.typeId, entry]));
   const maintenanceReservations = new Map(
     (globalThis.shengling?.toolMaintenanceRuntime?.listReservations?.() ?? []).map((entry) => [entry.toolId, entry]),
   );
-  readout.textContent = tools.map((tool) => {
+  const rows = tools.map((tool) => {
     const assignment = assignments.get(tool.id);
     const demand = demands.get(tool.id);
     const maintenanceReservation = maintenanceReservations.get(tool.id);
     const durability = `${Math.round(tool.durability)}/${Math.round(tool.maxDurability)}`;
     const maintenance = demand
-      ? `；维修需${materialLabel(demand.materials)}、${Math.round(demand.workMinutes)}分钟`
+      ? `；${demand.mode === 'replace' ? '替换' : '维修'}需${materialLabel(demand.materials)}、${Math.round(demand.workMinutes)}分钟`
       : '';
-    return `${tool.label} ${durability}（${conditionLabel(tool, assignment, maintenanceReservation)}${maintenance}）`;
-  }).join(' · ');
+    return `${tool.label}·第${tool.generation}代 ${durability}（${conditionLabel(tool, assignment, maintenanceReservation, demand)}${maintenance}）`;
+  });
+  const guarantee = [...coverage.values()]
+    .map((entry) => `${entry.label}${entry.usable}/${entry.required}${entry.gap > 0 ? '·恢复中' : ''}`)
+    .join('、');
+  readout.textContent = `${rows.join(' · ')}；公共保障：${guarantee}`;
 }
 
 export function attachToolRuntime() {
