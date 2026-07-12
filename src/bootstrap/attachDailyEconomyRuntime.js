@@ -1,6 +1,7 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createDailyEconomySystem } from '../modules/economy/dailyEconomySystem.js';
 import { createEconomicMetricsAuditView } from '../modules/economy/economicMetricsAuditView.js';
+import { createFarmSeedDailyEconomyView } from '../modules/economy/farmSeedDailyEconomyView.js';
 import { createTaskLifecycleEconomyView } from '../modules/economy/taskLifecycleEconomyView.js';
 
 function ensureReadout() {
@@ -34,6 +35,7 @@ function render(readout, system) {
   readout.textContent = [
     `第 ${report.day} 日经济`,
     `食物 ${signed(foodDelta(report))}`,
+    `粟种 ${signed(report.balances?.milletSeed?.actualDelta)}`,
     `水 ${signed(report.balances?.water?.actualDelta)}`,
     `木材 ${signed(report.balances?.wood?.actualDelta)}`,
     `劳动 ${laborStatus}`,
@@ -58,8 +60,11 @@ export function attachDailyEconomyRuntime() {
     dailyEconomySystem: baseDailyEconomySystem,
     taskLifecycleSystem: runtime.taskLifecycleSystem,
   });
-  const dailyEconomySystem = createEconomicMetricsAuditView({
+  const seedDailyEconomySystem = createFarmSeedDailyEconomyView({
     dailyEconomySystem: lifecycleDailyEconomySystem,
+  });
+  const dailyEconomySystem = createEconomicMetricsAuditView({
+    dailyEconomySystem: seedDailyEconomySystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
