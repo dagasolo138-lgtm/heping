@@ -8,6 +8,8 @@ import { createBuildingSystem } from '../src/modules/buildings/buildingSystem.js
 import { createResourceRenewalSystem } from '../src/modules/ecology/resourceRenewalSystem.js';
 import { createDailyEconomySystem } from '../src/modules/economy/dailyEconomySystem.js';
 import { createEconomicMetricsAuditView } from '../src/modules/economy/economicMetricsAuditView.js';
+import { createFarmSeedDailyEconomyView } from '../src/modules/economy/farmSeedDailyEconomyView.js';
+import { createFarmSeedResourceFlowView } from '../src/modules/economy/farmSeedResourceFlowView.js';
 import { createResourceFlowSystem } from '../src/modules/economy/resourceFlowSystem.js';
 import { attachResourceFlowTaskContextGuard } from '../src/modules/economy/resourceFlowTaskContextGuard.js';
 import { createTaskLifecycleEconomyView } from '../src/modules/economy/taskLifecycleEconomyView.js';
@@ -166,8 +168,11 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     resourceFlowSystem: baseResourceFlow,
     gameTime: time,
   });
-  const resourceFlow = createToolMaintenanceResourceFlowView({
+  const maintenanceResourceFlow = createToolMaintenanceResourceFlowView({
     resourceFlowSystem: yearAwareResourceFlow,
+  });
+  const resourceFlow = createFarmSeedResourceFlowView({
+    resourceFlowSystem: maintenanceResourceFlow,
   });
   runtime.resourceFlowSystem = resourceFlow;
   runtime.resourceFlowTaskContextGuard = resourceFlowTaskContextGuard;
@@ -195,7 +200,10 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     dailyEconomySystem: baseDailyEconomy,
     taskLifecycleSystem: taskLifecycle,
   });
-  const dailyEconomy = createEconomicMetricsAuditView({ dailyEconomySystem: lifecycleEconomy });
+  const seedEconomy = createFarmSeedDailyEconomyView({
+    dailyEconomySystem: lifecycleEconomy,
+  });
+  const dailyEconomy = createEconomicMetricsAuditView({ dailyEconomySystem: seedEconomy });
   runtime.dailyEconomySystem = dailyEconomy;
   bus.on('*', ({ eventName, payload }) => baseDailyEconomy.observe(eventName, payload));
 
