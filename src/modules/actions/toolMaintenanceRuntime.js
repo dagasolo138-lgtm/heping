@@ -1,6 +1,8 @@
 import { ACTION_TYPES } from './actionTypes.js';
 import { materialReservationKey } from './toolMaintenancePlanner.js';
 
+const MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
+
 function clone(value) {
   return structuredClone(value);
 }
@@ -9,6 +11,10 @@ function positiveMaterials(materials = {}) {
   return Object.fromEntries(Object.entries(materials)
     .map(([itemId, amount]) => [itemId, Math.max(0, Number(amount) || 0)])
     .filter(([, amount]) => amount > 0));
+}
+
+function modeForTask(task) {
+  return task?.type === ACTION_TYPES.REPLACE_TOOL ? 'replace' : 'repair';
 }
 
 export function createToolMaintenanceRuntime({
@@ -44,6 +50,8 @@ export function createToolMaintenanceRuntime({
     const failure = {
       taskId: task?.id ?? null,
       personId: personId ?? null,
+      actionType: task?.type ?? null,
+      mode: task?.data?.mode ?? modeForTask(task),
       demandId: task?.data?.demandId ?? null,
       toolId: task?.data?.toolId ?? null,
       reason,
@@ -56,12 +64,16 @@ export function createToolMaintenanceRuntime({
   }
 
   function reserveForTask({ task, personId } = {}) {
-    if (task?.type !== ACTION_TYPES.REPAIR_TOOL || !task.id) return null;
+    if (!MAINTENANCE_ACTIONS.has(task?.type) || !task.id) return null;
     if (reservations.has(task.id)) return clone(reservations.get(task.id));
 
+    const expectedMode = modeForTask(task);
     const demand = toolSystem?.getMaintenanceDemand?.(task.data?.toolId);
-    if (!demand || demand.id !== task.data?.demandId) {
-      return failReservation(task, personId, 'maintenance-demand-stale');
+    if (!demand || demand.id !== task.data?.demandId || demand.mode !== expectedMode) {
+      return failReservation(task, personId, 'maintenance-demand-stale', {
+        expectedMode,
+        liveMode: demand?.mode ?? null,
+      });
     }
     const campId = task.data?.campId ?? 'starting-camp';
     const camp = campStore?.get?.(campId);
@@ -81,10 +93,12 @@ export function createToolMaintenanceRuntime({
       amount: 1,
       capacity: 1,
       metadata: {
-        actionType: ACTION_TYPES.REPAIR_TOOL,
+        actionType: task.type,
+        mode: demand.mode,
         role: 'maintenance-target',
         toolId: demand.toolId,
         demandId: demand.id,
+        generation: demand.generation,
       },
     });
     if (!targetReservation) return failReservation(task, personId, 'maintenance-tool-reserved', { toolId: demand.toolId });
@@ -98,12 +112,14 @@ export function createToolMaintenanceRuntime({
         amount,
         capacity: Math.max(0, Number(camp.items?.[itemId] ?? 0)),
         metadata: {
-          actionType: ACTION_TYPES.REPAIR_TOOL,
+          actionType: task.type,
+          mode: demand.mode,
           role: 'maintenance-material',
           campId,
           itemId,
           toolId: demand.toolId,
           demandId: demand.id,
+          generation: demand.generation,
         },
       });
       if (!reservation) {
@@ -121,8 +137,11 @@ export function createToolMaintenanceRuntime({
     const bundle = {
       taskId: task.id,
       personId: personId ?? null,
+      actionType: task.type,
+      mode: demand.mode,
       demandId: demand.id,
       toolId: demand.toolId,
+      generation: demand.generation,
       campId,
       reservationIds: [...acquired],
       targetReservationId: targetReservation.id,
@@ -206,7 +225,12 @@ export function createToolMaintenanceRuntime({
       if (!bundle?.taskId || !bundle?.toolId || !Array.isArray(bundle.reservationIds)) {
         throw new Error('维修运行时检查点包含无效预留。');
       }
-      reservations.set(bundle.taskId, clone(bundle));
+      const normalized = {
+        ...clone(bundle),
+        actionType: bundle.actionType ?? ACTION_TYPES.REPAIR_TOOL,
+        mode: bundle.mode ?? (bundle.actionType === ACTION_TYPES.REPLACE_TOOL ? 'replace' : 'repair'),
+      };
+      reservations.set(normalized.taskId, normalized);
     });
     failures.clear();
     (snapshot.failures ?? []).forEach((failure) => {
@@ -227,6 +251,7 @@ export function createToolMaintenanceRuntime({
 
     reservations.forEach((bundle) => {
       if (!activeTaskIds.has(bundle.taskId)) issues.push({ type: 'orphan-maintenance-runtime', taskId: bundle.taskId });
+      if (!MAINTENANCE_ACTIONS.has(bundle.actionType)) issues.push({ type: 'invalid-maintenance-action', taskId: bundle.taskId, actionType: bundle.actionType });
       bundle.reservationIds.forEach((id) => {
         if (!ledgerEntries.some((entry) => entry.id === id && entry.taskId === bundle.taskId)) {
           issues.push({ type: 'missing-maintenance-reservation', taskId: bundle.taskId, reservationId: id });
@@ -237,7 +262,7 @@ export function createToolMaintenanceRuntime({
     });
 
     ledgerEntries
-      .filter((entry) => entry.metadata?.actionType === ACTION_TYPES.REPAIR_TOOL)
+      .filter((entry) => MAINTENANCE_ACTIONS.has(entry.metadata?.actionType))
       .forEach((entry) => {
         if (!reservations.has(entry.taskId)) issues.push({ type: 'orphan-maintenance-ledger-entry', reservationId: entry.id });
       });
@@ -246,12 +271,14 @@ export function createToolMaintenanceRuntime({
       ok: issues.length === 0,
       issues: Object.freeze(issues.map(clone)),
       active: reservations.size,
+      repairActive: [...reservations.values()].filter((entry) => entry.mode === 'repair').length,
+      replacementActive: [...reservations.values()].filter((entry) => entry.mode === 'replace').length,
       failedReservations: failures.size,
     });
   }
 
   eventBus?.on?.('actions:assigned', ({ personId, task }) => {
-    if (task?.type === ACTION_TYPES.REPAIR_TOOL) reserveForTask({ personId, task });
+    if (MAINTENANCE_ACTIONS.has(task?.type)) reserveForTask({ personId, task });
   });
   ['actions:completed', 'actions:failed', 'actions:cancelled'].forEach((eventName) => {
     eventBus?.on?.(eventName, ({ task, taskId }) => releaseTask(task?.id ?? taskId, `maintenance:${eventName.split(':')[1]}`));
