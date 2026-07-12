@@ -7,7 +7,7 @@ import { buildDynamicStockTargets, stockResourceForAction } from './stockTargetM
 import { scoreUtilityCandidates } from './utilityScorer.js';
 import { planToolMaintenanceAction } from './toolMaintenancePlanner.js';
 
-const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
+const ITEM_TYPES = Object.freeze(['milletSeed', 'wood', 'berries', 'millet', 'water']);
 const MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
 const ACTION_CAPS = Object.freeze({
   [ACTION_TYPES.FETCH_WATER]: 3,
@@ -265,7 +265,7 @@ function createUtilityCandidates(context) {
 
   if (needsResource(ACTION_TYPES.CHOP_TREE, context, person)) {
     const wood = attachStockTarget(makeChopTask(person, mapSystem, reservedFeatureIds), context.stockTargets);
-    if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId } }));
+    if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId }));
   }
 
   if (person.state.energy <= 60) {
