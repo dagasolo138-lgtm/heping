@@ -4,6 +4,7 @@ import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
 
 const CAMP_ID = 'starting-camp';
 const MAX_ACTIVE_MAINTENANCE = 1;
+const MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
 
 function clone(value) {
   return structuredClone(value);
@@ -27,9 +28,14 @@ function workerFactor(person, skill) {
   return Math.max(0.62, 1 - level * 0.05);
 }
 
+function activeMaintenanceCount(actionCounts = {}) {
+  return [...MAINTENANCE_ACTIONS].reduce((total, type) => total + Number(actionCounts[type] ?? 0), 0);
+}
+
 export function evaluateMaintenanceDemand({ demand, camp, reservationLedger } = {}) {
   const reasons = [];
   if (!demand?.id || !demand.toolId) reasons.push('invalid-demand');
+  if (!['repair', 'replace'].includes(demand?.mode)) reasons.push('invalid-mode');
   if (!camp?.id || !camp?.anchor) reasons.push('missing-camp');
   if (demand?.toolId && Number(reservationLedger?.count?.({ type: 'tool', key: demand.toolId }) ?? 0) > 0) {
     reasons.push('tool-reserved');
@@ -44,7 +50,7 @@ export function evaluateMaintenanceDemand({ demand, camp, reservationLedger } = 
 
 export function planToolMaintenanceAction({ person, camp, actionCounts = {} } = {}) {
   if (!person?.identity?.alive || !camp?.anchor) return null;
-  if (Number(actionCounts[ACTION_TYPES.REPAIR_TOOL] ?? 0) >= MAX_ACTIVE_MAINTENANCE) return null;
+  if (activeMaintenanceCount(actionCounts) >= MAX_ACTIVE_MAINTENANCE) return null;
 
   const runtime = globalThis.shengling ?? {};
   const toolSystem = runtime.toolSystem;
@@ -54,30 +60,39 @@ export function planToolMaintenanceAction({ person, camp, actionCounts = {} } = 
   for (const demand of demands) {
     const availability = evaluateMaintenanceDemand({ demand, camp, reservationLedger });
     if (!availability.ready) continue;
+    const actionType = demand.mode === 'replace' ? ACTION_TYPES.REPLACE_TOOL : ACTION_TYPES.REPAIR_TOOL;
     const skillFactor = workerFactor(person, demand.skill);
     const workDuration = Math.max(
       0.5,
       Number(demand.workMinutes ?? 0) / Math.max(1, WORLD_MINUTES_PER_REAL_SECOND) * skillFactor,
     );
-    const score = demand.priority === 'high' ? 96 : 58;
-    const reason = demand.priority === 'high'
-      ? `${demand.label}已严重磨损，必须尽快恢复生产能力`
-      : `${demand.label}耐久偏低，安排预防性维修`;
+    const score = demand.guaranteeGap ? 100 : demand.priority === 'high' ? 96 : 58;
+    const reason = demand.guaranteeGap
+      ? `${demand.label}已退出关键生产，必须恢复最低公共工具保障`
+      : demand.mode === 'replace'
+        ? `${demand.label}已达到本代维修上限，需要制作替代工具`
+        : demand.priority === 'high'
+          ? `${demand.label}已严重磨损，必须尽快恢复生产能力`
+          : `${demand.label}耐久偏低，安排预防性维修`;
     return {
       id: createId('task'),
-      type: ACTION_TYPES.REPAIR_TOOL,
-      label: ACTION_META[ACTION_TYPES.REPAIR_TOOL].label,
-      phaseLabel: ACTION_META[ACTION_TYPES.REPAIR_TOOL].phaseLabel,
+      type: actionType,
+      label: ACTION_META[actionType].label,
+      phaseLabel: ACTION_META[actionType].phaseLabel,
       destination: clone(camp.anchor),
       workDuration,
       data: {
         campId: camp.id,
         demandId: demand.id,
+        mode: demand.mode,
         toolId: demand.toolId,
         toolTypeId: demand.typeId,
         toolLabel: demand.label,
+        generation: Number(demand.generation ?? 1),
         condition: demand.condition,
         priority: demand.priority,
+        guaranteeGap: Boolean(demand.guaranteeGap),
+        replacementReason: demand.replacementReason ?? null,
         currentDurability: Number(demand.currentDurability),
         targetDurability: Number(demand.targetDurability),
         materials: clone(demand.materials),
@@ -88,7 +103,9 @@ export function planToolMaintenanceAction({ person, camp, actionCounts = {} } = 
           score,
           reason,
           factors: {
+            minimumGuarantee: demand.guaranteeGap ? 80 : 0,
             maintenanceUrgency: demand.priority === 'high' ? 70 : 32,
+            replacementNeed: demand.mode === 'replace' ? 34 : 0,
             productionContinuity: demand.priority === 'high' ? 26 : 20,
             skillFit: Math.round((1 - skillFactor) * 100),
           },
