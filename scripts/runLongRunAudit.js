@@ -59,6 +59,7 @@ function finalWorldStateDigest(world) {
     roads: world.roads.exportState(),
     foodStorage: world.foodStorage.exportState(),
     tools: world.tools.exportState(),
+    toolCoverage: world.tools.getCoverage(),
     maintenanceRuntime: world.toolMaintenanceRuntime.listReservations(),
     socialEvents: world.socialEvents.exportState(),
     chronicles: world.chronicles.exportState(),
@@ -87,6 +88,8 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   const activeTaskIds = new Set(activeTasks.map((record) => record.taskId));
   const reservations = world.reservationLedger.list();
   const toolAssignments = world.tools.getAssignments();
+  const tools = world.tools.list();
+  const toolCoverage = world.tools.getCoverage();
   const maintenanceDemands = world.tools.listMaintenanceDemands();
   const maintenanceReservations = world.toolMaintenanceRuntime.listReservations();
   const alive = world.people.getAliveRuntime().length;
@@ -113,8 +116,11 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.equal(maintenanceVerification.ok, true, JSON.stringify(compactIssues(maintenanceVerification)));
   assert.equal(maintenanceRuntimeVerification.ok, true, JSON.stringify(compactIssues(maintenanceRuntimeVerification)));
   assert.equal(maintenanceVerification.demandCount, maintenanceDemands.length);
-  assert.ok(maintenanceDemands.length <= world.tools.list().length, 'Maintenance demands exceed tool count');
-  assert.ok(maintenanceReservations.length <= 1, 'More than one maintenance task is active');
+  assert.equal(maintenanceVerification.replacementDemandCount, maintenanceDemands.filter((demand) => demand.mode === 'replace').length);
+  assert.equal(maintenanceVerification.guaranteeGapCount, toolCoverage.filter((entry) => entry.gap > 0).length);
+  assert.ok(maintenanceDemands.length <= tools.length, 'Maintenance demands exceed tool count');
+  assert.ok(maintenanceReservations.length <= 1, 'More than one maintenance or replacement task is active');
+  assert.ok(maintenanceRuntimeVerification.repairActive + maintenanceRuntimeVerification.replacementActive <= 1);
   assert.equal(reports.length, expectedDay, `Expected ${expectedDay} reports, got ${reports.length}`);
   assert.ok(activeTasks.length <= alive, `Active tasks ${activeTasks.length} exceed alive people ${alive}`);
   assert.ok(taskContextVerification.tracked <= alive, `Task contexts ${taskContextVerification.tracked} exceed alive people ${alive}`);
@@ -125,6 +131,24 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.ok(flowEntries.length <= 5000, `Resource flow exceeded cap: ${flowEntries.length}`);
   assert.ok((lifecycleState.records ?? []).length <= 5000, `Lifecycle records exceeded cap: ${lifecycleState.records?.length}`);
   assert.ok((lifecycleState.stageCosts ?? []).length <= 5000, `Stage costs exceeded cap: ${lifecycleState.stageCosts?.length}`);
+
+  tools.forEach((tool) => {
+    assert.ok(Number(tool.generation) >= 1, `Invalid tool generation: ${tool.id}`);
+    assert.ok(Number(tool.repairsSinceReplacement) >= 0, `Negative generation repair count: ${tool.id}`);
+    assert.ok(Number(tool.wearSinceReplacement) >= 0, `Negative generation wear: ${tool.id}`);
+    assert.ok(Number(tool.wearSinceReplacement) <= Number(tool.totalWear) + 0.001, `Generation wear exceeds total wear: ${tool.id}`);
+  });
+  toolCoverage.forEach((coverage) => {
+    assert.equal(coverage.protected, true, `Unprotected public tool guarantee: ${coverage.typeId}`);
+    if (coverage.gap > 0) {
+      assert.ok(maintenanceDemands.some((demand) => demand.typeId === coverage.typeId && demand.guaranteeGap),
+        `Guarantee gap lacks recovery demand: ${coverage.typeId}`);
+    }
+  });
+  maintenanceReservations.forEach((reservation) => {
+    assert.ok(['repair', 'replace'].includes(reservation.mode), `Invalid maintenance mode: ${reservation.taskId}`);
+    assert.ok(['repairTool', 'replaceTool'].includes(reservation.actionType), `Invalid maintenance action: ${reservation.taskId}`);
+  });
 
   finalizedReports.forEach((report) => {
     const key = reportIdentity(report);
@@ -153,10 +177,16 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
     },
     reservations: world.reservationLedger.getSummary(),
     toolSummary: world.tools.getSummary(),
+    toolCoverage,
     maintenance: {
       demands: maintenanceDemands.length,
       urgent: maintenanceDemands.filter((demand) => demand.priority === 'high').length,
+      replacements: maintenanceDemands.filter((demand) => demand.mode === 'replace').length,
+      generations: Object.fromEntries(tools.map((tool) => [tool.id, tool.generation])),
+      guaranteeGaps: toolCoverage.filter((entry) => entry.gap > 0).length,
       activeTasks: maintenanceReservations.length,
+      activeRepairs: maintenanceRuntimeVerification.repairActive,
+      activeReplacements: maintenanceRuntimeVerification.replacementActive,
       failedReservations: maintenanceRuntimeVerification.failedReservations,
       verification: maintenanceVerification.ok && maintenanceRuntimeVerification.ok,
     },
@@ -171,6 +201,7 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
       dailyEconomy: economyVerification.ok,
       toolMaintenance: maintenanceVerification.ok,
       toolMaintenanceRuntime: maintenanceRuntimeVerification.ok,
+      publicToolGuarantee: toolCoverage.every((entry) => entry.protected),
       simulationError: actionDiagnostics.lastSimulationError,
       orphanReservations: orphanReservations.length,
       orphanTools: orphanTools.length,
@@ -248,7 +279,8 @@ try {
       + `ticksPerSecond=${snapshot.segment.ticksPerSecond} heap=${snapshot.heapUsedBytes} `
       + `active=${snapshot.activeTasks} reservations=${snapshot.reservations.total} `
       + `maintenance=${snapshot.maintenance.demands}/${snapshot.maintenance.activeTasks} `
-      + `taskContexts=${snapshot.resourceFlowTaskContexts.tracked}`,
+      + `replacements=${snapshot.maintenance.replacements} generations=${JSON.stringify(snapshot.maintenance.generations)} `
+      + `guaranteeGaps=${snapshot.maintenance.guaranteeGaps} taskContexts=${snapshot.resourceFlowTaskContexts.tracked}`,
     );
   }
 
