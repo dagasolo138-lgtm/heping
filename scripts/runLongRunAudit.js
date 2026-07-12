@@ -55,6 +55,7 @@ function finalWorldStateDigest(world) {
     buildings: world.buildings.exportState(),
     fire: world.fire.exportState(),
     farms: world.farms.exportState(),
+    farmSeeds: world.farms.getSeedSummary(),
     ecology: world.ecology.exportState(),
     roads: world.roads.exportState(),
     foodStorage: world.foodStorage.exportState(),
@@ -84,6 +85,10 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   const economyVerification = world.dailyEconomy.verify();
   const maintenanceVerification = world.tools.verifyMaintenance();
   const maintenanceRuntimeVerification = world.toolMaintenanceRuntime.verify();
+  const seedVerification = world.farms.verifySeeds();
+  const seedSummary = world.farms.getSeedSummary();
+  const farmFields = world.farms.listFields();
+  const productiveFields = farmFields.filter((field) => field.status === 'growing' || field.status === 'mature').length;
   const activeTasks = world.taskLifecycle.list({ status: 'active' });
   const activeTaskIds = new Set(activeTasks.map((record) => record.taskId));
   const reservations = world.reservationLedger.list();
@@ -115,6 +120,7 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.equal(economyVerification.ok, true, JSON.stringify(compactIssues(economyVerification)));
   assert.equal(maintenanceVerification.ok, true, JSON.stringify(compactIssues(maintenanceVerification)));
   assert.equal(maintenanceRuntimeVerification.ok, true, JSON.stringify(compactIssues(maintenanceRuntimeVerification)));
+  assert.equal(seedVerification.ok, true, JSON.stringify(compactIssues(seedVerification)));
   assert.equal(maintenanceVerification.demandCount, maintenanceDemands.length);
   assert.equal(maintenanceVerification.replacementDemandCount, maintenanceDemands.filter((demand) => demand.mode === 'replace').length);
   assert.equal(maintenanceVerification.guaranteeGapCount, toolCoverage.filter((entry) => entry.gap > 0).length);
@@ -131,6 +137,11 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.ok(flowEntries.length <= 5000, `Resource flow exceeded cap: ${flowEntries.length}`);
   assert.ok((lifecycleState.records ?? []).length <= 5000, `Lifecycle records exceeded cap: ${lifecycleState.records?.length}`);
   assert.ok((lifecycleState.stageCosts ?? []).length <= 5000, `Stage costs exceeded cap: ${lifecycleState.stageCosts?.length}`);
+  assert.ok(seedSummary.onHand >= 0, 'Seed stock became negative');
+  assert.ok(seedSummary.inTransit <= seedSummary.carried + 0.001, 'In-transit seeds exceed carried seeds');
+  if (farmFields.length > 0) {
+    assert.ok(seedSummary.onHand + productiveFields > 0, 'Agriculture lost all seed stock and productive crops');
+  }
 
   tools.forEach((tool) => {
     assert.ok(Number(tool.generation) >= 1, `Invalid tool generation: ${tool.id}`);
@@ -190,6 +201,14 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
       failedReservations: maintenanceRuntimeVerification.failedReservations,
       verification: maintenanceVerification.ok && maintenanceRuntimeVerification.ok,
     },
+    farming: {
+      fields: farmFields.length,
+      productiveFields,
+      matureFields: farmFields.filter((field) => field.status === 'mature').length,
+      seed: seedSummary,
+      seedReservations: seedVerification.reservations,
+      verification: seedVerification.ok,
+    },
     flowEntries: flowEntries.length,
     reports: reports.length,
     finalizedReports: finalizedReports.length,
@@ -202,6 +221,7 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
       toolMaintenance: maintenanceVerification.ok,
       toolMaintenanceRuntime: maintenanceRuntimeVerification.ok,
       publicToolGuarantee: toolCoverage.every((entry) => entry.protected),
+      seedConservation: seedVerification.ok,
       simulationError: actionDiagnostics.lastSimulationError,
       orphanReservations: orphanReservations.length,
       orphanTools: orphanTools.length,
@@ -280,6 +300,8 @@ try {
       + `active=${snapshot.activeTasks} reservations=${snapshot.reservations.total} `
       + `maintenance=${snapshot.maintenance.demands}/${snapshot.maintenance.activeTasks} `
       + `replacements=${snapshot.maintenance.replacements} generations=${JSON.stringify(snapshot.maintenance.generations)} `
+      + `seeds=${snapshot.farming.seed.onHand}/${snapshot.farming.seed.target} seedTransit=${snapshot.farming.seed.inTransit} `
+      + `fields=${snapshot.farming.fields}/${snapshot.farming.productiveFields} `
       + `guaranteeGaps=${snapshot.maintenance.guaranteeGaps} taskContexts=${snapshot.resourceFlowTaskContexts.tracked}`,
     );
   }
