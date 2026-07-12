@@ -5,6 +5,7 @@ import { buildDesireModel } from './desireModel.js';
 import { makeActionCandidate } from './actionCandidates.js';
 import { buildDynamicStockTargets, stockResourceForAction } from './stockTargetModel.js';
 import { scoreUtilityCandidates } from './utilityScorer.js';
+import { planToolMaintenanceAction } from './toolMaintenancePlanner.js';
 
 const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
 const ACTION_CAPS = Object.freeze({
@@ -98,9 +99,28 @@ function buildingPipeline() {
   return { committed, constructionNeed };
 }
 
+function maintenancePipeline() {
+  const runtime = globalThis.shengling ?? {};
+  const committed = {};
+  const constructionNeed = {};
+  const reservations = runtime.reservationLedger?.list?.() ?? [];
+  (runtime.toolSystem?.listMaintenanceDemands?.() ?? []).forEach((demand) => {
+    const active = reservations.some((entry) => entry.type === 'tool'
+      && entry.key === demand.toolId
+      && entry.metadata?.actionType === ACTION_TYPES.REPAIR_TOOL);
+    Object.entries(demand.materials ?? {}).forEach(([itemId, value]) => {
+      addAmount(active ? committed : constructionNeed, itemId, value);
+    });
+  });
+  return { committed, constructionNeed };
+}
+
 export function buildPlanningStockTargets(context = {}) {
   const runtime = globalThis.shengling ?? {};
   const pipeline = buildingPipeline();
+  const maintenance = maintenancePipeline();
+  Object.entries(maintenance.committed).forEach(([itemId, value]) => addAmount(pipeline.committed, itemId, value));
+  Object.entries(maintenance.constructionNeed).forEach(([itemId, value]) => addAmount(pipeline.constructionNeed, itemId, value));
   addAmount(pipeline.committed, 'wood', Number(context.actionCounts?.[ACTION_TYPES.TEND_FIRE] ?? 0));
   return buildDynamicStockTargets({
     population: context.population ?? context.people?.length ?? 0,
@@ -328,6 +348,9 @@ export function planNextAction(inputContext) {
     const task = makeByType(type, context);
     if (task) return attachUtilityDebug(task, { score: 100, reason: '紧急生存需求', factors: { emergency: 100 } });
   }
+
+  const maintenance = planToolMaintenanceAction({ person, camp, actionCounts: context.actionCounts });
+  if (maintenance) return maintenance;
 
   const candidates = createUtilityCandidates(context);
   if (candidates.length) {

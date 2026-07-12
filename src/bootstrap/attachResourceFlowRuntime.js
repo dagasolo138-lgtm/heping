@@ -2,6 +2,7 @@ import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createResourceFlowSystem } from '../modules/economy/resourceFlowSystem.js';
 import { attachResourceFlowTaskContextGuard } from '../modules/economy/resourceFlowTaskContextGuard.js';
 import { createYearAwareResourceFlowView } from '../modules/economy/yearAwareResourceFlowView.js';
+import { createToolMaintenanceResourceFlowView } from '../modules/economy/toolMaintenanceResourceFlowView.js';
 
 function ensureReadout() {
   const host = document.querySelector('.camp-stock');
@@ -29,6 +30,7 @@ function render(readout, system, gameTime) {
     `生产 ${formatAmount(category.production)}`,
     `消耗 ${formatAmount(category.consumption)}`,
     `施工 ${formatAmount(category.construction)}`,
+    `维修 ${formatAmount(category.repair)}`,
     `腐败 ${formatAmount(category.spoilage)}`,
     `转移 ${formatAmount(category.transfer)}`,
   ].join(' · ');
@@ -50,9 +52,12 @@ export function attachResourceFlowRuntime() {
     resourceFlowSystem: baseResourceFlowSystem,
     getRuntime: () => globalThis.shengling,
   });
-  const resourceFlowSystem = createYearAwareResourceFlowView({
+  const yearAwareResourceFlowSystem = createYearAwareResourceFlowView({
     resourceFlowSystem: baseResourceFlowSystem,
     gameTime: runtime.gameTime,
+  });
+  const resourceFlowSystem = createToolMaintenanceResourceFlowView({
+    resourceFlowSystem: yearAwareResourceFlowSystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({

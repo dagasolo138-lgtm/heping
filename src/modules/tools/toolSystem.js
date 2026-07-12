@@ -1,15 +1,16 @@
 import { INITIAL_TOOL_BLUEPRINTS, TOOL_SCHEMA_VERSION, createToolInstance, toolDefinition } from './toolCatalog.js';
+import { maintenanceDemandView, synchronizeMaintenance, verifyToolMaintenance } from './toolMaintenanceModel.js';
 
 function clone(value) {
   return structuredClone(value);
 }
 
-function normalizedTool(raw) {
+function normalizedTool(raw, time = null) {
   const definition = toolDefinition(raw?.typeId);
   if (!raw?.id || !definition) throw new Error('工具存档包含未知工具。');
   const maximum = Math.max(1, Number(raw.maxDurability ?? definition.maxDurability));
   const durability = Math.max(0, Math.min(maximum, Number(raw.durability ?? maximum)));
-  return {
+  const base = {
     schemaVersion: TOOL_SCHEMA_VERSION,
     id: String(raw.id),
     typeId: definition.typeId,
@@ -20,8 +21,11 @@ function normalizedTool(raw) {
     owner: clone(raw.owner ?? { type: 'camp', id: 'starting-camp' }),
     location: clone(raw.location ?? { type: 'camp', id: 'starting-camp' }),
     repairedCount: Math.max(0, Number(raw.repairedCount ?? 0)),
+    replacedCount: Math.max(0, Number(raw.replacedCount ?? 0)),
     totalWear: Math.max(0, Number(raw.totalWear ?? 0)),
   };
+  const synchronized = synchronizeMaintenance(base, raw.maintenance ?? null, time);
+  return { ...base, condition: synchronized.condition, maintenance: synchronized.maintenance };
 }
 
 function toolScore(tool, actionType) {
@@ -47,11 +51,19 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     return gameTime?.stamp?.() ?? null;
   }
 
+  function synchronizeTool(tool, time = stamp()) {
+    const synchronized = synchronizeMaintenance(tool, tool.maintenance ?? null, time);
+    tool.condition = synchronized.condition;
+    tool.maintenance = synchronized.maintenance;
+    return tool;
+  }
+
   function emit(reason, payload = {}) {
     eventBus?.emit?.('tools:changed', {
       reason,
       ...clone(payload),
       tools: list(),
+      maintenanceDemands: listMaintenanceDemands(),
       summary: getSummary(),
       time: stamp(),
     });
@@ -60,7 +72,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
   function seedDefaults() {
     tools.clear();
     INITIAL_TOOL_BLUEPRINTS.forEach((blueprint) => {
-      const tool = createToolInstance(blueprint);
+      const tool = normalizedTool(createToolInstance(blueprint), stamp());
       tools.set(tool.id, tool);
     });
   }
@@ -74,6 +86,28 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
   function get(toolId) {
     const tool = tools.get(toolId);
     return tool ? clone(tool) : null;
+  }
+
+  function listMaintenanceDemands({ priority = null } = {}) {
+    return [...tools.values()]
+      .map(maintenanceDemandView)
+      .filter(Boolean)
+      .filter((demand) => !priority || demand.priority === priority)
+      .sort((first, second) => {
+        if (first.priority !== second.priority) return first.priority === 'high' ? -1 : 1;
+        return first.toolId.localeCompare(second.toolId);
+      })
+      .map(clone);
+  }
+
+  function getMaintenanceDemand(toolId) {
+    const tool = tools.get(toolId);
+    const demand = maintenanceDemandView(tool);
+    return demand ? clone(demand) : null;
+  }
+
+  function verifyMaintenance() {
+    return verifyToolMaintenance(list());
   }
 
   function isReserved(toolId) {
@@ -103,6 +137,8 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
       durability: tool.durability,
       maxDurability: tool.maxDurability,
       condition: tool.maxDurability > 0 ? tool.durability / tool.maxDurability : 0,
+      conditionState: tool.condition,
+      maintenanceDemandId: tool.maintenance?.demandId ?? null,
       actionType,
       effects: clone(definition.effects),
       wear: Number(definition.wear[actionType] ?? 0),
@@ -168,12 +204,19 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
   function applyWear(toolId, amount, reason = 'tool:wear') {
     const tool = tools.get(toolId);
     if (!tool || tool.status === 'broken') return null;
+    const previousDemandId = tool.maintenance?.demandId ?? null;
     const applied = Math.min(tool.durability, Math.max(0, Number(amount) || 0));
     tool.durability = Math.max(0, tool.durability - applied);
     tool.totalWear += applied;
     tool.status = tool.durability > 0 ? 'usable' : 'broken';
+    synchronizeTool(tool);
     tools.set(tool.id, tool);
-    emit(reason, { tool: clone(tool), amount: applied, broken: tool.status === 'broken' });
+    emit(reason, {
+      tool: clone(tool),
+      amount: applied,
+      broken: tool.status === 'broken',
+      maintenanceRequested: !previousDemandId && Boolean(tool.maintenance?.demandId),
+    });
     return clone(tool);
   }
 
@@ -216,8 +259,9 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     tool.durability += restored;
     tool.status = 'usable';
     tool.repairedCount += 1;
+    synchronizeTool(tool);
     tools.set(tool.id, tool);
-    emit(reason, { tool: clone(tool), amount: restored });
+    emit(reason, { tool: clone(tool), amount: restored, maintenanceCleared: !tool.maintenance?.demandId });
     return clone(tool);
   }
 
@@ -226,9 +270,10 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     if (!tool) return null;
     tool.durability = tool.maxDurability;
     tool.status = 'usable';
-    tool.repairedCount += 1;
+    tool.replacedCount += 1;
+    synchronizeTool(tool);
     tools.set(tool.id, tool);
-    emit('tool:replaced', { tool: clone(tool) });
+    emit('tool:replaced', { tool: clone(tool), maintenanceCleared: true });
     return clone(tool);
   }
 
@@ -238,10 +283,15 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
 
   function getSummary() {
     const values = [...tools.values()];
+    const demands = values.map(maintenanceDemandView).filter(Boolean);
     return {
       total: values.length,
       usable: values.filter((tool) => tool.status === 'usable').length,
       broken: values.filter((tool) => tool.status === 'broken').length,
+      low: values.filter((tool) => tool.condition === 'worn' || tool.condition === 'critical').length,
+      critical: values.filter((tool) => tool.condition === 'critical').length,
+      maintenanceNeeded: demands.length,
+      urgentMaintenance: demands.filter((demand) => demand.priority === 'high').length,
       reserved: assignments.size,
       averageCondition: values.length
         ? values.reduce((total, tool) => total + tool.durability / tool.maxDurability, 0) / values.length
@@ -254,19 +304,19 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
   }
 
   function importState(snapshot) {
-    if (snapshot?.schemaVersion !== TOOL_SCHEMA_VERSION || !Array.isArray(snapshot.tools)) {
+    if (![1, TOOL_SCHEMA_VERSION].includes(Number(snapshot?.schemaVersion)) || !Array.isArray(snapshot.tools)) {
       throw new Error('工具存档格式不兼容。');
     }
     const next = new Map();
     snapshot.tools.forEach((raw) => {
-      const tool = normalizedTool(raw);
+      const tool = normalizedTool(raw, stamp());
       if (next.has(tool.id)) throw new Error(`工具存档包含重复 ID：${tool.id}`);
       next.set(tool.id, tool);
     });
     tools.clear();
     next.forEach((tool, id) => tools.set(id, tool));
     assignments.clear();
-    emit('tools:hydrated', { count: tools.size });
+    emit('tools:hydrated', { count: tools.size, sourceSchemaVersion: Number(snapshot.schemaVersion) });
     return list();
   }
 
@@ -284,7 +334,7 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
   function restoreCheckpoint(snapshot) {
     tools.clear();
     (snapshot?.tools ?? []).forEach((raw) => {
-      const tool = normalizedTool(raw);
+      const tool = normalizedTool(raw, stamp());
       tools.set(tool.id, tool);
     });
     assignments.clear();
@@ -298,6 +348,9 @@ export function createToolSystem({ eventBus, gameTime, reservationLedger, getRun
     get,
     getSummary,
     getAssignments,
+    listMaintenanceDemands,
+    getMaintenanceDemand,
+    verifyMaintenance,
     previewForAction,
     reserveForTask,
     releaseReservationForOwner,

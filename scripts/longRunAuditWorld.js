@@ -3,6 +3,7 @@ import { resetIdSequence } from '../src/core/ids/createId.js';
 import { createGameTime } from '../src/core/time/gameTime.js';
 import { createActionSystem } from '../src/modules/actions/actionSystem.js';
 import { createReservationLedger } from '../src/modules/actions/reservationLedger.js';
+import { createToolMaintenanceRuntime } from '../src/modules/actions/toolMaintenanceRuntime.js';
 import { createBuildingSystem } from '../src/modules/buildings/buildingSystem.js';
 import { createResourceRenewalSystem } from '../src/modules/ecology/resourceRenewalSystem.js';
 import { createDailyEconomySystem } from '../src/modules/economy/dailyEconomySystem.js';
@@ -12,6 +13,7 @@ import { attachResourceFlowTaskContextGuard } from '../src/modules/economy/resou
 import { createTaskLifecycleEconomyView } from '../src/modules/economy/taskLifecycleEconomyView.js';
 import { createTaskLifecycleStageCostView } from '../src/modules/economy/taskLifecycleStageCostView.js';
 import { createTaskLifecycleSystem } from '../src/modules/economy/taskLifecycleSystem.js';
+import { createToolMaintenanceResourceFlowView } from '../src/modules/economy/toolMaintenanceResourceFlowView.js';
 import { createYearAwareResourceFlowView } from '../src/modules/economy/yearAwareResourceFlowView.js';
 import { createFireSystem } from '../src/modules/environment/fireSystem.js';
 import { createWeatherSystem } from '../src/modules/environment/weatherSystem.js';
@@ -140,6 +142,16 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   runtime.toolSystem = tools;
   installToolRuntimeListeners({ bus, tools });
 
+  const toolMaintenanceRuntime = createToolMaintenanceRuntime({
+    eventBus: bus,
+    reservationLedger,
+    campStore: camp,
+    toolSystem: tools,
+    gameTime: time,
+    getRuntime: () => runtime,
+  });
+  runtime.toolMaintenanceRuntime = toolMaintenanceRuntime;
+
   const baseResourceFlow = createResourceFlowSystem({
     eventBus: bus,
     gameTime: time,
@@ -150,9 +162,12 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     resourceFlowSystem: baseResourceFlow,
     getRuntime: () => runtime,
   });
-  const resourceFlow = createYearAwareResourceFlowView({
+  const yearAwareResourceFlow = createYearAwareResourceFlowView({
     resourceFlowSystem: baseResourceFlow,
     gameTime: time,
+  });
+  const resourceFlow = createToolMaintenanceResourceFlowView({
+    resourceFlowSystem: yearAwareResourceFlow,
   });
   runtime.resourceFlowSystem = resourceFlow;
   runtime.resourceFlowTaskContextGuard = resourceFlowTaskContextGuard;
@@ -243,6 +258,7 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     reservationLedger,
     actions,
     tools,
+    toolMaintenanceRuntime,
     socialEvents,
     chronicles,
     resourceFlow,

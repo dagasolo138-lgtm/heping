@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.27.7",
-  "buildId": "v0.27.7-stability-continuity-20260711-01",
-  "sourceCommit": "4deb19cd3832e1c335a600baca6efd789b6bed36",
+  "version": "v0.28.1",
+  "buildId": "v0.28.1-tool-maintenance-economy-20260712-01",
+  "sourceCommit": "d1f9780ff8910c4d88c2909b4b0bd786074a0503",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional v0.27.7 commit containing long-run stability guards, resource-flow task-context cleanup, construction handoff protection, full action-runtime rollback continuity and the world-save app-version bump; later README, ROADMAP, CODEX and manifest commits may follow it."
+    "sourceCommitPolicy": "sourceCommit points to the final functional v0.28.1 commit containing persistent maintenance demands, real repair tasks, target-tool and material reservations, repair labor and explicit failures, repair resource-flow accounting, daily reconciliation, long-run conservation checks, precise failed-load rollback for active repair tasks and deterministic-fingerprint compatibility; later tests, documentation and this manifest commit follow it."
   }
 }

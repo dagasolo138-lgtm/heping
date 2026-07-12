@@ -1,7 +1,7 @@
 export const DAILY_ECONOMY_SCHEMA_VERSION = 1;
 
 const RESOURCE_ITEMS = Object.freeze(['wood', 'berries', 'millet', 'water', 'stone']);
-const OUTFLOW_CATEGORIES = new Set(['consumption', 'fuel', 'construction', 'spoilage']);
+const OUTFLOW_CATEGORIES = new Set(['consumption', 'fuel', 'construction', 'repair', 'spoilage']);
 
 function clone(value) {
   return structuredClone(value);
@@ -144,6 +144,7 @@ function buildBalances(opening, closing, summary) {
     if (itemId.startsWith('durability:')) return;
     const flow = summary.byItem[itemId] ?? {};
     const production = round(flow.production);
+    const repair = round(flow.repair);
     const outflow = round([...OUTFLOW_CATEGORIES].reduce((total, category) => total + Number(flow[category] ?? 0), 0));
     const expectedDelta = round(production - outflow);
     const actualDelta = round(Number(closing.byItem?.[itemId] ?? 0) - Number(opening.byItem?.[itemId] ?? 0));
@@ -154,6 +155,7 @@ function buildBalances(opening, closing, summary) {
       consumption: round(flow.consumption),
       fuel: round(flow.fuel),
       construction: round(flow.construction),
+      ...(repair > 0 ? { repair } : {}),
       spoilage: round(flow.spoilage),
       internalTransfer: round(flow.transfer),
       expectedDelta,

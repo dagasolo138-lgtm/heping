@@ -12,15 +12,40 @@ function ensureReadout() {
   return readout;
 }
 
+function conditionLabel(tool, assignment, maintenanceReservation) {
+  if (maintenanceReservation) return tool.status === 'broken' ? '维修中·原已损坏' : '维修中';
+  if (tool.status === 'broken') return '损坏·急需维修';
+  if (assignment) return tool.condition === 'critical' ? '使用中·严重磨损' : tool.condition === 'worn' ? '使用中·低耐久' : '使用中';
+  if (tool.condition === 'critical') return '严重磨损·急需维修';
+  if (tool.condition === 'worn') return '低耐久·待维修';
+  return '可用';
+}
+
+function materialLabel(materials = {}) {
+  const labels = { wood: '木料', berries: '浆果', water: '水', millet: '粟米' };
+  return Object.entries(materials)
+    .filter(([, amount]) => Number(amount) > 0)
+    .map(([itemId, amount]) => `${labels[itemId] ?? itemId}${Number(amount)}`)
+    .join('+');
+}
+
 function render(readout, toolSystem) {
   if (!readout) return;
   const tools = toolSystem.list();
   const assignments = new Map(toolSystem.getAssignments().map((entry) => [entry.toolId, entry]));
+  const demands = new Map(toolSystem.listMaintenanceDemands().map((entry) => [entry.toolId, entry]));
+  const maintenanceReservations = new Map(
+    (globalThis.shengling?.toolMaintenanceRuntime?.listReservations?.() ?? []).map((entry) => [entry.toolId, entry]),
+  );
   readout.textContent = tools.map((tool) => {
     const assignment = assignments.get(tool.id);
+    const demand = demands.get(tool.id);
+    const maintenanceReservation = maintenanceReservations.get(tool.id);
     const durability = `${Math.round(tool.durability)}/${Math.round(tool.maxDurability)}`;
-    const state = tool.status === 'broken' ? '损坏' : assignment ? '使用中' : '可用';
-    return `${tool.label} ${durability}（${state}）`;
+    const maintenance = demand
+      ? `；维修需${materialLabel(demand.materials)}、${Math.round(demand.workMinutes)}分钟`
+      : '';
+    return `${tool.label} ${durability}（${conditionLabel(tool, assignment, maintenanceReservation)}${maintenance}）`;
   }).join(' · ');
 }
 
@@ -54,6 +79,7 @@ export function attachToolRuntime() {
     toolSystem.reconcile();
   });
   eventBus.on('tools:changed', () => render(readout, toolSystem));
+  eventBus.on('tool-maintenance:changed', () => render(readout, toolSystem));
   eventBus.on('save:loaded', () => {
     toolSystem.reconcile(new Set());
     render(readout, toolSystem);

@@ -58,6 +58,10 @@ test('初始公共工具包含石斧、搬运篮、简易农具和石镐', () =>
     total: 4,
     usable: 4,
     broken: 0,
+    low: 0,
+    critical: 0,
+    maintenanceNeeded: 0,
+    urgentMaintenance: 0,
     reserved: 0,
     averageCondition: 1,
   });
@@ -115,6 +119,7 @@ test('工具耐久可存档，运行时占用不进入长期存档', () => {
   toolSystem.applyWear('tool-simple-farm-tool-1', 12);
   toolSystem.reserveForTask({ task: task('task-farm', ACTION_TYPES.CLEAR_FIELD), personId: 'person-1' });
   const snapshot = toolSystem.exportState();
+  assert.equal(snapshot.schemaVersion, 2);
   assert.equal(snapshot.tools.find((tool) => tool.id === 'tool-simple-farm-tool-1').durability, 72);
   assert.equal('assignments' in snapshot, false);
 
@@ -183,4 +188,72 @@ test('石斧降低伐木耗时和能耗，搬运篮降低有效负重', () => {
   } finally {
     globalThis.shengling = originalRuntime;
   }
+});
+
+test('低耐久工具生成唯一且稳定的维修需求', () => {
+  const { toolSystem } = createHarness();
+  toolSystem.applyWear('tool-stone-axe-1', 50);
+  const first = toolSystem.getMaintenanceDemand('tool-stone-axe-1');
+  assert.equal(first.id, 'tool-maintenance:tool-stone-axe-1');
+  assert.equal(first.state, 'requested');
+  assert.equal(first.priority, 'normal');
+  assert.equal(first.reason, 'low-durability');
+  assert.deepEqual(first.materials, { wood: 1 });
+  assert.ok(first.targetDurability > first.currentDurability);
+
+  toolSystem.applyWear('tool-stone-axe-1', 1);
+  const second = toolSystem.getMaintenanceDemand('tool-stone-axe-1');
+  assert.equal(second.id, first.id);
+  assert.deepEqual(second.requestedAt, first.requestedAt);
+  assert.equal(toolSystem.listMaintenanceDemands().length, 1);
+  assert.deepEqual(toolSystem.verifyMaintenance(), { ok: true, errors: [], demandCount: 1 });
+});
+
+test('严重磨损和损坏会把维修需求升级为高优先级', () => {
+  const { toolSystem } = createHarness();
+  toolSystem.applyWear('tool-stone-axe-1', 999);
+  const demand = toolSystem.getMaintenanceDemand('tool-stone-axe-1');
+  assert.equal(demand.state, 'urgent');
+  assert.equal(demand.priority, 'high');
+  assert.equal(demand.reason, 'broken');
+  assert.equal(toolSystem.getSummary().urgentMaintenance, 1);
+});
+
+test('部分修理保留原需求，恢复到阈值以上后清除', () => {
+  const { toolSystem } = createHarness();
+  toolSystem.applyWear('tool-stone-axe-1', 999);
+  const original = toolSystem.getMaintenanceDemand('tool-stone-axe-1');
+
+  toolSystem.repair('tool-stone-axe-1', 10);
+  const partial = toolSystem.getMaintenanceDemand('tool-stone-axe-1');
+  assert.equal(partial.id, original.id);
+  assert.deepEqual(partial.requestedAt, original.requestedAt);
+  assert.equal(partial.priority, 'high');
+
+  toolSystem.repair('tool-stone-axe-1', 60);
+  assert.equal(toolSystem.getMaintenanceDemand('tool-stone-axe-1'), null);
+  assert.equal(toolSystem.get('tool-stone-axe-1').condition, 'healthy');
+  assert.equal(toolSystem.verifyMaintenance().ok, true);
+});
+
+test('v1 工具存档可迁移并重建维修需求', () => {
+  const { toolSystem } = createHarness();
+  const legacyTools = toolSystem.list().map((tool) => {
+    const legacy = { ...tool, schemaVersion: 1 };
+    delete legacy.condition;
+    delete legacy.maintenance;
+    delete legacy.replacedCount;
+    if (legacy.id === 'tool-stone-axe-1') {
+      legacy.durability = 10;
+      legacy.status = 'usable';
+    }
+    return legacy;
+  });
+
+  toolSystem.importState({ schemaVersion: 1, tools: legacyTools });
+  const migrated = toolSystem.get('tool-stone-axe-1');
+  assert.equal(migrated.schemaVersion, 2);
+  assert.equal(migrated.condition, 'critical');
+  assert.equal(toolSystem.getMaintenanceDemand(migrated.id).priority, 'high');
+  assert.equal(toolSystem.verifyMaintenance().ok, true);
 });

@@ -11,6 +11,7 @@ const LABOR_ACTIONS = new Set([
   ACTION_TYPES.CLEAR_FIELD,
   ACTION_TYPES.SOW_MILLET,
   ACTION_TYPES.HARVEST_MILLET,
+  ACTION_TYPES.REPAIR_TOOL,
   ACTION_TYPES.TEND_FIRE,
 ]);
 
@@ -24,6 +25,7 @@ const ACTION_SKILL = Object.freeze({
   [ACTION_TYPES.CLEAR_FIELD]: 'gathering',
   [ACTION_TYPES.SOW_MILLET]: 'gathering',
   [ACTION_TYPES.HARVEST_MILLET]: 'gathering',
+  [ACTION_TYPES.REPAIR_TOOL]: 'building',
   [ACTION_TYPES.TEND_FIRE]: 'gathering',
 });
 
@@ -37,6 +39,7 @@ const ACTION_INTENSITY = Object.freeze({
   [ACTION_TYPES.CLEAR_FIELD]: 1.45,
   [ACTION_TYPES.SOW_MILLET]: 0.9,
   [ACTION_TYPES.HARVEST_MILLET]: 1.25,
+  [ACTION_TYPES.REPAIR_TOOL]: 1.18,
   [ACTION_TYPES.TEND_FIRE]: 1,
 });
 
@@ -80,8 +83,13 @@ function carriedWeight(person) {
   }, 0);
 }
 
-function skillLevel(person, taskType) {
-  const skill = ACTION_SKILL[taskType];
+function actionSkill(task) {
+  if (task?.type === ACTION_TYPES.REPAIR_TOOL && task?.data?.skill) return task.data.skill;
+  return ACTION_SKILL[task?.type] ?? null;
+}
+
+function skillLevel(person, task) {
+  const skill = actionSkill(task);
   return skill ? Math.max(0, Number(person?.work?.skills?.[skill] ?? 0)) : 0;
 }
 
@@ -133,11 +141,12 @@ function fatigueEnergyMultiplier(person) {
   return 1 + Math.max(0, 50 - energy) * 0.012;
 }
 
-function skillEnergyMultiplier(person, taskType) {
-  return clamp(1 - skillLevel(person, taskType) * 0.035, 0.65, 1);
+function skillEnergyMultiplier(person, task) {
+  return clamp(1 - skillLevel(person, task) * 0.035, 0.65, 1);
 }
 
 function resolveTool(task) {
+  if (task?.type === ACTION_TYPES.REPAIR_TOOL) return null;
   const system = globalThis.shengling?.toolSystem;
   const explicit = task?.data?.tool ?? task?.data?.laborCost?.tool ?? null;
   if (explicit?.id) {
@@ -200,7 +209,7 @@ export function buildLaborCostProfile({ person, task, position, route = [], mapS
   const roadEnergy = 1 / Math.max(1, roadFactor);
   const loadEnergy = loadEnergyMultiplier(effectiveLoadWeight);
   const fatigueEnergy = fatigueEnergyMultiplier(person);
-  const skillEnergy = skillEnergyMultiplier(person, task.type);
+  const skillEnergy = skillEnergyMultiplier(person, task);
   const movementExtraEnergyRate = extraEnergyRate({
     intensity,
     loadEnergy,
@@ -223,12 +232,13 @@ export function buildLaborCostProfile({ person, task, position, route = [], mapS
   });
   const expectedEnergy = travelSeconds * (0.12 + movementExtraEnergyRate)
     + effectiveWorkDuration * (0.12 + workExtraEnergyRate);
+  const skill = actionSkill(task);
 
   return Object.freeze({
     schemaVersion: 2,
     actionType: task.type,
-    skill: ACTION_SKILL[task.type] ?? null,
-    skillLevel: round(skillLevel(person, task.type)),
+    skill,
+    skillLevel: round(skillLevel(person, task)),
     intensity: round(intensity),
     distance: round(distance),
     loadWeight: round(weight),
