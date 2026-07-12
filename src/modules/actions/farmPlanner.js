@@ -34,7 +34,17 @@ export function planFarmAction({ person, farmSystem, actionCounts }) {
   }
 
   if (field.status === 'readyToSow' && !active(actionCounts, ACTION_TYPES.SOW_MILLET, 1)) {
-    return createTask(ACTION_TYPES.SOW_MILLET, destination, { fieldId: field.id }, workerDuration(person, ACTION_META[ACTION_TYPES.SOW_MILLET].workDuration));
+    const seedPlan = farmSystem.getSeedPlan(field.id);
+    if (!seedPlan || !farmSystem.canStartSowing({ person, fieldId: field.id })) return null;
+    return createTask(ACTION_TYPES.SOW_MILLET, destination, {
+      fieldId: field.id,
+      cropId: seedPlan.cropId,
+      seedItemId: seedPlan.seedItemId,
+      seedAmount: seedPlan.seedAmount,
+      seedSourceCampId: 'starting-camp',
+      seedTarget: seedPlan.target,
+      seedShortage: seedPlan.shortage,
+    }, workerDuration(person, ACTION_META[ACTION_TYPES.SOW_MILLET].workDuration));
   }
 
   if (field.status === 'mature' && !active(actionCounts, ACTION_TYPES.HARVEST_MILLET, 1)) {
