@@ -101,7 +101,7 @@ export function createToolMaintenanceResourceFlowView({ resourceFlowSystem } = {
   function verify() {
     const base = resourceFlowSystem.verify();
     const issues = [...(base.issues ?? [])];
-    list().filter((entry) => ['repair', 'replacement'].includes(entry.category)).forEach((entry) => {
+    list().filter((entry) => entry.metadata?.maintenanceMode || entry.category === 'replacement').forEach((entry) => {
       if (!entry.taskId) issues.push({ type: 'tool-maintenance-flow-missing-task', id: entry.id });
       if (!entry.metadata?.toolId) issues.push({ type: 'tool-maintenance-flow-missing-tool', id: entry.id });
       if (!['repair', 'replace'].includes(entry.metadata?.maintenanceMode)) {
