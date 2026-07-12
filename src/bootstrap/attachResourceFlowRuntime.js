@@ -1,4 +1,5 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
+import { createFarmSeedResourceFlowView } from '../modules/economy/farmSeedResourceFlowView.js';
 import { createResourceFlowSystem } from '../modules/economy/resourceFlowSystem.js';
 import { attachResourceFlowTaskContextGuard } from '../modules/economy/resourceFlowTaskContextGuard.js';
 import { createYearAwareResourceFlowView } from '../modules/economy/yearAwareResourceFlowView.js';
@@ -29,6 +30,7 @@ function render(readout, system, gameTime) {
     `今日流水 ${summary.totalEntries} 笔`,
     `生产 ${formatAmount(category.production)}`,
     `消耗 ${formatAmount(category.consumption)}`,
+    `播种 ${formatAmount(category.planting)}`,
     `施工 ${formatAmount(category.construction)}`,
     `维修 ${formatAmount(category.repair)}`,
     `腐败 ${formatAmount(category.spoilage)}`,
@@ -56,8 +58,11 @@ export function attachResourceFlowRuntime() {
     resourceFlowSystem: baseResourceFlowSystem,
     gameTime: runtime.gameTime,
   });
-  const resourceFlowSystem = createToolMaintenanceResourceFlowView({
+  const maintenanceResourceFlowSystem = createToolMaintenanceResourceFlowView({
     resourceFlowSystem: yearAwareResourceFlowSystem,
+  });
+  const resourceFlowSystem = createFarmSeedResourceFlowView({
+    resourceFlowSystem: maintenanceResourceFlowSystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
