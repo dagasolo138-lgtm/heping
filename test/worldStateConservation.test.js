@@ -19,6 +19,7 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     const economy = world.dailyEconomy.verify();
     const maintenance = world.tools.verifyMaintenance();
     const maintenanceRuntime = world.toolMaintenanceRuntime.verify();
+    const coverage = world.tools.getCoverage();
     const alivePeople = world.people.getAliveRuntime();
     const activeTasks = world.taskLifecycle.list({ status: 'active' });
     const activeTaskIds = new Set(activeTasks.map((record) => record.taskId));
@@ -35,7 +36,10 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     assert.equal(economy.ok, true, JSON.stringify(economy.issues));
     assert.equal(maintenance.ok, true, JSON.stringify(maintenance.errors));
     assert.equal(maintenanceRuntime.ok, true, JSON.stringify(maintenanceRuntime.issues));
-    assert.ok(maintenanceReservations.length <= 1, '同时存在多个维修任务');
+    assert.ok(maintenanceReservations.length <= 1, '同时存在多个维修或替换任务');
+    assert.ok(maintenanceRuntime.repairActive + maintenanceRuntime.replacementActive <= 1);
+    assert.equal(maintenance.guaranteeGapCount, coverage.filter((entry) => entry.gap > 0).length);
+    coverage.forEach((entry) => assert.equal(entry.protected, true, `公共工具保障未被覆盖：${entry.typeId}`));
     assert.ok(resourceFlowContexts.tracked <= alivePeople.length);
     assert.ok(activeTasks.length <= alivePeople.length);
     assert.equal(new Set(activePersonIds).size, activePersonIds.length, '同一人物存在多个活动任务');
@@ -46,7 +50,7 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
       assert.ok(Number(entry.amount) > 0, `预留数量无效：${entry.id}`);
       if (entry.type === 'camp-item') {
         const [campId, itemId] = entry.key.split(':');
-        assert.ok(Number(world.camp.get(campId)?.items?.[itemId] ?? 0) >= Number(entry.amount), `维修材料预留超过库存：${entry.id}`);
+        assert.ok(Number(world.camp.get(campId)?.items?.[itemId] ?? 0) >= Number(entry.amount), `维护材料预留超过库存：${entry.id}`);
       }
     });
 
@@ -64,16 +68,22 @@ test('运行世界中的任务、预留、工具与营地库存保持一致', { 
     });
 
     maintenanceReservations.forEach((bundle) => {
-      assert.ok(activeTaskIds.has(bundle.taskId), `发现孤立维修任务：${bundle.taskId}`);
-      assert.ok(reservations.some((entry) => entry.id === bundle.targetReservationId && entry.type === 'tool'), `维修任务缺少目标工具预留：${bundle.taskId}`);
+      assert.ok(activeTaskIds.has(bundle.taskId), `发现孤立维护任务：${bundle.taskId}`);
+      assert.ok(['repair', 'replace'].includes(bundle.mode), `维护任务模式无效：${bundle.taskId}`);
+      assert.ok(['repairTool', 'replaceTool'].includes(bundle.actionType), `维护任务行动无效：${bundle.taskId}`);
+      assert.ok(reservations.some((entry) => entry.id === bundle.targetReservationId && entry.type === 'tool'), `维护任务缺少目标工具预留：${bundle.taskId}`);
       bundle.materialReservations.forEach((material) => {
-        assert.ok(reservations.some((entry) => entry.id === material.reservationId && entry.type === 'camp-item'), `维修任务缺少材料预留：${material.reservationId}`);
+        assert.ok(reservations.some((entry) => entry.id === material.reservationId && entry.type === 'camp-item'), `维护任务缺少材料预留：${material.reservationId}`);
       });
     });
 
     world.tools.list().forEach((tool) => {
       assert.ok(tool.durability >= 0, `工具耐久为负：${tool.id}`);
       assert.ok(tool.durability <= tool.maxDurability, `工具耐久超过上限：${tool.id}`);
+      assert.ok(Number(tool.generation) >= 1, `工具代际无效：${tool.id}`);
+      assert.ok(Number(tool.repairsSinceReplacement) >= 0, `工具本代维修次数为负：${tool.id}`);
+      assert.ok(Number(tool.wearSinceReplacement) >= 0, `工具本代磨损为负：${tool.id}`);
+      assert.ok(Number(tool.wearSinceReplacement) <= Number(tool.totalWear) + 0.001, `工具本代磨损超过总磨损：${tool.id}`);
     });
 
     world.people.list().forEach((person) => {
