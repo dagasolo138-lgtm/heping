@@ -21,6 +21,7 @@ import { createFarmSeedResourceFlowView } from '../src/modules/economy/farmSeedR
 import { createResourceFlowSystem } from '../src/modules/economy/resourceFlowSystem.js';
 import { createFireSystem } from '../src/modules/environment/fireSystem.js';
 import { createWeatherSystem } from '../src/modules/environment/weatherSystem.js';
+import { createFarmGrowthTickHandler } from '../src/modules/farming/farmGrowthScheduler.js';
 import { createFarmSystem } from '../src/modules/farming/farmSystem.js';
 import { createChronicleSystem } from '../src/modules/history/chronicleSystem.js';
 import { createMapSystem } from '../src/modules/map/mapSystem.js';
@@ -35,7 +36,7 @@ import { createCampStore } from '../src/modules/settlements/campStore.js';
 import { createSocialEventSystem } from '../src/modules/social/socialEventSystem.js';
 import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSystem.js';
 
-const DAY_60_EXPECTED_FINGERPRINT = '68cc6feff5e715fd21d6386e199d7876a11d01d5f87cff31a58014d33cd1584b';
+const DAY_60_EXPECTED_FINGERPRINT = '560abc8360e2127343cd27424f9c02cf221be861d346de9cd293ebcf5e2140d7';
 const DAY_60_TICKS = 85_200;
 
 function round(value, digits = 4) {
@@ -100,6 +101,7 @@ function createReplayWorld(seed) {
     peopleSystem: people,
     gameTime: time,
     getRuntimePeople: () => actions.getRenderPeople(),
+    getMovementPeople: () => actions.getMovementPeople(),
   });
   const chronicles = createChronicleSystem({ eventBus: bus, gameTime: time, peopleSystem: people });
 
@@ -138,9 +140,10 @@ function createReplayWorld(seed) {
   runtime.dailyEconomySystem = dailyEconomy;
   subscribeObserverEvents({ eventBus: bus, observer: baseDailyEconomy, eventNames: DAILY_ECONOMY_OBSERVER_EVENTS });
 
+  const syncFarmGrowth = createFarmGrowthTickHandler({ farmSystem: farms, gameTime: time });
   bus.on('simulation:tick', ({ weather: currentWeather }) => {
     ecology.sync();
-    farms.syncGrowth(currentWeather);
+    syncFarmGrowth({ weather: currentWeather });
     foodStorage.sync(currentWeather);
     roadSampler.sample();
   });
