@@ -13,6 +13,7 @@ import { createReservationLedger } from '../src/modules/actions/reservationLedge
 import { createToolMaintenanceRuntime } from '../src/modules/actions/toolMaintenanceRuntime.js';
 import { createBuildingSystem } from '../src/modules/buildings/buildingSystem.js';
 import { createResourceRenewalSystem } from '../src/modules/ecology/resourceRenewalSystem.js';
+import { createWorldDynamicsSystem } from '../src/modules/dynamics/worldDynamicsSystem.js';
 import { createDailyEconomySystem } from '../src/modules/economy/dailyEconomySystem.js';
 import { createEconomicMetricsAuditView } from '../src/modules/economy/economicMetricsAuditView.js';
 import { createFarmSeedDailyEconomyView } from '../src/modules/economy/farmSeedDailyEconomyView.js';
@@ -196,6 +197,17 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   runtime.dailyEconomySystem = dailyEconomy;
   subscribeObserverEvents({ eventBus: bus, observer: baseDailyEconomy, eventNames: DAILY_ECONOMY_OBSERVER_EVENTS });
 
+  const worldDynamics = createWorldDynamicsSystem({
+    eventBus: bus,
+    gameTime: time,
+    getRuntime: () => runtime,
+  });
+  runtime.worldDynamicsSystem = worldDynamics;
+  bus.on('daily-economy:finalized', ({ report }) => {
+    const decorated = dailyEconomy.getReport(report.year, report.day) ?? report;
+    worldDynamics.evaluate(decorated);
+  });
+
   const syncFarmGrowth = createFarmGrowthTickHandler({ farmSystem: farms, gameTime: time });
   bus.on('simulation:tick', (payload) => {
     ecology.sync();
@@ -268,6 +280,7 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     resourceFlowTaskContextGuard,
     taskLifecycle,
     dailyEconomy,
+    worldDynamics,
     restoreGlobals,
   };
 }

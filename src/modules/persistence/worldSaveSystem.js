@@ -89,6 +89,7 @@ export function createWorldSaveSystem({
         tools: maybeExport(runtime?.toolSystem),
         resourceFlow: maybeExport(runtime?.resourceFlowSystem),
         dailyEconomy: maybeExport(runtime?.dailyEconomySystem),
+        worldDynamics: maybeExport(runtime?.worldDynamicsSystem),
         socialEvents: maybeExport(socialEventSystem),
         chronicles: maybeExport(chronicleSystem),
         actionRuntime: exportActionRuntimeSnapshot({
@@ -140,6 +141,7 @@ export function createWorldSaveSystem({
       ['tools', '工具', runtime?.toolSystem],
       ['resourceFlow', '资源流水', runtime?.resourceFlowSystem],
       ['dailyEconomy', '每日经济摘要', runtime?.dailyEconomySystem],
+      ['worldDynamics', '世界动力', runtime?.worldDynamicsSystem],
       ['socialEvents', '社会事件', socialEventSystem],
       ['chronicles', '史书', chronicleSystem],
     ];
@@ -167,6 +169,9 @@ export function createWorldSaveSystem({
     if (snapshot.systems.dailyEconomy === null || snapshot.systems.dailyEconomy === undefined) {
       runtime?.dailyEconomySystem?.reset?.();
     }
+    if (snapshot.systems.worldDynamics === null || snapshot.systems.worldDynamics === undefined) {
+      runtime?.worldDynamicsSystem?.reset?.();
+    }
   }
 
   function refreshMap(runtime) {
@@ -192,6 +197,7 @@ export function createWorldSaveSystem({
       toolMaintenance: runtime?.toolMaintenanceRuntime?.createCheckpoint?.() ?? null,
       resourceFlow: runtime?.resourceFlowSystem?.createCheckpoint?.() ?? null,
       dailyEconomy: runtime?.dailyEconomySystem?.createCheckpoint?.() ?? null,
+      worldDynamics: runtime?.worldDynamicsSystem?.createCheckpoint?.() ?? null,
       actionRuntime: runtime?.actionSystem?.createRuntimeCheckpoint?.() ?? null,
     };
   }
@@ -208,6 +214,9 @@ export function createWorldSaveSystem({
     }
     if (checkpoint?.dailyEconomy && runtime?.dailyEconomySystem?.restoreCheckpoint) {
       runtime.dailyEconomySystem.restoreCheckpoint(checkpoint.dailyEconomy);
+    }
+    if (checkpoint?.worldDynamics && runtime?.worldDynamicsSystem?.restoreCheckpoint) {
+      runtime.worldDynamicsSystem.restoreCheckpoint(checkpoint.worldDynamics);
     }
     if (checkpoint?.actionRuntime && runtime?.actionSystem?.restoreRuntimeCheckpoint) {
       runtime.actionSystem.restoreRuntimeCheckpoint(checkpoint.actionRuntime);

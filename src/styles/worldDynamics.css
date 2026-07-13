@@ -1,0 +1,74 @@
+.observer-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+.dynamics-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  padding: 10px;
+}
+
+.dynamics-metric {
+  min-height: 62px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.dynamics-metric span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.dynamics-metric strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.dynamics-section { margin-top: 8px; overflow: hidden; }
+.dynamics-list { display: grid; gap: 7px; margin: 0; padding: 10px; list-style: none; }
+.dynamics-empty { padding: 14px; color: var(--muted); font-size: 11px; }
+
+.dynamics-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .024);
+}
+
+.dynamics-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dynamics-card__head strong { color: #f0eee5; font-size: 12px; }
+.dynamics-card__head b { color: var(--accent); font-size: 11px; }
+.dynamics-card p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.dynamics-card--pressure { border-color: rgba(226, 125, 110, .22); }
+.dynamics-card--opportunity { border-color: rgba(112, 181, 154, .25); }
+.dynamics-card--commitment { border-color: rgba(224, 189, 114, .28); }
+
+.dynamics-progress {
+  height: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .06);
+}
+
+.dynamics-progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+@media (max-width: 620px) {
+  .observer-tabs { grid-template-columns: repeat(5, minmax(52px, 1fr)); overflow-x: auto; }
+  .observer-tabs button { font-size: 10px; }
+  .dynamics-overview { grid-template-columns: 1fr; }
+}

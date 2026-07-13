@@ -1,4 +1,5 @@
 import { ACTION_TYPES } from './actionTypes.js';
+import { readActiveRuntimeCommitments, scoreCommitmentUtility } from './commitmentUtility.js';
 import { campScarcity, scarcityForAction } from './scarcityUtility.js';
 import { scoreSocialUtility } from './socialUtility.js';
 
@@ -66,6 +67,7 @@ function explain(factors) {
     .map(([key]) => ({
       personalNeed: '个人需求',
       campScarcity: '动态库存缺口',
+      communityCommitment: '共同承诺',
       skillFit: '技能适配',
       roleFit: '职业倾向',
       traitBias: '性格倾向',
@@ -79,11 +81,14 @@ function explain(factors) {
 
 export function scoreUtilityCandidates({ person, desire, candidates, camp, population, actionCounts, allPeople = [], stockTargets = null }) {
   const scarcity = campScarcity({ camp, population, stockTargets });
+  const commitments = readActiveRuntimeCommitments();
   return candidates.map((candidate) => {
     const social = scoreSocialUtility({ person, candidate, allPeople });
+    const commitment = scoreCommitmentUtility({ candidate, commitments });
     const factors = {
       personalNeed: needScore(candidate.type, desire),
       campScarcity: scarcityForAction(candidate.type, scarcity) * 42,
+      communityCommitment: commitment.score,
       skillFit: skillScore(candidate.type, person),
       roleFit: Number(ROLE_FIT[person.work.occupation]?.[candidate.type] ?? ROLE_FIT.unassigned[candidate.type] ?? 0),
       traitBias: traitScore(candidate.type, desire),
@@ -99,6 +104,7 @@ export function scoreUtilityCandidates({ person, desire, candidates, camp, popul
       factors: Object.freeze(Object.fromEntries(Object.entries(factors).map(([key, value]) => [key, round(value)]))),
       reason: explain(factors) || '低优先级待命',
       socialTargets: social.targets ?? [],
+      commitmentTargets: commitment.matches,
     });
   }).sort((first, second) => second.score - first.score);
 }
