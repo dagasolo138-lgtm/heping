@@ -60,22 +60,40 @@ function buildWeather(time, seed, season) {
   };
 }
 
+function windowSignature(time, season) {
+  return `${time?.year}:${time?.day}:${timeWindow(time)}:${season?.id ?? 'base'}:${Number(season?.temperatureModifier ?? 0)}`;
+}
+
 export function createWeatherSystem({ eventBus, gameTime, seed = 'starting-valley-weather-v1' }) {
   let seasonSystem = null;
+  const headless = eventBus?.getDiagnostics?.().mode === 'headless';
   let weather = buildWeather(gameTime.now(), seed, null);
+  let signature = windowSignature(gameTime.now(), null);
+  let cacheHits = 0;
+  let rebuilds = 1;
 
   function getSeason() {
     return seasonSystem?.get?.() ?? null;
   }
 
   function get() {
+    if (headless) return weather;
     return structuredClone(weather);
   }
 
-  function refresh({ emit = true } = {}) {
-    const next = buildWeather(gameTime.now(), seed, getSeason());
+  function refresh({ emit = true, force = false } = {}) {
+    const time = gameTime.now();
+    const season = getSeason();
+    const nextSignature = windowSignature(time, season);
+    if (!force && nextSignature === signature) {
+      cacheHits += 1;
+      return get();
+    }
+    const next = buildWeather(time, seed, season);
     const changed = next.key !== weather.key || next.temperature !== weather.temperature;
-    weather = next;
+    weather = headless ? Object.freeze(next) : next;
+    signature = nextSignature;
+    rebuilds += 1;
     if (emit && changed) eventBus.emit('environment:weather', { weather: get(), time: gameTime.stamp() });
     return get();
   }
@@ -86,8 +104,13 @@ export function createWeatherSystem({ eventBus, gameTime, seed = 'starting-valle
 
   function setSeasonSystem(nextSeasonSystem) {
     seasonSystem = nextSeasonSystem;
-    return refresh();
+    return refresh({ force: true });
   }
 
-  return Object.freeze({ get, sync, setSeasonSystem });
+  function getDiagnostics() {
+    return { mode: headless ? 'headless' : 'safe', cacheHits, rebuilds, signature };
+  }
+
+  if (headless) weather = Object.freeze(weather);
+  return Object.freeze({ get, sync, setSeasonSystem, getDiagnostics });
 }
