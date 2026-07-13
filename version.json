@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "project": "生灵",
   "version": "v0.30.1",
-  "buildId": "v0.30.1-release-cleanup-20260713-01",
-  "sourceCommit": "e482f9785af9ca92eb8ec0e20551fef735384f6b",
+  "buildId": "v0.30.1-release-cleanup-20260713-02",
+  "sourceCommit": "f1561b9a37aa03bd9ea40f80dc956766900f1bae",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the v0.30.1 functional release-alignment commit that updates WORLD_SAVE_APP_VERSION after v0.30.0 world dynamics, hidden 100x browser validation, persistence integration and long-run audits were merged; README, codex and this manifest are release metadata surrounding that functional commit."
+    "sourceCommitPolicy": "sourceCommit points to the squash-merged v0.30.1 functional release-alignment commit on main; this manifest-only follow-up records the final mainline SHA without changing world behavior or save data."
   }
 }
