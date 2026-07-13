@@ -19,6 +19,7 @@ import { createToolMaintenanceResourceFlowView } from '../src/modules/economy/to
 import { createYearAwareResourceFlowView } from '../src/modules/economy/yearAwareResourceFlowView.js';
 import { createFireSystem } from '../src/modules/environment/fireSystem.js';
 import { createWeatherSystem } from '../src/modules/environment/weatherSystem.js';
+import { createFarmGrowthTickHandler } from '../src/modules/farming/farmGrowthScheduler.js';
 import { createFarmSystem } from '../src/modules/farming/farmSystem.js';
 import { createChronicleSystem } from '../src/modules/history/chronicleSystem.js';
 import { createMapSystem } from '../src/modules/map/mapSystem.js';
@@ -207,10 +208,14 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   runtime.dailyEconomySystem = dailyEconomy;
   bus.on('*', ({ eventName, payload }) => baseDailyEconomy.observe(eventName, payload));
 
-  bus.on('simulation:tick', ({ weather: currentWeather }) => {
+  const syncFarmGrowth = createFarmGrowthTickHandler({
+    farmSystem: farms,
+    gameTime: time,
+  });
+  bus.on('simulation:tick', (payload) => {
     ecology.sync();
-    farms.syncGrowth(currentWeather);
-    foodStorage.sync(currentWeather);
+    syncFarmGrowth({ weather: payload.weather });
+    foodStorage.sync(payload.weather);
     roadSampler.sample();
   });
   bus.on('buildings:completed', ({ building }) => {
