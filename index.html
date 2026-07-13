@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="./src/styles/experience.css" />
   <link rel="stylesheet" href="./src/styles/observer.css" />
   <link rel="stylesheet" href="./src/styles/observerGesture.css" />
+  <link rel="stylesheet" href="./src/styles/worldDynamics.css" />
 </head>
 <body>
   <main class="app-shell">
@@ -92,6 +93,7 @@
           <button id="observer-tab-people" type="button" role="tab" aria-selected="true" aria-controls="observer-panel-people" data-observer-tab="people">人物</button>
           <button id="observer-tab-camp" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-camp" data-observer-tab="camp">营地</button>
           <button id="observer-tab-events" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-events" data-observer-tab="events">事件</button>
+          <button id="observer-tab-dynamics" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-dynamics" data-observer-tab="dynamics">动力</button>
           <button id="observer-tab-chronicle" type="button" role="tab" aria-selected="false" aria-controls="observer-panel-chronicle" data-observer-tab="chronicle">史书</button>
         </nav>
 
@@ -135,6 +137,27 @@
                 <div><p class="panel__kicker">LIVING RECORD</p><h2>即时动向</h2></div>
               </div>
               <ol id="action-log" class="action-log action-log--full" aria-live="polite"></ol>
+            </section>
+          </section>
+
+          <section id="observer-panel-dynamics" class="observer-panel" role="tabpanel" aria-labelledby="observer-tab-dynamics" data-observer-panel="dynamics" hidden>
+            <section class="panel">
+              <div class="panel__header panel__header--compact">
+                <div><p class="panel__kicker">WORLD DYNAMICS</p><h2>世界动力</h2></div>
+              </div>
+              <div id="dynamics-overview" class="dynamics-overview" aria-live="polite"></div>
+            </section>
+            <section class="panel dynamics-section">
+              <div class="panel__header panel__header--compact"><div><p class="panel__kicker">PRESSURES</p><h2>当前压力</h2></div></div>
+              <ol id="dynamics-pressure-list" class="dynamics-list"></ol>
+            </section>
+            <section class="panel dynamics-section">
+              <div class="panel__header panel__header--compact"><div><p class="panel__kicker">OPPORTUNITIES</p><h2>当前机会</h2></div></div>
+              <ol id="dynamics-opportunity-list" class="dynamics-list"></ol>
+            </section>
+            <section class="panel dynamics-section">
+              <div class="panel__header panel__header--compact"><div><p class="panel__kicker">COMMITMENTS</p><h2>共同承诺</h2></div></div>
+              <ol id="dynamics-commitment-list" class="dynamics-list"></ol>
             </section>
           </section>
 
