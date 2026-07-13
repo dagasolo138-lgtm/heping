@@ -1,26 +1,33 @@
 # 生灵
 
-《生灵》是一个运行于 GitHub Pages 的规则驱动动态世界模拟游戏。世界先记录客观事实，再由人物传记、史书和未来对话系统解释这些事实。
+《生灵》是一个部署在 GitHub Pages 的规则驱动动态世界模拟游戏。世界先产生并保存客观事实，人物记忆、关系、传记、史书和未来对话系统只解释这些事实，不能反向篡改世界。
 
-## 开发交接规则
+## 当前版本：v0.30.1
 
-开发前可按需查阅 [`codex.md`](./codex.md)。每次完成有效更新后，必须在 `codex.md` 末尾追加版本更新概述；每次影响 Pages 的发布还必须同步更新根目录 `version.json`。
+v0.30.1 是 v0.30.0 世界动力引擎的发布收口版本：统一 README、交接文档、页面构建清单和世界存档应用版本，不改变固定 tick、人物选择或资源结算结果。
 
-## 当前版本：v0.28.2
+v0.30.0 已完成“世界动力事实层”：每日经济、农业和天气事实会形成压力、机会与共同承诺；共同承诺只能给已有合法任务候选增加有限权重，不能生成非法任务，也不能绕过生存、路线、库存、预留、并发和工具维护约束。
 
-当前阶段已完成公共工具的耐久、维修、替换和最低保障闭环。村民会为磨损工具安排维修；同一代工具反复维修后会进入真实替换生产；关键工具退出生产时，恢复任务会被提升为最高优先级。
+## 核心原则
 
-### 当前能力
+- 世界事实优先，AI 只负责表达。
+- 人物不知道玩家和游戏的存在。
+- 所有世界变化必须由固定 tick 推进，UI 不承担结算。
+- 预留、任务生命周期、资源流水是三套独立事实，不得混写。
+- 失败不能吞材料、制造物资、留下幽灵预留或部分结算。
+- 相同种子、相同输入和相同 tick 数必须得到相同世界结果。
 
-- 10 位村民，拥有年龄、职业、技能、性格、家庭关系、库存、事实与个人记忆。
-- 160 米 × 120 米起始河谷，包含河流、林地、石滩、营地和可耗竭资源。
-- 村民会取水、采集、砍树、搬运、建造、维修工具、替换工具、添柴、取暖、睡眠、开垦、播种与收获。
-- A* 网格寻路；资源链为“地图 → 人物背包 → 营地库存 → 工地、工具维护、篝火或生存消耗”。
-- 昼夜、天气、四季、篝火、潮湿、受寒、生态恢复、踩踏道路、粟田、扩田和土壤肥力均由固定 tick 推进。
-- 世界速度支持 **0.5×、1×、2×、5×、10×**。
-- 桌面端使用地图主视图和右侧观察栏；手机端使用底部观察抽屉。
-- 存档支持事务化导入、失败回滚、精确坐标恢复和成功读档后的 `cancel-and-replan`。
-- CI 持续执行普通回归、真实移动 Chromium、第 60 日多批次一致性和第 120 日稳定性审计。
+## 当前能力
+
+- 10 位村民，拥有年龄、职业、技能、性格、家庭关系、库存、状态、事实和个人记忆。
+- 160 米 × 120 米起始河谷，包含河流、林地、石滩、营地、道路、建筑、农田和可耗竭资源。
+- 村民会取水、采集、砍树、搬运、建造、添柴、取暖、睡眠、开垦、播种、收获、维修和替换工具。
+- A* 网格寻路；实际路线、负重、地形、道路、天气、体力、技能和工具共同决定劳动成本。
+- 昼夜、天气、四季、篝火、潮湿、受寒、生态恢复、踩踏道路、食物腐败、粟田扩张和土壤肥力均由固定 tick 推进。
+- 桌面端使用地图主视图与右侧观察栏；手机端使用底部观察抽屉。
+- 世界速度公开支持 **0.5×、1×、2×、5×、10×**。
+- 测试环境提供隐藏 **100×** 固定 tick 推进入口，不显示在玩家界面。
+- 存档支持事务化导入、失败回滚、旧存档初始化、精确坐标恢复和成功读档后的重新规划。
 
 ## 确定性模拟内核
 
@@ -28,79 +35,46 @@
 1 tick = 1 世界分钟 = 1 / 6 模拟秒
 ```
 
-现实帧率只决定何时消费固定 tick，不改变世界结算结果。季节、环境、生态、农田、食物、道路、行动、需求和规划按固定顺序执行；主要 UI 最高 10 FPS。
+现实帧率只决定何时消费固定 tick，不改变结算顺序。主要 UI 读数合并刷新，避免显示层拖慢世界运行。
 
-统一运行时预留账本覆盖：
+公开速度由正常世界循环驱动；隐藏测试入口要求先暂停正常循环：
 
-```text
-task-slot / feature / camp-storage / building-material
-tool / camp-item
+```js
+window.shengling.worldSpeedRuntime.advanceTestSeconds(seconds, { multiplier: 100 })
 ```
 
-任务完成、失败、取消、人物死亡、路线失败和读档重建都会释放对应预留。
+单次最多推进 36,000 ticks；0.1 测试秒在 100× 下精确推进 60 ticks。
 
-## v0.27 生存经济
+## 生存经济事实链
 
 ### 动态目标库存
 
-营地按人口、季节、天气、腐败、储存保护、燃料、建造和工具维护计算未来三日安全库存。
+营地按人口、季节、天气、腐败、燃料、建造、农业和工具维护计算未来三日安全库存。
 
 ```text
-有效库存 = 营地现货 + 人物背包 + 在途采集 - 已承诺物资
+有效库存 = 营地现货 + 人物背包 + 在途资源 - 已承诺物资
 ```
 
-维修或替换尚未启动时，所需材料进入未来缺口；任务已经预留材料后，需求转入已承诺物资。
-
-```js
-window.shengling.stockTargetSystem.get()
-window.shengling.stockTargetSystem.refresh()
-```
-
-### 劳动成本
-
-采集、搬运、施工、维修、替换、农事和添柴共用劳动成本模型。实际路线、负重、地形、道路、天气、精力、技能、行动强度和工具共同决定预计耗时与额外能耗。
-
-```js
-task.data.laborCost
-window.shengling.laborCostSystem.estimate(personId, task)
-window.shengling.laborCostSystem.getRecent(10)
-```
+未启动任务需要的材料属于未来缺口；已经预留的材料属于承诺，不能重复计算。
 
 ### 统一资源流水
 
-人物背包、营地库存和工具耐久的实际变化进入同一事实源：
+人物背包、营地库存、农田投入产出和工具耐久的真实变化进入同一流水系统：
 
 ```text
 production / transfer / consumption / fuel
 construction / spoilage / wear / repair / replacement
 ```
 
-每笔流水包含世界时间、物品、数量、单位、来源、去向、类别、原因、人物、任务、预留和元数据。任务化维修与替换必须带有 `taskId / personId / toolId / maintenanceMode`；管理用途的直接修理 API 可以没有任务上下文。
-
 ```js
 window.shengling.resourceFlowSystem.list({ limit: 20 })
-window.shengling.resourceFlowSystem.list({ category: 'repair' })
-window.shengling.resourceFlowSystem.list({ category: 'replacement' })
-window.shengling.resourceFlowSystem.getDailySummary(2, 1)
+window.shengling.resourceFlowSystem.getDailySummary(year, day)
 window.shengling.resourceFlowSystem.verify()
 ```
 
 ### 每日经济摘要
 
-```text
-预期净变化
-= 生产
-- 消费
-- 燃料
-- 施工
-- 维修
-- 替换
-- 腐败
-
-账实差异 = 实际期末变化 - 预期净变化
-```
-
-日报同时记录劳动、任务生命周期、生存请求拒绝、三日目标库存、腐败压力、瓶颈和模拟错误。
+日报以流水、任务生命周期和库存快照为事实源，记录期初、期末、生产、消费、燃料、施工、维修、替换、腐败、农业种子、劳动、拒绝请求、目标缺口和账实差异。
 
 ```js
 window.shengling.dailyEconomySystem.getCurrentReport()
@@ -108,95 +82,87 @@ window.shengling.dailyEconomySystem.getReport(year, day)
 window.shengling.dailyEconomySystem.verify()
 ```
 
-### 任务生命周期
+## 工具维护经济
 
-任务统一记录 `active / completed / cancelled / failed`，并支持阶段成本、跨日结转和真实超时判定。
+工具拥有耐久、状态、代际、本代维修次数和本代磨损。石斧、搬运篮和简易农具维持最低一件可用的公共保障。
+
+```text
+磨损
+→ 生成 repair 或 replace 需求
+→ 预留目标工具与材料
+→ 村民前往营地投入劳动
+→ 原子扣料
+→ 恢复耐久或推进代际
+→ 写入生命周期、人物事实、流水和日报
+```
+
+工具维修与替换合计最多并发一个。材料不足、目标工具被占用、需求模式变化或代际变化都会使旧任务失败，但不会改变既有库存和工具状态。
+
+## v0.29 粟种与播种事实链
+
+- 粟种是营地、人物背包、农田投入、资源流水和日报中的真实物资。
+- 第一块农田出现时，初始种子进入营地库存。
+- 播种必须领取、运输并投入真实种子；失败与取消不会凭空消耗。
+- 收获会按规则返种，种子目标随农田规模变化。
+- 旧农田存档中的隐藏种子会迁移到营地库存。
+- 无界面高速回放降低环境维护、人物历史复制和观察系统的长期成本。
+
+## v0.30 世界动力引擎
+
+每日封存经济报告后，世界动力系统计算：
+
+### 压力
+
+- 食物、饮水、木材和粟种目标缺口。
+- 食物或饮水请求被拒绝。
+- 食物腐败损失。
+- 劳动任务积压。
+- 土壤肥力退化。
+
+压力保存严重度、持续日数、原因、证据、建议响应和开启/解除时间。
+
+### 机会
+
+- 食物或其他库存的真实富余。
+- 雨天播种窗口。
+- 成熟收获窗口。
+
+机会会过期并进入历史，不直接创建任务。
+
+### 共同承诺
+
+持续压力达到门槛后会形成共同承诺；紧急生存拒绝可以立即形成承诺。承诺作为 `communityCommitment` 因子进入候选评分，单个候选最多增加 18 分。
+
+承诺不能：
+
+- 创建原本不存在的候选；
+- 绕过路线、库存、预留和并发；
+- 覆盖紧急饥渴、睡眠、篝火、建造、农业和工具保障的硬优先级；
+- 修改已经发生的历史事实。
 
 ```js
-window.shengling.taskLifecycleSystem.list()
-window.shengling.taskLifecycleSystem.getDailySummary(year, day)
-window.shengling.taskLifecycleSystem.verify()
+window.shengling.worldDynamicsSystem.getSummary()
+window.shengling.worldDynamicsSystem.listPressures({ state: 'active' })
+window.shengling.worldDynamicsSystem.listOpportunities({ state: 'active' })
+window.shengling.worldDynamicsSystem.listCommitments({ state: 'active' })
+window.shengling.worldDynamicsSystem.verify()
 ```
 
-## v0.28 工具维护经济
+## 验证体系
 
-### v0.28.0 维修需求事实层
+CI 持续执行：
 
-- 工具状态：`healthy / worn / critical / broken`。
-- 维修需求保存目标耐久、材料、工时、技能、请求时间、原因和优先级。
-- 工具 schema v2 可读取旧 v1 工具存档。
+- JavaScript 语法检查；
+- 非回放单元测试；
+- 生产构建；
+- 第 30 日确定性回放；
+- 第 60 日确定性回放；
+- 真实移动 Chromium 核心交互；
+- 隐藏 100× Chromium 冒烟测试；
+- Day 60 batch 1 / 5 / 10 一致性审计；
+- Day 120 batch 10 长期稳定性审计。
 
-### v0.28.1 真实维修任务
-
-```text
-工具磨损
-→ 生成 repair 需求
-→ 预留目标工具与营地材料
-→ 村民前往营地并投入劳动
-→ 扣除材料、恢复耐久
-→ 写入生命周期、人物事实、repair 流水与日报
-```
-
-材料在执行期间被移走时整单失败，不重复扣料、不改变工具，维修需求继续保留。失败读档会精确恢复活动维修任务、行动代理、工具预留和材料预留。
-
-### v0.28.2 工具替换与最低公共保障
-
-工具 schema 升级到 v3：
-
-```text
-generation
-repairsSinceReplacement
-wearSinceReplacement
-```
-
-维护需求 schema 升级到 v2，并区分：
-
-```text
-repair  = 恢复当前一代工具
-replace = 消耗更多材料与劳动，制作下一代工具
-```
-
-当前替换规则：
-
-- 同一代工具完成两次维修后，再次进入磨损区间会生成替换需求。
-- 当代累计磨损达到最大耐久的 2.5 倍时，也会进入替换。
-- 替换完成后耐久恢复至满值、`generation + 1`，并清零当代维修与磨损计数。
-- 维修和替换共用一个并发名额，避免公共维护吞噬全部劳动力。
-- 石斧、搬运篮、简易农具最低保障均为一件可用工具。
-- 关键工具损坏时，恢复任务获得最高优先级；材料不足会反向形成木材库存缺口，引导村民先补材料。
-
-| 工具 | 普通维修 | 正式替换 | 最低公共保障 |
-|---|---|---|---:|
-| 石斧 | 木料 1 / 90 分钟 | 木料 3 / 180 分钟 | 1 |
-| 搬运篮 | 木料 1 / 70 分钟 | 木料 2 / 150 分钟 | 1 |
-| 简易农具 | 木料 1 / 100 分钟 | 木料 3 / 210 分钟 | 1 |
-| 石镐 | 木料 1 / 110 分钟 | 木料 3 / 220 分钟 | 暂不强制 |
-
-```js
-window.shengling.toolSystem.list()
-window.shengling.toolSystem.getSummary()
-window.shengling.toolSystem.getCoverage()
-window.shengling.toolSystem.listMaintenanceDemands()
-window.shengling.toolSystem.verifyMaintenance()
-window.shengling.toolMaintenanceRuntime.listReservations()
-window.shengling.toolMaintenanceRuntime.verify()
-```
-
-## 确定性回归
-
-### 第 30 日世界基线
-
-```text
-20b2e6bea8c6f87cde6ee663ffe19ed97dedeb670679a5a7007ca6e4e412461c
-```
-
-### 第 60 日生存经济基线
-
-```text
-68cc6feff5e715fd21d6386e199d7876a11d01d5f87cff31a58014d33cd1584b
-```
-
-Stability Audit 还会使用维修经济世界分别以 batch 1、5、10 推进到第 60 日，要求最终摘要完全一致，并以 batch 10 推进到第 120 日。
+v0.30.0 封版验证中，Day 120 推进 171,600 ticks，世界动力、任务生命周期、资源流水、日报、工具、粟种和公共工具保障全部通过校验，无模拟错误或孤儿预留。
 
 ## 运行
 
@@ -209,25 +175,25 @@ npm run build
 npm run dev
 ```
 
-`test:mobile-smoke` 需要本机安装 Chromium、Google Chrome 或设置 `CHROME_PATH`。
+`test:mobile-smoke` 需要 Chromium、Google Chrome 或 `CHROME_PATH`。
 
 ## 部署确认
 
-1. 打开 Pages 页面，检查系统菜单中的版本和构建编号。
-2. 访问 `https://dagasolo138-lgtm.github.io/heping/version.json?cacheBust=任意新数字`。
-3. 对比 `buildId` 与 `sourceCommit`。
+1. 打开 GitHub Pages 页面，检查系统菜单中的版本和构建编号。
+2. 访问 `/heping/version.json?cacheBust=任意新数字`。
+3. 对比页面显示与 `version.json` 的 `buildId`、`sourceCommit`。
 
 ## 已知限制
 
 - 存档保存在当前浏览器，没有跨设备云存档。
-- 成功读档不续接任务路径游标、工作耗时或中途动画；未完成任务会取消后重新规划。
-- 维修与替换配方目前只使用既有木料；石材、纤维和零部件产业尚未形成。
-- 石镐已经进入维护体系，但采石行动和石材资源尚未实现。
-- 最低保障保护已有公共工具记录；尚未实现“工具记录被删除后凭空补建新 ID”。
+- 成功读档不会续接路径游标、已投入工时或中途动画，未完成任务会取消后重新规划。
+- 石材、纤维和零部件产业尚未形成，工具配方仍主要使用木料。
+- 石镐已进入维护体系，但正式采石行动和石材资源尚未实现。
 - 休息、睡眠和空闲时间还没有形成完整时间预算。
 - 草棚、储物棚和农田尚未成为寻路障碍。
-- 自动移动 Chromium 覆盖核心交互；真实 iPhone 安全区和浏览器外壳仍需人工回归。
+- 共同承诺目前只覆盖部分生存、木材和储存响应。
+- 自动 Chromium 不能完全替代真实 iPhone 安全区和浏览器外壳回归。
 
-## 下一阶段
+## 开发交接
 
-工具维修经济在 v0.28.2 收口后，下一阶段进入农业闭环：种子储备与播种消耗、休耕、堆肥、水分和多作物。完整顺序见 [ROADMAP.md](./ROADMAP.md)。
+开发前查阅 [`codex.md`](./codex.md)。每次有效更新后必须同步交接记录；影响 Pages 的发布还必须更新根目录 `version.json`。

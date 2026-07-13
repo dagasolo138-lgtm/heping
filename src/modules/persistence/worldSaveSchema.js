@@ -1,5 +1,5 @@
 export const WORLD_SAVE_SCHEMA_VERSION = 1;
-export const WORLD_SAVE_APP_VERSION = '0.28.2';
+export const WORLD_SAVE_APP_VERSION = '0.30.1';
 export const WORLD_SAVE_DEFAULT_SLOT = 'manual';
 export const WORLD_SAVE_STORAGE_PREFIX = 'shengling.save';
 

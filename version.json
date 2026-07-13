@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.28.2",
-  "buildId": "v0.28.2-tool-replacement-guarantee-20260712-01",
-  "sourceCommit": "2355c3f849e43fdcdcabca69bd97a9e424d68a75",
+  "version": "v0.30.1",
+  "buildId": "v0.30.1-release-cleanup-20260713-01",
+  "sourceCommit": "e482f9785af9ca92eb8ec0e20551fef735384f6b",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the final functional v0.28.2 commit containing tool schema v3, generational repair limits, real replaceTool tasks, target-tool and material reservations, minimum public tool guarantees, replacement resource-flow accounting, daily reconciliation, long-run conservation checks, legacy v1/v2 migration and precise failed-load rollback for active replacement tasks; later documentation and this manifest commit follow it."
+    "sourceCommitPolicy": "sourceCommit points to the v0.30.1 functional release-alignment commit that updates WORLD_SAVE_APP_VERSION after v0.30.0 world dynamics, hidden 100x browser validation, persistence integration and long-run audits were merged; README, codex and this manifest are release metadata surrounding that functional commit."
   }
 }
