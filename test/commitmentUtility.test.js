@@ -27,11 +27,15 @@ test('已完成承诺不加分，进度会衰减且总分封顶', () => {
   assert.deepEqual(score.matches.map((entry) => entry.id), ['storage', 'wood']);
 });
 
-test('效用评分读取世界动力承诺，但不会创造候选', () => {
+test('效用评分每轮只读取一次承诺快照，且不会创造候选', () => {
   const previous = globalThis.shengling;
+  let reads = 0;
   globalThis.shengling = {
     worldDynamicsSystem: {
-      listCommitments: () => [{ id: 'water-1', type: 'restore-water-reserve', state: 'active', priority: 75, progress: 0 }],
+      listCommitments: () => {
+        reads += 1;
+        return [{ id: 'water-1', type: 'restore-water-reserve', state: 'active', priority: 75, progress: 0 }];
+      },
     },
   };
   try {
@@ -48,6 +52,7 @@ test('效用评分读取世界动力承诺，但不会创造候选', () => {
       actionCounts: {},
       stockTargets: { shortage: { water: 0, food: 0, wood: 0 } },
     });
+    assert.equal(reads, 1);
     assert.equal(scored.length, 2);
     assert.equal(scored[0].candidate.type, ACTION_TYPES.FETCH_WATER);
     assert.equal(scored[0].factors.communityCommitment, 13.5);
