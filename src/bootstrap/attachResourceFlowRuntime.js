@@ -1,4 +1,9 @@
+import {
+  RESOURCE_FLOW_OBSERVER_EVENTS,
+  subscribeObserverEvents,
+} from '../core/events/observerSubscriptions.js';
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
+import { createFarmSeedResourceFlowView } from '../modules/economy/farmSeedResourceFlowView.js';
 import { createResourceFlowSystem } from '../modules/economy/resourceFlowSystem.js';
 import { attachResourceFlowTaskContextGuard } from '../modules/economy/resourceFlowTaskContextGuard.js';
 import { createYearAwareResourceFlowView } from '../modules/economy/yearAwareResourceFlowView.js';
@@ -29,6 +34,7 @@ function render(readout, system, gameTime) {
     `今日流水 ${summary.totalEntries} 笔`,
     `生产 ${formatAmount(category.production)}`,
     `消耗 ${formatAmount(category.consumption)}`,
+    `播种 ${formatAmount(category.planting)}`,
     `施工 ${formatAmount(category.construction)}`,
     `维修 ${formatAmount(category.repair)}`,
     `腐败 ${formatAmount(category.spoilage)}`,
@@ -56,8 +62,11 @@ export function attachResourceFlowRuntime() {
     resourceFlowSystem: baseResourceFlowSystem,
     gameTime: runtime.gameTime,
   });
-  const resourceFlowSystem = createToolMaintenanceResourceFlowView({
+  const maintenanceResourceFlowSystem = createToolMaintenanceResourceFlowView({
     resourceFlowSystem: yearAwareResourceFlowSystem,
+  });
+  const resourceFlowSystem = createFarmSeedResourceFlowView({
+    resourceFlowSystem: maintenanceResourceFlowSystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
@@ -65,7 +74,11 @@ export function attachResourceFlowRuntime() {
     render: () => render(readout, resourceFlowSystem, runtime.gameTime),
   });
 
-  eventBus.on('*', ({ eventName, payload }) => baseResourceFlowSystem.observe(eventName, payload));
+  subscribeObserverEvents({
+    eventBus,
+    observer: baseResourceFlowSystem,
+    eventNames: RESOURCE_FLOW_OBSERVER_EVENTS,
+  });
   eventBus.on('resource-flow:recorded', () => scheduler.request('resource-flow:recorded'));
   eventBus.on('resource-flow:hydrated', () => scheduler.request('resource-flow:hydrated'));
   eventBus.on('simulation:time', () => scheduler.request('simulation:time'));

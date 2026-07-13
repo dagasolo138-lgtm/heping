@@ -45,6 +45,18 @@ function summary(entries) {
 
 export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, buildingSystem }) {
   const entries = new Map();
+  const headless = eventBus?.getDiagnostics?.().mode === 'headless';
+  let nextDueTick = Infinity;
+  let skippedSyncs = 0;
+  let processedSyncs = 0;
+
+  function recomputeNextDueTick() {
+    nextDueTick = Infinity;
+    entries.forEach((entry) => {
+      nextDueTick = Math.min(nextDueTick, Number(entry.regrowAtTick ?? Infinity));
+    });
+    return nextDueTick;
+  }
 
   function list() {
     return [...entries.values()].sort((first, second) => first.regrowAtTick - second.regrowAtTick).map(clone);
@@ -68,6 +80,7 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
     const config = RESOURCE_RENEWAL[feature?.kind];
     if (!config || entries.has(feature.id)) return null;
     const now = gameTime.now();
+    const regrowMinutes = renewalMinutes(config);
     const entry = {
       id: feature.id,
       kind: feature.kind,
@@ -80,11 +93,12 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
       markerLabel: config.markerLabel,
       depletedAt: gameTime.stamp(),
       seasonId: currentSeasonId(),
-      regrowMinutes: renewalMinutes(config),
-      regrowAtTick: Number(now.tick) + renewalMinutes(config),
+      regrowMinutes,
+      regrowAtTick: Number(now.tick) + regrowMinutes,
       delayedCount: 0,
     };
     entries.set(entry.id, entry);
+    nextDueTick = Math.min(nextDueTick, entry.regrowAtTick);
     mapSystem.addFeature({
       id: entry.markerId,
       kind: entry.markerKind,
@@ -121,6 +135,11 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
 
   function sync() {
     const nowTick = Number(gameTime.now().tick ?? 0);
+    if (nowTick < nextDueTick) {
+      skippedSyncs += 1;
+      return headless ? null : getSummary();
+    }
+    processedSyncs += 1;
     const due = [...entries.values()].filter((entry) => entry.regrowAtTick <= nowTick);
     due.forEach((entry) => {
       if (locationBlocked(entry)) {
@@ -131,6 +150,7 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
       }
       restore(entry);
     });
+    recomputeNextDueTick();
     return getSummary();
   }
 
@@ -151,12 +171,23 @@ export function createResourceRenewalSystem({ eventBus, gameTime, mapSystem, bui
       if (!entry?.id) throw new Error('生态存档缺少资源 id。');
       entries.set(entry.id, clone(entry));
     });
+    recomputeNextDueTick();
     emit('ecology:hydrated');
     return getSummary();
+  }
+
+  function getDiagnostics() {
+    return {
+      mode: headless ? 'headless' : 'safe',
+      nextDueTick: Number.isFinite(nextDueTick) ? nextDueTick : null,
+      skippedSyncs,
+      processedSyncs,
+      pending: entries.size,
+    };
   }
 
   eventBus.on('map:feature-removed', ({ feature }) => { registerDepletion(feature); });
   eventBus.on('simulation:time', () => { sync(); });
 
-  return Object.freeze({ registerDepletion, sync, list, getSummary, exportState, importState });
+  return Object.freeze({ registerDepletion, sync, list, getSummary, getDiagnostics, exportState, importState });
 }

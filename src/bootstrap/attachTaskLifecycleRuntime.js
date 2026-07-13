@@ -1,3 +1,7 @@
+import {
+  TASK_LIFECYCLE_OBSERVER_EVENTS,
+  subscribeObserverEvents,
+} from '../core/events/observerSubscriptions.js';
 import { createTaskLifecycleSystem } from '../modules/economy/taskLifecycleSystem.js';
 import { createTaskLifecycleStageCostView } from '../modules/economy/taskLifecycleStageCostView.js';
 
@@ -17,7 +21,11 @@ export function attachTaskLifecycleRuntime() {
     gameTime: runtime.gameTime,
   });
 
-  eventBus.on('*', ({ eventName, payload }) => taskLifecycleSystem.observe(eventName, payload));
+  subscribeObserverEvents({
+    eventBus,
+    observer: taskLifecycleSystem,
+    eventNames: TASK_LIFECYCLE_OBSERVER_EVENTS,
+  });
   globalThis.shengling = Object.freeze({ ...runtime, taskLifecycleSystem });
   return taskLifecycleSystem;
 }

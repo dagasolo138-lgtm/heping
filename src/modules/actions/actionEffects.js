@@ -2,13 +2,17 @@ import { CAMP_ITEM_LABELS } from '../settlements/campStore.js';
 import { ACTION_TYPES } from './actionTypes.js';
 import { completeToolMaintenance } from './toolMaintenanceEffects.js';
 
-const RESOURCE_IDS = ['wood', 'berries', 'millet', 'water'];
+const RESOURCE_IDS = ['milletSeed', 'wood', 'berries', 'millet', 'water'];
 const TOOL_MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
+
+function itemLabel(itemId) {
+  return CAMP_ITEM_LABELS[itemId] ?? (itemId === 'milletSeed' ? '粟种' : itemId);
+}
 
 function itemText(items) {
   return Object.entries(items)
     .filter(([, value]) => value > 0)
-    .map(([id, value]) => `${CAMP_ITEM_LABELS[id] ?? id}×${value}`)
+    .map(([id, value]) => `${itemLabel(id)}×${value}`)
     .join('、');
 }
 

@@ -59,6 +59,30 @@ test('日级对账将生产与消耗解释为期初期末库存变化', () => {
   assert.equal(report.ok, true);
 });
 
+test('播种把真实粟种记为 planting 出库并保持日报守恒', () => {
+  const harness = createHarness();
+  harness.camps[0].items.milletSeed = 2;
+  harness.daily.reset();
+  record(harness.flow, {
+    itemId: 'milletSeed',
+    amount: 1,
+    from: 'person:person-1',
+    to: 'farm:field-1',
+    category: 'planting',
+    reason: 'sowMillet',
+  });
+  harness.camps[0].items.milletSeed = 1;
+
+  const report = harness.daily.getCurrentReport();
+  assert.equal(report.flow.byCategory.planting, 1);
+  assert.equal(report.balances.milletSeed.planting, 1);
+  assert.equal(report.balances.milletSeed.expectedDelta, -1);
+  assert.equal(report.balances.milletSeed.actualDelta, -1);
+  assert.equal(report.balances.milletSeed.discrepancy, 0);
+  assert.equal(report.ok, true);
+  assert.equal(harness.daily.verify().ok, true);
+});
+
 test('劳动分配、完成和生存拒绝进入日报与瓶颈', () => {
   const harness = createHarness();
   const task = {

@@ -20,6 +20,7 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
   const map = mapSystem.get();
   const feature = map?.features.find((item) => item.kind === 'campfire');
   const position = feature ? { x: feature.x, y: feature.y } : { ...map.spawnPoint };
+  const headless = eventBus?.getDiagnostics?.().mode === 'headless';
   let state = {
     id: feature?.id ?? 'starting-campfire',
     featureId: feature?.id ?? null,
@@ -30,9 +31,29 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
     warmthRadius: 7,
     lastTick: Number(gameTime.now().tick ?? 0),
   };
+  let cachedView = null;
+  let viewHits = 0;
+
+  function invalidate() {
+    cachedView = null;
+  }
+
+  function buildView() {
+    return {
+      ...state,
+      position: headless ? state.position : clone(state.position),
+      fuel: Math.round(state.fuel * 100) / 100,
+    };
+  }
 
   function get() {
-    return clone({ ...state, fuel: Math.round(state.fuel * 100) / 100 });
+    if (!headless) return clone(buildView());
+    if (cachedView) {
+      viewHits += 1;
+      return cachedView;
+    }
+    cachedView = Object.freeze(buildView());
+    return cachedView;
   }
 
   function emit(reason) {
@@ -42,7 +63,10 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
   function sync({ weather, phase }) {
     const nowTick = Number(gameTime.now().tick ?? 0);
     const elapsedMinutes = Math.max(0, nowTick - state.lastTick);
-    state.lastTick = nowTick;
+    if (state.lastTick !== nowTick) {
+      state.lastTick = nowTick;
+      invalidate();
+    }
     if (!elapsedMinutes || !state.lit) return get();
 
     const shouldBurn = Boolean(phase?.isNight || weather?.requiresFire);
@@ -51,6 +75,7 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
     const before = state.fuel;
     state.fuel = Math.max(0, state.fuel - elapsedMinutes * rate);
     state.lit = state.fuel > 0.01;
+    invalidate();
     if (Math.abs(before - state.fuel) >= 0.05 || !state.lit) emit(state.lit ? 'fuel:burned' : 'fire:extinguished');
     return get();
   }
@@ -60,6 +85,7 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
     if (!accepted) return 0;
     state.fuel += accepted;
     state.lit = state.fuel > 0.01;
+    invalidate();
     emit('fuel:added');
     return accepted;
   }
@@ -75,8 +101,8 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
   function exportState() {
     return {
       schemaVersion: FIRE_SCHEMA_VERSION,
-      exportedAt: gameTime.stamp(),
-      state: get(),
+      exportedAt: { ...gameTime.stamp() },
+      state: clone(get()),
     };
   }
 
@@ -94,9 +120,14 @@ export function createFireSystem({ eventBus, gameTime, mapSystem }) {
       lastTick: Math.max(0, Number(snapshot.state.lastTick ?? gameTime.now().tick ?? 0)),
       lit: Boolean(snapshot.state.lit),
     };
+    invalidate();
     emit('fire:hydrated');
     return get();
   }
 
-  return Object.freeze({ get, sync, addFuel, needsFuel, isWarmAt, exportState, importState });
+  function getDiagnostics() {
+    return { mode: headless ? 'headless' : 'safe', viewHits, cached: Boolean(cachedView) };
+  }
+
+  return Object.freeze({ get, sync, addFuel, needsFuel, isWarmAt, exportState, importState, getDiagnostics });
 }

@@ -1,6 +1,11 @@
+import {
+  DAILY_ECONOMY_OBSERVER_EVENTS,
+  subscribeObserverEvents,
+} from '../core/events/observerSubscriptions.js';
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createDailyEconomySystem } from '../modules/economy/dailyEconomySystem.js';
 import { createEconomicMetricsAuditView } from '../modules/economy/economicMetricsAuditView.js';
+import { createFarmSeedDailyEconomyView } from '../modules/economy/farmSeedDailyEconomyView.js';
 import { createTaskLifecycleEconomyView } from '../modules/economy/taskLifecycleEconomyView.js';
 
 function ensureReadout() {
@@ -34,6 +39,7 @@ function render(readout, system) {
   readout.textContent = [
     `第 ${report.day} 日经济`,
     `食物 ${signed(foodDelta(report))}`,
+    `粟种 ${signed(report.balances?.milletSeed?.actualDelta)}`,
     `水 ${signed(report.balances?.water?.actualDelta)}`,
     `木材 ${signed(report.balances?.wood?.actualDelta)}`,
     `劳动 ${laborStatus}`,
@@ -58,8 +64,11 @@ export function attachDailyEconomyRuntime() {
     dailyEconomySystem: baseDailyEconomySystem,
     taskLifecycleSystem: runtime.taskLifecycleSystem,
   });
-  const dailyEconomySystem = createEconomicMetricsAuditView({
+  const seedDailyEconomySystem = createFarmSeedDailyEconomyView({
     dailyEconomySystem: lifecycleDailyEconomySystem,
+  });
+  const dailyEconomySystem = createEconomicMetricsAuditView({
+    dailyEconomySystem: seedDailyEconomySystem,
   });
   const readout = ensureReadout();
   const scheduler = createUiRenderScheduler({
@@ -67,7 +76,11 @@ export function attachDailyEconomyRuntime() {
     render: () => render(readout, dailyEconomySystem),
   });
 
-  eventBus.on('*', ({ eventName, payload }) => baseDailyEconomySystem.observe(eventName, payload));
+  subscribeObserverEvents({
+    eventBus,
+    observer: baseDailyEconomySystem,
+    eventNames: DAILY_ECONOMY_OBSERVER_EVENTS,
+  });
   ['simulation:time', 'resource-flow:recorded', 'task-lifecycle:closed', 'daily-economy:finalized', 'daily-economy:hydrated']
     .forEach((eventName) => eventBus.on(eventName, () => scheduler.request(eventName)));
   eventBus.on('save:loaded', () => scheduler.request('save:loaded'));

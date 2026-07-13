@@ -1,4 +1,5 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
+import { createFarmGrowthTickHandler } from '../modules/farming/farmGrowthScheduler.js';
 import { createFarmSystem } from '../modules/farming/farmSystem.js';
 
 function ensureReadout() {
@@ -20,6 +21,12 @@ function soilText(summary) {
   return ` · 土壤 ${fertility}${warning}`;
 }
 
+function seedText(summary) {
+  const seed = summary.seed ?? {};
+  const shortage = Number(seed.shortage ?? 0);
+  return `粟种 ${Number(seed.onHand ?? 0)}/${Number(seed.target ?? 0)}${shortage > 0 ? ` · 缺 ${shortage}` : ''}`;
+}
+
 function renderReadout(readout, farmSystem) {
   if (!readout) return;
   const summary = farmSystem.getSummary();
@@ -28,37 +35,54 @@ function renderReadout(readout, farmSystem) {
     return;
   }
   const soil = soilText(summary);
+  const seeds = seedText(summary);
   if (summary.mature) {
-    readout.textContent = `农事 · ${summary.mature} 块粟田成熟待收 · 种子 ${summary.seedStock}${soil}`;
+    readout.textContent = `农事 · ${summary.mature} 块粟田成熟待收 · ${seeds}${soil}`;
     return;
   }
   if (summary.growing) {
-    readout.textContent = `农事 · ${summary.growing} 块粟田生长中 · 种子 ${summary.seedStock}${soil}`;
+    readout.textContent = `农事 · ${summary.growing} 块粟田生长中 · ${seeds}${soil}`;
     return;
   }
   if (summary.waitingToSow) {
-    readout.textContent = `农事 · ${summary.waitingToSow} 块粟田等待春播 · 种子 ${summary.seedStock}${soil}`;
+    readout.textContent = `农事 · ${summary.waitingToSow} 块粟田等待春播 · ${seeds}${soil}`;
     return;
   }
   if (summary.sowable) {
-    readout.textContent = `农事 · ${summary.sowable} 块粟田可播种 · 种子 ${summary.seedStock}${soil}`;
+    readout.textContent = `农事 · ${summary.sowable} 块粟田可播种 · ${seeds}${soil}`;
     return;
   }
-  readout.textContent = `农事 · 待开垦 ${summary.clearing} 块 · 种子 ${summary.seedStock}${soil}`;
+  readout.textContent = `农事 · 待开垦 ${summary.clearing} 块 · ${seeds}${soil}`;
 }
 
-function patchMilletChip(runtime) {
-  const container = document.querySelector('#camp-resources');
-  if (!container) return;
-  const amount = Number(runtime.campStore.get('starting-camp')?.items?.millet ?? 0);
-  let chip = container.querySelector('#millet-resource-chip');
+function patchResourceChip(container, { id, label, amount, className }) {
+  let chip = container.querySelector(`#${id}`);
   if (!chip) {
     chip = document.createElement('span');
-    chip.id = 'millet-resource-chip';
-    chip.className = 'resource-chip resource-chip--millet';
+    chip.id = id;
+    chip.className = `resource-chip ${className}`;
     container.append(chip);
   }
-  chip.innerHTML = `<b>粟米</b><strong>${amount}</strong>`;
+  chip.innerHTML = `<b>${label}</b><strong>${amount}</strong>`;
+}
+
+function patchFarmChips(runtime, farmSystem) {
+  const container = document.querySelector('#camp-resources');
+  if (!container) return;
+  const camp = runtime.campStore.get('starting-camp');
+  patchResourceChip(container, {
+    id: 'millet-resource-chip',
+    label: '粟米',
+    amount: Number(camp?.items?.millet ?? 0),
+    className: 'resource-chip--millet',
+  });
+  const seed = farmSystem.getSeedSummary();
+  patchResourceChip(container, {
+    id: 'millet-seed-resource-chip',
+    label: `粟种 · 目标 ${seed.target}`,
+    amount: Number(camp?.items?.milletSeed ?? 0),
+    className: 'resource-chip--millet',
+  });
 }
 
 export function attachFarmRuntime() {
@@ -79,14 +103,18 @@ export function attachFarmRuntime() {
     maxFps: 10,
     render: () => {
       renderReadout(readout, farmSystem);
-      patchMilletChip(runtime);
+      patchFarmChips(runtime, farmSystem);
       runtime.mapView.redraw();
     },
   });
   renderReadout(readout, farmSystem);
-  patchMilletChip(runtime);
+  patchFarmChips(runtime, farmSystem);
 
-  eventBus.on('simulation:tick', ({ weather }) => farmSystem.syncGrowth(weather));
+  const syncFarmGrowth = createFarmGrowthTickHandler({
+    farmSystem,
+    gameTime: runtime.gameTime,
+  });
+  eventBus.on('simulation:tick', syncFarmGrowth);
   eventBus.on('farms:changed', () => ui.request('farms:changed'));
   eventBus.on('farms:matured', ({ field }) => {
     const status = document.querySelector('#system-status');

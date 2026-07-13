@@ -7,7 +7,7 @@ import { buildDynamicStockTargets, stockResourceForAction } from './stockTargetM
 import { scoreUtilityCandidates } from './utilityScorer.js';
 import { planToolMaintenanceAction } from './toolMaintenancePlanner.js';
 
-const ITEM_TYPES = Object.freeze(['wood', 'berries', 'millet', 'water']);
+const ITEM_TYPES = Object.freeze(['milletSeed', 'wood', 'berries', 'millet', 'water']);
 const MAINTENANCE_ACTIONS = new Set([ACTION_TYPES.REPAIR_TOOL, ACTION_TYPES.REPLACE_TOOL]);
 const ACTION_CAPS = Object.freeze({
   [ACTION_TYPES.FETCH_WATER]: 3,
@@ -55,7 +55,9 @@ function createTask(type, destination, data = {}, duration = ACTION_META[type].w
 }
 
 function carriedItems(person) {
-  return Object.fromEntries(ITEM_TYPES.map((itemId) => [itemId, amount(person.inventory.items, itemId)]).filter(([, value]) => value > 0));
+  return Object.fromEntries(ITEM_TYPES
+    .map((itemId) => [itemId, amount(person.inventory.items, itemId)])
+    .filter(([, value]) => value > 0));
 }
 
 function carriedAmount(items) {
@@ -181,12 +183,22 @@ function makeWaterTask(person, mapSystem) {
   const from = locationOf(person);
   const access = mapSystem.findNearestWaterAccess(from.x, from.y);
   if (!access) return null;
-  return createTask(ACTION_TYPES.FETCH_WATER, access, { yield: 3 }, ACTION_META[ACTION_TYPES.FETCH_WATER].workDuration * workerFactor(person, 'fishing'));
+  return createTask(
+    ACTION_TYPES.FETCH_WATER,
+    access,
+    { yield: 3 },
+    ACTION_META[ACTION_TYPES.FETCH_WATER].workDuration * workerFactor(person, 'fishing'),
+  );
 }
 
 function makeBerryTask(person, mapSystem, reservedFeatureIds) {
   const from = locationOf(person);
-  const bush = mapSystem.findNearestFeature({ x: from.x, y: from.y, kinds: ['berryBush'], excludeIds: [...reservedFeatureIds] });
+  const bush = mapSystem.findNearestFeature({
+    x: from.x,
+    y: from.y,
+    kinds: ['berryBush'],
+    excludeIds: [...reservedFeatureIds],
+  });
   if (!bush) return null;
   const multiplier = berryYieldMultiplier();
   return createTask(ACTION_TYPES.GATHER_BERRIES, { x: bush.x, y: bush.y }, {
@@ -199,7 +211,12 @@ function makeBerryTask(person, mapSystem, reservedFeatureIds) {
 
 function makeChopTask(person, mapSystem, reservedFeatureIds) {
   const from = locationOf(person);
-  const tree = mapSystem.findNearestFeature({ x: from.x, y: from.y, kinds: ['tree'], excludeIds: [...reservedFeatureIds] });
+  const tree = mapSystem.findNearestFeature({
+    x: from.x,
+    y: from.y,
+    kinds: ['tree'],
+    excludeIds: [...reservedFeatureIds],
+  });
   if (!tree) return null;
   const standAt = mapSystem.findNearestWalkableNeighbor(tree.x, tree.y, from.x, from.y);
   if (!standAt) return null;
@@ -211,7 +228,10 @@ function makeChopTask(person, mapSystem, reservedFeatureIds) {
 }
 
 function makeRestTask(camp) {
-  return createTask(ACTION_TYPES.REST, camp.anchor, { energyGain: 28, stressLoss: 12 }, ACTION_META[ACTION_TYPES.REST].workDuration);
+  return createTask(ACTION_TYPES.REST, camp.anchor, {
+    energyGain: 28,
+    stressLoss: 12,
+  }, ACTION_META[ACTION_TYPES.REST].workDuration);
 }
 
 function compactCandidateScore(item) {
@@ -253,19 +273,35 @@ function needsResource(type, context, person) {
 function createUtilityCandidates(context) {
   const { person, camp, mapSystem, reservedFeatureIds } = context;
   const candidates = [];
+
   if (needsResource(ACTION_TYPES.FETCH_WATER, context, person)) {
     const water = attachStockTarget(makeWaterTask(person, mapSystem), context.stockTargets);
-    if (water) candidates.push(makeActionCandidate({ task: water, person, source: 'nearestWater', target: { itemId: 'water' } }));
+    if (water) candidates.push(makeActionCandidate({
+      task: water,
+      person,
+      source: 'nearestWater',
+      target: { itemId: 'water' },
+    }));
   }
 
   if (needsResource(ACTION_TYPES.GATHER_BERRIES, context, person)) {
     const berries = attachStockTarget(makeBerryTask(person, mapSystem, reservedFeatureIds), context.stockTargets);
-    if (berries) candidates.push(makeActionCandidate({ task: berries, person, source: 'nearestBerryBush', target: { itemId: 'berries', featureId: berries.data.featureId } }));
+    if (berries) candidates.push(makeActionCandidate({
+      task: berries,
+      person,
+      source: 'nearestBerryBush',
+      target: { itemId: 'berries', featureId: berries.data.featureId },
+    }));
   }
 
   if (needsResource(ACTION_TYPES.CHOP_TREE, context, person)) {
     const wood = attachStockTarget(makeChopTask(person, mapSystem, reservedFeatureIds), context.stockTargets);
-    if (wood) candidates.push(makeActionCandidate({ task: wood, person, source: 'nearestTree', target: { itemId: 'wood', featureId: wood.data.featureId } }));
+    if (wood) candidates.push(makeActionCandidate({
+      task: wood,
+      person,
+      source: 'nearestTree',
+      target: { itemId: 'wood', featureId: wood.data.featureId },
+    }));
   }
 
   if (person.state.energy <= 60) {
@@ -313,7 +349,13 @@ function legacyPlanNextAction(context) {
   if (person.state.hunger >= 62) urgentTypes.push(ACTION_TYPES.GATHER_BERRIES);
 
   const rolePlan = ROLE_PRIORITY[person.work.occupation] ?? ROLE_PRIORITY.unassigned;
-  const candidates = [...new Set([...urgentTypes, ...rolePlan, ACTION_TYPES.FETCH_WATER, ACTION_TYPES.GATHER_BERRIES, ACTION_TYPES.CHOP_TREE])];
+  const candidates = [...new Set([
+    ...urgentTypes,
+    ...rolePlan,
+    ACTION_TYPES.FETCH_WATER,
+    ACTION_TYPES.GATHER_BERRIES,
+    ACTION_TYPES.CHOP_TREE,
+  ])];
 
   for (const type of candidates) {
     if (type === ACTION_TYPES.FETCH_WATER && !shortages.water && person.state.thirst < 62) continue;
@@ -324,7 +366,10 @@ function legacyPlanNextAction(context) {
     if (task) return task;
   }
 
-  if (person.state.energy <= 48 && (person.location.tileX !== camp.anchor.x || person.location.tileY !== camp.anchor.y)) return makeRestTask(camp);
+  if (person.state.energy <= 48
+    && (person.location.tileX !== camp.anchor.x || person.location.tileY !== camp.anchor.y)) {
+    return makeRestTask(camp);
+  }
   return null;
 }
 
@@ -339,7 +384,11 @@ export function planNextAction(inputContext) {
 
   if (person.state.energy <= 18) {
     const rest = makeRestTask(camp);
-    return attachUtilityDebug(rest, { score: 100, reason: '精力过低，需要立即休息', factors: { emergency: 70, personalNeed: 30 } });
+    return attachUtilityDebug(rest, {
+      score: 100,
+      reason: '精力过低，需要立即休息',
+      factors: { emergency: 70, personalNeed: 30 },
+    });
   }
 
   const emergencyTypes = [];
@@ -347,10 +396,18 @@ export function planNextAction(inputContext) {
   if (person.state.hunger >= 86) emergencyTypes.push(ACTION_TYPES.GATHER_BERRIES);
   for (const type of emergencyTypes) {
     const task = makeByType(type, context);
-    if (task) return attachUtilityDebug(task, { score: 100, reason: '紧急生存需求', factors: { emergency: 100 } });
+    if (task) return attachUtilityDebug(task, {
+      score: 100,
+      reason: '紧急生存需求',
+      factors: { emergency: 100 },
+    });
   }
 
-  const maintenance = planToolMaintenanceAction({ person, camp, actionCounts: context.actionCounts });
+  const maintenance = planToolMaintenanceAction({
+    person,
+    camp,
+    actionCounts: context.actionCounts,
+  });
   if (maintenance) return maintenance;
 
   const candidates = createUtilityCandidates(context);
