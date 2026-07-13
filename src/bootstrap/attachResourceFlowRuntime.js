@@ -1,3 +1,7 @@
+import {
+  RESOURCE_FLOW_OBSERVER_EVENTS,
+  subscribeObserverEvents,
+} from '../core/events/observerSubscriptions.js';
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
 import { createFarmSeedResourceFlowView } from '../modules/economy/farmSeedResourceFlowView.js';
 import { createResourceFlowSystem } from '../modules/economy/resourceFlowSystem.js';
@@ -70,7 +74,11 @@ export function attachResourceFlowRuntime() {
     render: () => render(readout, resourceFlowSystem, runtime.gameTime),
   });
 
-  eventBus.on('*', ({ eventName, payload }) => baseResourceFlowSystem.observe(eventName, payload));
+  subscribeObserverEvents({
+    eventBus,
+    observer: baseResourceFlowSystem,
+    eventNames: RESOURCE_FLOW_OBSERVER_EVENTS,
+  });
   eventBus.on('resource-flow:recorded', () => scheduler.request('resource-flow:recorded'));
   eventBus.on('resource-flow:hydrated', () => scheduler.request('resource-flow:hydrated'));
   eventBus.on('simulation:time', () => scheduler.request('simulation:time'));
