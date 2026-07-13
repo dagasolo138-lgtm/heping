@@ -16,10 +16,10 @@ function report(day, overrides = {}) {
     year: 1,
     day,
     openedAt: { year: 1, day, minute: 0, tick: day * 1440 },
-    closedAt: { year: 1, day, minute: 1439, tick: day * 1440 + 1439 },
+    closedAt: { year: 1, day: day + 1, minute: 0, tick: (day + 1) * 1440 },
     stockTargets: { goals: { food: 10, water: 8, wood: 6 } },
     stockGaps: {},
-    closingInventory: { byItem: { food: 10, water: 8, wood: 6 } },
+    closingInventory: { byItem: { berries: 6, millet: 4, water: 8, wood: 6 } },
     denials: { total: 0, food: 0, water: 0 },
     flow: { byCategory: { production: 10, spoilage: 0 } },
     labor: { assigned: 4, completed: 4, cancelled: 0, failed: 0 },
@@ -35,6 +35,7 @@ test('持续两日的库存压力形成承诺，压力解除后承诺完成', ()
   let pressure = system.listPressures({ state: 'active' })[0];
   assert.equal(pressure.signature, 'stock-gap:food');
   assert.equal(pressure.persistenceDays, 1);
+  assert.equal(pressure.updatedAt.day, 1);
   assert.equal(system.listCommitments({ state: 'active' }).length, 0);
 
   clock.set({ day: 2, tick: 2880 });
@@ -62,11 +63,11 @@ test('同一日报重复评估不会虚增持续天数', () => {
   assert.equal(system.listPressures({ state: 'active' })[0].persistenceDays, 1);
 });
 
-test('雨天播种窗口与库存富余会生成机会', () => {
+test('雨天播种窗口与真实食物汇总会生成机会', () => {
   const clock = createClock();
   const system = createWorldDynamicsSystem({ gameTime: clock, getRuntime: () => ({}) });
   system.evaluate(report(1, {
-    closingInventory: { byItem: { food: 18, water: 8, wood: 6 } },
+    closingInventory: { byItem: { berries: 10, millet: 8, water: 8, wood: 6 } },
   }), {
     weather: { id: 'rain', isRain: true },
     farm: { sowable: 1, mature: 0, seed: { onHand: 2, shortage: 0 }, soil: {}, total: 1 },
