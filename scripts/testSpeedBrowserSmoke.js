@@ -199,8 +199,12 @@ try {
   }, null, 2)}\n`);
   throw error;
 } finally {
-  client?.close();
+  try { client?.close(); } catch { /* cleanup must not mask a completed smoke test */ }
   stopProcess(chrome);
   stopProcess(vite);
-  if (userDataDir) await rm(userDataDir, { recursive: true, force: true });
+  await delay(120);
+  if (userDataDir) {
+    try { await rm(userDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); }
+    catch { /* the runner will discard its temporary filesystem */ }
+  }
 }
