@@ -1,5 +1,5 @@
 import { ACTION_TYPES } from './actionTypes.js';
-import { scoreCommitmentUtility } from './commitmentUtility.js';
+import { readActiveRuntimeCommitments, scoreCommitmentUtility } from './commitmentUtility.js';
 import { campScarcity, scarcityForAction } from './scarcityUtility.js';
 import { scoreSocialUtility } from './socialUtility.js';
 
@@ -81,9 +81,10 @@ function explain(factors) {
 
 export function scoreUtilityCandidates({ person, desire, candidates, camp, population, actionCounts, allPeople = [], stockTargets = null }) {
   const scarcity = campScarcity({ camp, population, stockTargets });
+  const commitments = readActiveRuntimeCommitments();
   return candidates.map((candidate) => {
     const social = scoreSocialUtility({ person, candidate, allPeople });
-    const commitment = scoreCommitmentUtility({ candidate });
+    const commitment = scoreCommitmentUtility({ candidate, commitments });
     const factors = {
       personalNeed: needScore(candidate.type, desire),
       campScarcity: scarcityForAction(candidate.type, scarcity) * 42,
