@@ -55,20 +55,20 @@ test('headless 结构共享追加不会修改已导出的历史快照', () => {
   const before = people.exportState();
   const beforePerson = before.people.find((person) => person.id === personId);
   const beforePersonal = structuredClone(beforePerson.memories.personal);
+  const beforeLifeEvents = structuredClone(beforePerson.memories.lifeEvents);
   const beforeRecent = [...beforePerson.memories.recent];
 
   people.addEncounterMemory(personId, { type: 'encounter', summary: '第二条记忆' });
-  people.addLifeEvent(personId, { type: 'milestone', summary: '第一条生命事件' });
+  people.addLifeEvent(personId, { type: 'milestone', summary: '新增生命事件' });
   const after = people.exportState();
   const afterPerson = after.people.find((person) => person.id === personId);
 
   assert.deepEqual(beforePerson.memories.personal, beforePersonal);
+  assert.deepEqual(beforePerson.memories.lifeEvents, beforeLifeEvents);
   assert.deepEqual(beforePerson.memories.recent, beforeRecent);
-  assert.equal(beforePerson.memories.personal.length, 1);
-  assert.equal(beforePerson.memories.lifeEvents.length, 0);
-  assert.equal(afterPerson.memories.personal.length, 2);
-  assert.equal(afterPerson.memories.lifeEvents.length, 1);
-  assert.equal(afterPerson.memories.recent.length, 3);
+  assert.equal(afterPerson.memories.personal.length, beforePersonal.length + 1);
+  assert.equal(afterPerson.memories.lifeEvents.length, beforeLifeEvents.length + 1);
+  assert.equal(afterPerson.memories.recent.length, Math.min(24, beforeRecent.length + 2));
   assert.ok(people.getRuntimeDiagnostics().structurallySharedMemoryAppends >= 3);
   assert.equal(people.verify().ok, true);
 });
