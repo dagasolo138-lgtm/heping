@@ -10,6 +10,8 @@ import { createReservationLedger } from '../src/modules/actions/reservationLedge
 import { createBuildingSystem } from '../src/modules/buildings/buildingSystem.js';
 import { createResourceRenewalSystem } from '../src/modules/ecology/resourceRenewalSystem.js';
 import { createDailyEconomySystem } from '../src/modules/economy/dailyEconomySystem.js';
+import { createFarmSeedDailyEconomyView } from '../src/modules/economy/farmSeedDailyEconomyView.js';
+import { createFarmSeedResourceFlowView } from '../src/modules/economy/farmSeedResourceFlowView.js';
 import { createResourceFlowSystem } from '../src/modules/economy/resourceFlowSystem.js';
 import { createFireSystem } from '../src/modules/environment/fireSystem.js';
 import { createWeatherSystem } from '../src/modules/environment/weatherSystem.js';
@@ -115,22 +117,24 @@ function createReplayWorld(seed) {
     worldSpeedSystem: { get: () => ({ value: 10, label: '10×', worldMinutesPerRealSecond: 60 }) },
   };
 
-  const resourceFlow = createResourceFlowSystem({
+  const baseResourceFlow = createResourceFlowSystem({
     eventBus: bus,
     gameTime: time,
     getRuntime: () => runtime,
   });
+  const resourceFlow = createFarmSeedResourceFlowView({ resourceFlowSystem: baseResourceFlow });
   runtime.resourceFlowSystem = resourceFlow;
-  bus.on('*', ({ eventName, payload }) => resourceFlow.observe(eventName, payload));
+  bus.on('*', ({ eventName, payload }) => baseResourceFlow.observe(eventName, payload));
 
-  const dailyEconomy = createDailyEconomySystem({
+  const baseDailyEconomy = createDailyEconomySystem({
     eventBus: bus,
     gameTime: time,
     resourceFlowSystem: resourceFlow,
     getRuntime: () => runtime,
   });
+  const dailyEconomy = createFarmSeedDailyEconomyView({ dailyEconomySystem: baseDailyEconomy });
   runtime.dailyEconomySystem = dailyEconomy;
-  bus.on('*', ({ eventName, payload }) => dailyEconomy.observe(eventName, payload));
+  bus.on('*', ({ eventName, payload }) => baseDailyEconomy.observe(eventName, payload));
 
   bus.on('simulation:tick', ({ weather: currentWeather }) => {
     ecology.sync();
