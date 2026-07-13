@@ -1,6 +1,13 @@
-import { createEventBus } from '../src/core/events/eventBus.js';
+import { createHeadlessEventBus } from '../src/core/events/headlessEventBus.js';
+import {
+  DAILY_ECONOMY_OBSERVER_EVENTS,
+  RESOURCE_FLOW_OBSERVER_EVENTS,
+  TASK_LIFECYCLE_OBSERVER_EVENTS,
+  subscribeObserverEvents,
+} from '../src/core/events/observerSubscriptions.js';
 import { resetIdSequence } from '../src/core/ids/createId.js';
 import { createGameTime } from '../src/core/time/gameTime.js';
+import { createHeadlessReplay } from '../src/core/simulation/headlessReplay.js';
 import { createActionSystem } from '../src/modules/actions/actionSystem.js';
 import { createReservationLedger } from '../src/modules/actions/reservationLedger.js';
 import { createToolMaintenanceRuntime } from '../src/modules/actions/toolMaintenanceRuntime.js';
@@ -36,23 +43,13 @@ import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSyste
 import { createToolSystem } from '../src/modules/tools/toolSystem.js';
 
 function installToolRuntimeListeners({ bus, tools }) {
-  bus.on('actions:assigned', ({ personId, task }) => {
-    tools.reserveForTask({ personId, task });
-  });
+  bus.on('actions:assigned', ({ personId, task }) => tools.reserveForTask({ personId, task }));
   bus.on('people:changed', ({ reason, person }) => {
-    if (reason === 'activity:set' && !person?.activity?.current) {
-      tools.releaseReservationForOwner(person.id);
-    }
+    if (reason === 'activity:set' && !person?.activity?.current) tools.releaseReservationForOwner(person.id);
   });
-  bus.on('actions:completed', ({ personId, task }) => {
-    tools.completeTask({ personId, task });
-  });
-  bus.on('simulation:tick', () => {
-    tools.reconcile();
-  });
-  bus.on('save:loaded', () => {
-    tools.reconcile(new Set());
-  });
+  bus.on('actions:completed', ({ personId, task }) => tools.completeTask({ personId, task }));
+  bus.on('simulation:tick', () => tools.reconcile());
+  bus.on('save:loaded', () => tools.reconcile(new Set()));
 }
 
 export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
@@ -62,7 +59,7 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
   resetIdSequence(seed);
-  const bus = createEventBus();
+  const bus = createHeadlessEventBus();
   const time = createGameTime({ year: 1, day: 1, minute: 480 });
   const people = createPeopleSystem({ eventBus: bus, gameTime: time });
   const map = createMapSystem({ eventBus: bus, gameTime: time });
@@ -91,7 +88,7 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   const farms = createFarmSystem({ eventBus: bus, gameTime: time, mapSystem: map, buildingSystem: buildings, seasonSystem: seasons });
   const foodStorage = createFoodStorageSystem({ eventBus: bus, gameTime: time, campStore: camp });
   const reservationLedger = createReservationLedger();
-  const actions = createActionSystem({
+  const rawActions = createActionSystem({
     peopleSystem: people,
     mapSystem: map,
     campStore: camp,
@@ -102,6 +99,14 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     eventBus: bus,
     gameTime: time,
     reservationLedger,
+  });
+  let headlessReplay = null;
+  const actions = Object.freeze({
+    ...rawActions,
+    advanceTicks(count, options = {}) {
+      if (!headlessReplay) return rawActions.advanceTicks(count, options);
+      return headlessReplay.advanceTicks(count, options).advancedTicks;
+    },
   });
   const roadSampler = createRoadTickSampler({ roadSystem: roads, getPeople: () => actions.getMovementPeople() });
   const socialEvents = createSocialEventSystem({
@@ -136,12 +141,7 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   globalThis.shengling = runtime;
   globalThis.__shenglingEventBus = bus;
 
-  const tools = createToolSystem({
-    eventBus: bus,
-    gameTime: time,
-    reservationLedger,
-    getRuntime: () => runtime,
-  });
+  const tools = createToolSystem({ eventBus: bus, gameTime: time, reservationLedger, getRuntime: () => runtime });
   runtime.toolSystem = tools;
   installToolRuntimeListeners({ bus, tools });
 
@@ -155,41 +155,23 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   });
   runtime.toolMaintenanceRuntime = toolMaintenanceRuntime;
 
-  const baseResourceFlow = createResourceFlowSystem({
-    eventBus: bus,
-    gameTime: time,
-    getRuntime: () => runtime,
-  });
+  const baseResourceFlow = createResourceFlowSystem({ eventBus: bus, gameTime: time, getRuntime: () => runtime });
   const resourceFlowTaskContextGuard = attachResourceFlowTaskContextGuard({
     eventBus: bus,
     resourceFlowSystem: baseResourceFlow,
     getRuntime: () => runtime,
   });
-  const yearAwareResourceFlow = createYearAwareResourceFlowView({
-    resourceFlowSystem: baseResourceFlow,
-    gameTime: time,
-  });
-  const maintenanceResourceFlow = createToolMaintenanceResourceFlowView({
-    resourceFlowSystem: yearAwareResourceFlow,
-  });
-  const resourceFlow = createFarmSeedResourceFlowView({
-    resourceFlowSystem: maintenanceResourceFlow,
-  });
+  const yearAwareResourceFlow = createYearAwareResourceFlowView({ resourceFlowSystem: baseResourceFlow, gameTime: time });
+  const maintenanceResourceFlow = createToolMaintenanceResourceFlowView({ resourceFlowSystem: yearAwareResourceFlow });
+  const resourceFlow = createFarmSeedResourceFlowView({ resourceFlowSystem: maintenanceResourceFlow });
   runtime.resourceFlowSystem = resourceFlow;
   runtime.resourceFlowTaskContextGuard = resourceFlowTaskContextGuard;
-  bus.on('*', ({ eventName, payload }) => baseResourceFlow.observe(eventName, payload));
+  subscribeObserverEvents({ eventBus: bus, observer: baseResourceFlow, eventNames: RESOURCE_FLOW_OBSERVER_EVENTS });
 
-  const baseTaskLifecycle = createTaskLifecycleSystem({
-    eventBus: bus,
-    gameTime: time,
-    getRuntime: () => runtime,
-  });
-  const taskLifecycle = createTaskLifecycleStageCostView({
-    taskLifecycleSystem: baseTaskLifecycle,
-    gameTime: time,
-  });
+  const baseTaskLifecycle = createTaskLifecycleSystem({ eventBus: bus, gameTime: time, getRuntime: () => runtime });
+  const taskLifecycle = createTaskLifecycleStageCostView({ taskLifecycleSystem: baseTaskLifecycle, gameTime: time });
   runtime.taskLifecycleSystem = taskLifecycle;
-  bus.on('*', ({ eventName, payload }) => taskLifecycle.observe(eventName, payload));
+  subscribeObserverEvents({ eventBus: bus, observer: taskLifecycle, eventNames: TASK_LIFECYCLE_OBSERVER_EVENTS });
 
   const baseDailyEconomy = createDailyEconomySystem({
     eventBus: bus,
@@ -201,17 +183,12 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     dailyEconomySystem: baseDailyEconomy,
     taskLifecycleSystem: taskLifecycle,
   });
-  const seedEconomy = createFarmSeedDailyEconomyView({
-    dailyEconomySystem: lifecycleEconomy,
-  });
+  const seedEconomy = createFarmSeedDailyEconomyView({ dailyEconomySystem: lifecycleEconomy });
   const dailyEconomy = createEconomicMetricsAuditView({ dailyEconomySystem: seedEconomy });
   runtime.dailyEconomySystem = dailyEconomy;
-  bus.on('*', ({ eventName, payload }) => baseDailyEconomy.observe(eventName, payload));
+  subscribeObserverEvents({ eventBus: bus, observer: baseDailyEconomy, eventNames: DAILY_ECONOMY_OBSERVER_EVENTS });
 
-  const syncFarmGrowth = createFarmGrowthTickHandler({
-    farmSystem: farms,
-    gameTime: time,
-  });
+  const syncFarmGrowth = createFarmGrowthTickHandler({ farmSystem: farms, gameTime: time });
   bus.on('simulation:tick', (payload) => {
     ecology.sync();
     syncFarmGrowth({ weather: payload.weather });
@@ -239,10 +216,13 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     if (currentCamp) farms.ensureExpansionField({ campAnchor: currentCamp.anchor });
   });
 
+  headlessReplay = createHeadlessReplay({ actionSystem: rawActions, gameTime: time, eventBus: bus, defaultBatchSize: 600 });
+  runtime.headlessReplay = headlessReplay;
+
   globalThis.requestAnimationFrame = () => 1;
   globalThis.cancelAnimationFrame = () => {};
-  actions.start();
-  actions.stop();
+  rawActions.start();
+  rawActions.stop();
   globalThis.requestAnimationFrame = previousRequestAnimationFrame;
   globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
 
@@ -270,6 +250,8 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     foodStorage,
     reservationLedger,
     actions,
+    rawActions,
+    headlessReplay,
     tools,
     toolMaintenanceRuntime,
     socialEvents,
