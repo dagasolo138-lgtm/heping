@@ -69,6 +69,7 @@ function finalWorldStateDigest(world) {
     taskLifecycle: world.taskLifecycle.exportState(),
     resourceFlow: world.resourceFlow.exportState(),
     dailyEconomy: world.dailyEconomy.exportState(),
+    worldDynamics: world.worldDynamics.exportState(),
   });
 }
 
@@ -83,6 +84,8 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   const flowVerification = world.resourceFlow.verify();
   const taskContextVerification = world.resourceFlowTaskContextGuard.verify();
   const economyVerification = world.dailyEconomy.verify();
+  const dynamicsVerification = world.worldDynamics.verify();
+  const dynamicsSummary = world.worldDynamics.getSummary();
   const maintenanceVerification = world.tools.verifyMaintenance();
   const maintenanceRuntimeVerification = world.toolMaintenanceRuntime.verify();
   const seedVerification = world.farms.verifySeeds();
@@ -118,6 +121,7 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.equal(flowVerification.ok, true, JSON.stringify(compactIssues(flowVerification)));
   assert.equal(taskContextVerification.ok, true, JSON.stringify(compactIssues(taskContextVerification)));
   assert.equal(economyVerification.ok, true, JSON.stringify(compactIssues(economyVerification)));
+  assert.equal(dynamicsVerification.ok, true, JSON.stringify(compactIssues(dynamicsVerification)));
   assert.equal(maintenanceVerification.ok, true, JSON.stringify(compactIssues(maintenanceVerification)));
   assert.equal(maintenanceRuntimeVerification.ok, true, JSON.stringify(compactIssues(maintenanceRuntimeVerification)));
   assert.equal(seedVerification.ok, true, JSON.stringify(compactIssues(seedVerification)));
@@ -137,6 +141,8 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
   assert.ok(flowEntries.length <= 5000, `Resource flow exceeded cap: ${flowEntries.length}`);
   assert.ok((lifecycleState.records ?? []).length <= 5000, `Lifecycle records exceeded cap: ${lifecycleState.records?.length}`);
   assert.ok((lifecycleState.stageCosts ?? []).length <= 5000, `Stage costs exceeded cap: ${lifecycleState.stageCosts?.length}`);
+  assert.ok(dynamicsSummary.activePressures <= 16, `Too many active world pressures: ${dynamicsSummary.activePressures}`);
+  assert.ok(dynamicsSummary.activeOpportunities <= 16, `Too many active world opportunities: ${dynamicsSummary.activeOpportunities}`);
   assert.ok(seedSummary.onHand >= 0, 'Seed stock became negative');
   assert.ok(seedSummary.inTransit <= seedSummary.carried + 0.001, 'In-transit seeds exceed carried seeds');
   if (farmFields.length > 0) {
@@ -209,6 +215,13 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
       seedReservations: seedVerification.reservations,
       verification: seedVerification.ok,
     },
+    worldDynamics: {
+      summary: dynamicsSummary,
+      pressures: world.worldDynamics.listPressures().length,
+      opportunities: world.worldDynamics.listOpportunities().length,
+      commitments: world.worldDynamics.listCommitments().length,
+      verification: dynamicsVerification.ok,
+    },
     flowEntries: flowEntries.length,
     reports: reports.length,
     finalizedReports: finalizedReports.length,
@@ -218,6 +231,7 @@ function auditCheckpoint(world, expectedDay, historicalDigests) {
       resourceFlow: flowVerification.ok,
       resourceFlowTaskContexts: taskContextVerification.ok,
       dailyEconomy: economyVerification.ok,
+      worldDynamics: dynamicsVerification.ok,
       toolMaintenance: maintenanceVerification.ok,
       toolMaintenanceRuntime: maintenanceRuntimeVerification.ok,
       publicToolGuarantee: toolCoverage.every((entry) => entry.protected),
@@ -302,6 +316,7 @@ try {
       + `replacements=${snapshot.maintenance.replacements} generations=${JSON.stringify(snapshot.maintenance.generations)} `
       + `seeds=${snapshot.farming.seed.onHand}/${snapshot.farming.seed.target} seedTransit=${snapshot.farming.seed.inTransit} `
       + `fields=${snapshot.farming.fields}/${snapshot.farming.productiveFields} `
+      + `dynamics=${snapshot.worldDynamics.summary.activePressures}/${snapshot.worldDynamics.summary.activeCommitments} `
       + `guaranteeGaps=${snapshot.maintenance.guaranteeGaps} taskContexts=${snapshot.resourceFlowTaskContexts.tracked}`,
     );
   }
