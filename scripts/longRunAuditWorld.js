@@ -43,6 +43,16 @@ import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSyste
 import { createToolSystem } from '../src/modules/tools/toolSystem.js';
 
 const TOOL_RECONCILE_INTERVAL_TICKS = 60;
+const RESOURCE_FLOW_PERSON_REASONS = new Set(['inventory:item']);
+const TASK_LIFECYCLE_PERSON_REASONS = new Set(['activity:set', 'lifecycle:death']);
+
+function shouldObserveResourceFlow(eventName, payload) {
+  return eventName !== 'people:changed' || RESOURCE_FLOW_PERSON_REASONS.has(payload?.reason);
+}
+
+function shouldObserveTaskLifecycle(eventName, payload) {
+  return eventName !== 'people:changed' || TASK_LIFECYCLE_PERSON_REASONS.has(payload?.reason);
+}
 
 function installToolRuntimeListeners({ bus, tools }) {
   let lastReconcileTick = 0;
@@ -174,12 +184,24 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
   const resourceFlow = createFarmSeedResourceFlowView({ resourceFlowSystem: maintenanceResourceFlow });
   runtime.resourceFlowSystem = resourceFlow;
   runtime.resourceFlowTaskContextGuard = resourceFlowTaskContextGuard;
-  subscribeObserverEvents({ eventBus: bus, observer: baseResourceFlow, eventNames: RESOURCE_FLOW_OBSERVER_EVENTS });
+  const resourceFlowObserverSubscription = subscribeObserverEvents({
+    eventBus: bus,
+    observer: baseResourceFlow,
+    eventNames: RESOURCE_FLOW_OBSERVER_EVENTS,
+    shouldObserve: shouldObserveResourceFlow,
+  });
+  runtime.resourceFlowObserverSubscription = resourceFlowObserverSubscription;
 
   const baseTaskLifecycle = createTaskLifecycleSystem({ eventBus: bus, gameTime: time, getRuntime: () => runtime });
   const taskLifecycle = createTaskLifecycleStageCostView({ taskLifecycleSystem: baseTaskLifecycle, gameTime: time });
   runtime.taskLifecycleSystem = taskLifecycle;
-  subscribeObserverEvents({ eventBus: bus, observer: taskLifecycle, eventNames: TASK_LIFECYCLE_OBSERVER_EVENTS });
+  const taskLifecycleObserverSubscription = subscribeObserverEvents({
+    eventBus: bus,
+    observer: taskLifecycle,
+    eventNames: TASK_LIFECYCLE_OBSERVER_EVENTS,
+    shouldObserve: shouldObserveTaskLifecycle,
+  });
+  runtime.taskLifecycleObserverSubscription = taskLifecycleObserverSubscription;
 
   const baseDailyEconomy = createDailyEconomySystem({
     eventBus: bus,
@@ -266,7 +288,9 @@ export function createLongRunAuditWorld(seed = 'replay-seed-v0277-stability') {
     chronicles,
     resourceFlow,
     resourceFlowTaskContextGuard,
+    resourceFlowObserverSubscription,
     taskLifecycle,
+    taskLifecycleObserverSubscription,
     dailyEconomy,
     restoreGlobals,
   };
