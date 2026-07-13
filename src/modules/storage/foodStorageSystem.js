@@ -41,9 +41,12 @@ function foodRates(weather, protection) {
 }
 
 export function createFoodStorageSystem({ eventBus, gameTime, campStore, campId = 'starting-camp' }) {
+  const headless = eventBus?.getDiagnostics?.().mode === 'headless';
   let lastProcessedTick = Number(gameTime.now().tick ?? 0);
   let lastWeather = null;
   let lastResult = null;
+  let skippedSyncs = 0;
+  let processedSyncs = 0;
 
   function getSummary() {
     const storage = campStore.getStorage(campId);
@@ -60,11 +63,15 @@ export function createFoodStorageSystem({ eventBus, gameTime, campStore, campId 
   }
 
   function sync(weather) {
-    lastWeather = weather ? clone(weather) : lastWeather;
+    if (weather) lastWeather = headless ? weather : clone(weather);
     const nowTick = Number(gameTime.now().tick ?? 0);
     const elapsedMinutes = nowTick - lastProcessedTick;
-    if (elapsedMinutes < SYNC_INTERVAL_MINUTES) return getSummary();
+    if (elapsedMinutes < SYNC_INTERVAL_MINUTES) {
+      skippedSyncs += 1;
+      return headless ? null : getSummary();
+    }
     lastProcessedTick = nowTick;
+    processedSyncs += 1;
 
     const storage = campStore.getStorage(campId);
     const rates = foodRates(lastWeather, storage?.protection ?? 0);
@@ -81,19 +88,20 @@ export function createFoodStorageSystem({ eventBus, gameTime, campStore, campId 
       ...(result ?? { changed: false, spoiled: {} }),
     };
 
+    const summary = getSummary();
     eventBus.emit('storage:food-aged', {
-      summary: getSummary(),
+      summary,
       result: clone(lastResult),
       time: gameTime.stamp(),
     });
     if (Object.values(lastResult.spoiled ?? {}).some((amount) => amount > 0)) {
       eventBus.emit('storage:food-spoiled', {
         spoiled: clone(lastResult.spoiled),
-        summary: getSummary(),
+        summary,
         time: gameTime.stamp(),
       });
     }
-    return getSummary();
+    return summary;
   }
 
   function exportState() {
@@ -117,7 +125,17 @@ export function createFoodStorageSystem({ eventBus, gameTime, campStore, campId 
     return getSummary();
   }
 
+  function getDiagnostics() {
+    return {
+      mode: headless ? 'headless' : 'safe',
+      intervalMinutes: SYNC_INTERVAL_MINUTES,
+      lastProcessedTick,
+      skippedSyncs,
+      processedSyncs,
+    };
+  }
+
   eventBus.on('simulation:time', ({ weather }) => { sync(weather); });
 
-  return Object.freeze({ sync, getSummary, exportState, importState });
+  return Object.freeze({ sync, getSummary, getDiagnostics, exportState, importState });
 }
