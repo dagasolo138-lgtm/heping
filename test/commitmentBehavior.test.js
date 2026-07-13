@@ -61,7 +61,8 @@ function runScenario(commitments) {
     });
     return { reads, scored };
   } finally {
-    globalThis.shengling = previous;
+    if (previous === undefined) delete globalThis.shengling;
+    else globalThis.shengling = previous;
   }
 }
 
