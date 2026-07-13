@@ -21,6 +21,7 @@ const RUNTIME_KEYS = Object.freeze([
   'inventory',
   'extensions',
 ]);
+const DRAFT_KEYS = Object.freeze([...RUNTIME_KEYS, 'memories']);
 
 function clone(value) {
   return structuredClone(value);
@@ -73,11 +74,9 @@ function cachedRuntimeView(person, cache) {
 }
 
 function runtimeDraft(person, keys = RUNTIME_KEYS) {
-  const selected = new Set(keys);
-  const draft = { ...person, memories: person.memories };
-  RUNTIME_KEYS.forEach((key) => {
-    draft[key] = selected.has(key) ? clone(person[key]) : person[key];
-  });
+  const draft = { ...person };
+  DRAFT_KEYS.forEach((key) => { draft[key] = person[key]; });
+  keys.forEach((key) => { draft[key] = clone(person[key]); });
   return draft;
 }
 
@@ -125,6 +124,7 @@ export function createPeopleSystem({
   const headless = runtimeMode === 'headless';
   let runtimeCacheHits = 0;
   let runtimeCacheMisses = 0;
+  let deferredValidations = 0;
 
   function stamp() {
     return gameTime.stamp();
@@ -153,7 +153,8 @@ export function createPeopleSystem({
   }
 
   function commitRuntime(person, reason) {
-    validatePerson(person);
+    if (headless) deferredValidations += 1;
+    else validatePerson(person);
     person.revision += 1;
     person.updatedAt = stamp();
     people.set(person.id, person);
@@ -179,6 +180,11 @@ export function createPeopleSystem({
     return { person: commitRuntime(draft, reason), result: clone(result) };
   }
 
+  function transactMemory(personId, reason, mutator) {
+    if (!headless) return transact(personId, reason, mutator);
+    return transactRuntime(personId, reason, ['memories'], mutator);
+  }
+
   function create(input) {
     const person = createPerson(input, stamp());
     people.set(person.id, person);
@@ -201,7 +207,26 @@ export function createPeopleSystem({
     commit(secondDraft, `relation:${kind}`);
   }
 
+  function verify() {
+    const issues = [];
+    people.forEach((person, personId) => {
+      try {
+        validatePerson(person);
+      } catch (error) {
+        issues.push({ personId, message: error?.message ?? String(error) });
+      }
+    });
+    return {
+      ok: issues.length === 0,
+      count: people.size,
+      deferredValidations,
+      issues,
+    };
+  }
+
   function exportState() {
+    const verification = verify();
+    if (!verification.ok) throw new Error(`人物状态校验失败：${JSON.stringify(verification.issues.slice(0, 5))}`);
     return {
       schemaVersion: PEOPLE_SCHEMA_VERSION,
       exportedAt: stamp(),
@@ -234,6 +259,7 @@ export function createPeopleSystem({
       hitRate: runtimeCacheHits + runtimeCacheMisses > 0
         ? runtimeCacheHits / (runtimeCacheHits + runtimeCacheMisses)
         : 0,
+      deferredValidations,
     };
   }
 
@@ -247,6 +273,7 @@ export function createPeopleSystem({
     getAliveRuntime: () => [...people.values()].filter((person) => person.identity.alive).map(runtimeView),
     count: () => people.size,
     connect,
+    verify,
     exportState,
     importState,
     getRuntimeDiagnostics,
@@ -258,9 +285,9 @@ export function createPeopleSystem({
     setExtension: (id, namespace, value) => transactRuntime(id, 'extension:set', ['extensions'], (draft) => setExtension(draft, namespace, value)).person,
     addStatusTag: (id, tag) => transactRuntime(id, 'state:status:add', ['state'], (draft) => addStatusTag(draft, tag)).person,
     removeStatusTag: (id, tag) => transactRuntime(id, 'state:status:remove', ['state'], (draft) => removeStatusTag(draft, tag)).person,
-    addLifeEvent: (id, event) => transact(id, 'memory:life-event', (draft) => appendLifeEvent(draft, { ...event, time: event.time ?? stamp() })).result,
-    addPersonalMemory: (id, memory) => transact(id, 'memory:personal', (draft) => appendPersonalMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
-    addEncounterMemory: (id, memory) => transact(id, 'memory:encounter', (draft) => appendEncounterMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
+    addLifeEvent: (id, event) => transactMemory(id, 'memory:life-event', (draft) => appendLifeEvent(draft, { ...event, time: event.time ?? stamp() })).result,
+    addPersonalMemory: (id, memory) => transactMemory(id, 'memory:personal', (draft) => appendPersonalMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
+    addEncounterMemory: (id, memory) => transactMemory(id, 'memory:encounter', (draft) => appendEncounterMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
     adjustRelation: (id, otherId, patch) => transactRuntime(id, 'relation:adjust', ['relations'], (draft) => adjustRelation(draft, otherId, patch)).person,
     changeItem: (id, itemId, delta) => transactRuntime(id, 'inventory:item', ['inventory'], (draft) => changeItem(draft, itemId, delta)).person,
     equipItem: (id, slot, itemId) => transactRuntime(id, 'inventory:equip', ['inventory'], (draft) => equipItem(draft, slot, itemId)).person,
