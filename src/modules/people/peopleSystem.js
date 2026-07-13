@@ -80,6 +80,19 @@ function runtimeDraft(person, keys = RUNTIME_KEYS) {
   return draft;
 }
 
+function memoryDraft(person) {
+  const memories = person.memories ?? {};
+  return {
+    ...person,
+    memories: {
+      ...memories,
+      lifeEvents: [...(memories.lifeEvents ?? [])],
+      personal: [...(memories.personal ?? [])],
+      recent: [...(memories.recent ?? [])],
+    },
+  };
+}
+
 function migrateSnapshot(rawSnapshot) {
   if (!rawSnapshot || !Array.isArray(rawSnapshot.people)) return rawSnapshot;
   const snapshot = clone(rawSnapshot);
@@ -125,6 +138,7 @@ export function createPeopleSystem({
   let runtimeCacheHits = 0;
   let runtimeCacheMisses = 0;
   let deferredValidations = 0;
+  let structurallySharedMemoryAppends = 0;
 
   function stamp() {
     return gameTime.stamp();
@@ -182,7 +196,12 @@ export function createPeopleSystem({
 
   function transactMemory(personId, reason, mutator) {
     if (!headless) return transact(personId, reason, mutator);
-    return transactRuntime(personId, reason, ['memories'], mutator);
+    const original = people.get(personId);
+    if (!original) throw new Error(`找不到人物：${personId}`);
+    const draft = memoryDraft(original);
+    const result = mutator(draft);
+    structurallySharedMemoryAppends += 1;
+    return { person: commitRuntime(draft, reason), result: clone(result) };
   }
 
   function create(input) {
@@ -260,6 +279,7 @@ export function createPeopleSystem({
         ? runtimeCacheHits / (runtimeCacheHits + runtimeCacheMisses)
         : 0,
       deferredValidations,
+      structurallySharedMemoryAppends,
     };
   }
 
