@@ -115,7 +115,11 @@ function migrateSnapshot(rawSnapshot) {
   return snapshot;
 }
 
-export function createPeopleSystem({ eventBus, gameTime, runtimeMode = 'safe' }) {
+export function createPeopleSystem({
+  eventBus,
+  gameTime,
+  runtimeMode = eventBus?.getDiagnostics?.().mode ?? 'safe',
+}) {
   const people = new Map();
   const runtimeCache = new Map();
   const headless = runtimeMode === 'headless';
