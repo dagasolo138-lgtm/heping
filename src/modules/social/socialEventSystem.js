@@ -28,8 +28,10 @@ function stableRoll(seed) {
   return Math.abs(hash >>> 0) % 100;
 }
 
-function hasEventMemory(person, eventId) {
-  return (person.memories?.personal ?? []).some((memory) => memory.details?.eventId === eventId);
+function eventIdsFrom(person) {
+  return new Set((person?.memories?.personal ?? [])
+    .map((memory) => memory.details?.eventId)
+    .filter(Boolean));
 }
 
 function locationOf(person) {
@@ -69,30 +71,80 @@ export function createSocialEventSystem({
   peopleSystem,
   gameTime,
   getRuntimePeople = () => peopleSystem.getAlive(),
+  getMovementPeople = () => globalThis.shengling?.actionSystem?.getMovementPeople?.() ?? getRuntimePeople(),
 } = {}) {
   const events = [];
+  const knownEventIds = new Map();
+  let contextBuilds = 0;
+  let movementSnapshots = 0;
+  let memoryCacheSeeds = 0;
 
   function alivePeople() {
-    return peopleSystem.getAlive();
+    const lightweight = peopleSystem.getAliveRuntime?.();
+    const list = Array.isArray(lightweight) ? [...lightweight] : peopleSystem.getAlive();
+    return list.sort((first, second) => first.identity.name.localeCompare(second.identity.name, 'zh-CN'));
   }
 
-  function runtimePerson(id) {
-    return getRuntimePeople()?.find((person) => person.id === id) ?? peopleSystem.get(id);
+  function movementLocations() {
+    const runtime = getMovementPeople?.();
+    movementSnapshots += 1;
+    return new Map((Array.isArray(runtime) ? runtime : []).map((person) => [person.id, locationOf(person)]));
   }
 
-  function peopleNear(location, exceptIds = new Set(), radius = DIRECT_RADIUS) {
-    return alivePeople().filter((person) => {
+  function createContext(locations = null) {
+    const people = alivePeople();
+    contextBuilds += 1;
+    return {
+      people,
+      byId: new Map(people.map((person) => [person.id, person])),
+      locations: locations ?? movementLocations(),
+    };
+  }
+
+  function runtimePerson(id, context) {
+    if (!id) return null;
+    const person = context?.byId.get(id) ?? peopleSystem.getRuntime?.(id) ?? peopleSystem.get(id);
+    if (!person) return null;
+    const location = context?.locations.get(id);
+    if (!location) return person;
+    return {
+      ...person,
+      location: {
+        ...person.location,
+        tileX: location.tileX,
+        tileY: location.tileY,
+      },
+    };
+  }
+
+  function peopleNear(location, exceptIds = new Set(), radius = DIRECT_RADIUS, context) {
+    return context.people.filter((person) => {
       if (exceptIds.has(person.id)) return false;
-      const runtime = runtimePerson(person.id) ?? person;
-      return distance(location, locationOf(runtime)) <= radius;
+      const runtimeLocation = context.locations.get(person.id) ?? locationOf(person);
+      return distance(location, runtimeLocation) <= radius;
     });
   }
 
-  function recordMemory(person, event, source, viaPersonId = null) {
-    const current = peopleSystem.get(person.id);
-    if (!current || hasEventMemory(current, event.id)) return null;
-    const actor = event.actorId ? peopleSystem.get(event.actorId) : null;
-    const target = event.targetId ? peopleSystem.get(event.targetId) : null;
+  function knownIdsFor(personId) {
+    if (knownEventIds.has(personId)) return knownEventIds.get(personId);
+    const ids = eventIdsFrom(peopleSystem.get(personId));
+    knownEventIds.set(personId, ids);
+    memoryCacheSeeds += 1;
+    return ids;
+  }
+
+  function hasEventMemory(personId, eventId) {
+    return knownIdsFor(personId).has(eventId);
+  }
+
+  function rememberEvent(personId, eventId) {
+    knownIdsFor(personId).add(eventId);
+  }
+
+  function recordMemory(person, event, source, viaPersonId = null, context) {
+    if (!person || hasEventMemory(person.id, event.id)) return null;
+    const actor = event.actorId ? runtimePerson(event.actorId, context) : null;
+    const target = event.targetId ? runtimePerson(event.targetId, context) : null;
     const prefix = source === 'direct' ? '亲眼所见' : '听闻';
     const memory = peopleSystem.addPersonalMemory(person.id, {
       type: source === 'direct' ? 'social:observedEvent' : 'social:rumor',
@@ -109,6 +161,7 @@ export function createSocialEventSystem({
       },
       time: event.time,
     });
+    rememberEvent(person.id, event.id);
     if (actor && actor.id !== person.id) peopleSystem.adjustRelation(person.id, actor.id, relationDeltaFor(event, source));
     return memory;
   }
@@ -119,16 +172,17 @@ export function createSocialEventSystem({
     return Math.min(88, 12 + event.severity * 9 + social * 2 + relation * 0.4);
   }
 
-  function spreadRumors(event, witnesses) {
+  function spreadRumors(event, witnesses, baseContext) {
     witnesses.forEach((speaker) => {
-      const speakerRuntime = runtimePerson(speaker.id) ?? speaker;
-      peopleNear(locationOf(speakerRuntime), new Set([speaker.id, event.actorId, event.targetId].filter(Boolean)), RUMOR_RADIUS)
+      const context = createContext(baseContext.locations);
+      const speakerRuntime = runtimePerson(speaker.id, context) ?? speaker;
+      peopleNear(locationOf(speakerRuntime), new Set([speaker.id, event.actorId, event.targetId].filter(Boolean)), RUMOR_RADIUS, context)
         .forEach((listener) => {
           if (event.witnesses.includes(listener.id)) return;
-          if (hasEventMemory(listener, event.id)) return;
+          if (hasEventMemory(listener.id, event.id)) return;
           const chance = rumorChance(speaker, listener, event);
           if (stableRoll(`${event.id}:${speaker.id}:${listener.id}`) >= chance) return;
-          const memory = recordMemory(listener, event, 'rumor', speaker.id);
+          const memory = recordMemory(listener, event, 'rumor', speaker.id, context);
           if (memory) event.heardBy.push(listener.id);
         });
     });
@@ -136,7 +190,8 @@ export function createSocialEventSystem({
 
   function ingest(rawEvent) {
     if (!rawEvent?.actorId && rawEvent?.kind !== 'campRuleChanged') return null;
-    const actor = rawEvent.actorId ? runtimePerson(rawEvent.actorId) : null;
+    const context = createContext();
+    const actor = rawEvent.actorId ? runtimePerson(rawEvent.actorId, context) : null;
     const baseLocation = rawEvent.location ?? (actor ? locationOf(actor) : { tileX: 0, tileY: 0 });
     const event = {
       schemaVersion: SOCIAL_EVENT_SCHEMA_VERSION,
@@ -157,12 +212,12 @@ export function createSocialEventSystem({
       heardBy: [],
     };
     const except = new Set([event.actorId, event.targetId].filter(Boolean));
-    const witnesses = peopleNear(baseLocation, except, DIRECT_RADIUS);
+    const witnesses = peopleNear(baseLocation, except, DIRECT_RADIUS, context);
     witnesses.forEach((person) => {
-      const memory = recordMemory(person, event, 'direct');
+      const memory = recordMemory(person, event, 'direct', null, context);
       if (memory) event.witnesses.push(person.id);
     });
-    spreadRumors(event, witnesses);
+    spreadRumors(event, witnesses, context);
     events.unshift(event);
     events.splice(MAX_EVENTS);
     eventBus.emit('social:event-recorded', { event: clone(event), time: gameTime.stamp() });
@@ -181,8 +236,19 @@ export function createSocialEventSystem({
     if (snapshot === null || snapshot === undefined) return null;
     if (snapshot?.schemaVersion !== SOCIAL_EVENT_SCHEMA_VERSION) throw new Error('社会事件存档格式不兼容。');
     events.splice(0, events.length, ...(Array.isArray(snapshot.events) ? clone(snapshot.events).slice(0, MAX_EVENTS) : []));
+    knownEventIds.clear();
     eventBus.emit('social:events-hydrated', { count: events.length, time: gameTime.stamp() });
     return exportState();
+  }
+
+  function getDiagnostics() {
+    return {
+      contextBuilds,
+      movementSnapshots,
+      memoryCacheSeeds,
+      knownPeople: knownEventIds.size,
+      retainedEvents: events.length,
+    };
   }
 
   const offCompleted = eventBus.on('actions:completed', ({ result, task, personId, time }) => {
@@ -246,18 +312,21 @@ export function createSocialEventSystem({
     severity: 4,
     time,
   }));
+  const offPeopleHydrated = eventBus.on('people:hydrated', () => knownEventIds.clear());
 
   return Object.freeze({
     ingest,
     listEvents: () => clone(events),
     exportState,
     importState,
+    getDiagnostics,
     stop() {
       offCompleted();
       offDistributed();
       offDenied();
       offRelation();
       offRule();
+      offPeopleHydrated();
     },
   });
 }
