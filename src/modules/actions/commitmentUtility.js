@@ -25,7 +25,7 @@ function contribution(commitment) {
   return MAX_COMMITMENT_SCORE * priority * remaining;
 }
 
-function activeRuntimeCommitments() {
+export function readActiveRuntimeCommitments() {
   try {
     const result = globalThis.shengling?.worldDynamicsSystem?.listCommitments?.({ state: 'active' });
     return Array.isArray(result) ? result : [];
@@ -35,7 +35,7 @@ function activeRuntimeCommitments() {
 }
 
 export function scoreCommitmentUtility({ candidate, commitments = null } = {}) {
-  const source = Array.isArray(commitments) ? commitments : activeRuntimeCommitments();
+  const source = Array.isArray(commitments) ? commitments : readActiveRuntimeCommitments();
   if (!candidate?.type) return Object.freeze({ score: 0, matches: Object.freeze([]) });
   const matches = source
     .filter((commitment) => commitment?.state === 'active')
