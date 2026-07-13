@@ -5,6 +5,15 @@ function normalizePositiveInteger(value, fallback) {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
 }
 
+function verifyBoundary(eventBus) {
+  if (eventBus?.getDiagnostics?.().mode !== 'headless') return null;
+  const people = globalThis.shengling?.peopleSystem?.verify?.() ?? null;
+  if (people && !people.ok) {
+    throw new Error(`无界面回放人物校验失败：${JSON.stringify((people.issues ?? []).slice(0, 5))}`);
+  }
+  return { people };
+}
+
 export function createHeadlessReplay({ actionSystem, gameTime = null, eventBus = null, defaultBatchSize = 600 } = {}) {
   if (!actionSystem?.advanceTicks) throw new Error('无界面回放缺少行动系统。');
   const normalizedDefaultBatchSize = normalizePositiveInteger(defaultBatchSize, 600);
@@ -32,6 +41,7 @@ export function createHeadlessReplay({ actionSystem, gameTime = null, eventBus =
     }
 
     const elapsedMs = performance.now() - startedAt;
+    const boundaryVerification = verifyBoundary(eventBus);
     const after = gameTime?.stamp?.() ?? null;
     const result = Object.freeze({
       mode: 'headless',
@@ -43,6 +53,7 @@ export function createHeadlessReplay({ actionSystem, gameTime = null, eventBus =
       ticksPerSecond: Math.round(advancedTicks / Math.max(0.001, elapsedMs / 1000)),
       before,
       after,
+      boundaryVerification,
       eventBus: eventBus?.getDiagnostics?.() ?? null,
     });
     runs += 1;
