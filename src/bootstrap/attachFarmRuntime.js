@@ -1,4 +1,5 @@
 import { createUiRenderScheduler } from '../core/ui/uiRenderScheduler.js';
+import { createFarmGrowthTickHandler } from '../modules/farming/farmGrowthScheduler.js';
 import { createFarmSystem } from '../modules/farming/farmSystem.js';
 
 function ensureReadout() {
@@ -109,7 +110,11 @@ export function attachFarmRuntime() {
   renderReadout(readout, farmSystem);
   patchFarmChips(runtime, farmSystem);
 
-  eventBus.on('simulation:tick', ({ weather }) => farmSystem.syncGrowth(weather));
+  const syncFarmGrowth = createFarmGrowthTickHandler({
+    farmSystem,
+    gameTime: runtime.gameTime,
+  });
+  eventBus.on('simulation:tick', syncFarmGrowth);
   eventBus.on('farms:changed', () => ui.request('farms:changed'));
   eventBus.on('farms:matured', ({ field }) => {
     const status = document.querySelector('#system-status');
