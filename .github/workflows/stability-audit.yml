@@ -9,10 +9,7 @@ on:
       - 'scripts/runLongRunAudit.js'
       - 'scripts/compareStabilityReports.js'
       - 'src/core/**'
-      - 'src/modules/actions/**'
-      - 'src/modules/economy/**'
-      - 'src/modules/persistence/**'
-      - 'src/modules/tools/**'
+      - 'src/modules/**'
       - 'package.json'
       - 'package-lock.json'
 
