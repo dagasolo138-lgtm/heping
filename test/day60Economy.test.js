@@ -2,9 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
-import { createEventBus } from '../src/core/events/eventBus.js';
+import { createHeadlessEventBus } from '../src/core/events/headlessEventBus.js';
+import {
+  DAILY_ECONOMY_OBSERVER_EVENTS,
+  RESOURCE_FLOW_OBSERVER_EVENTS,
+  subscribeObserverEvents,
+} from '../src/core/events/observerSubscriptions.js';
 import { resetIdSequence } from '../src/core/ids/createId.js';
 import { createGameTime } from '../src/core/time/gameTime.js';
+import { createHeadlessReplay } from '../src/core/simulation/headlessReplay.js';
 import { createActionSystem } from '../src/modules/actions/actionSystem.js';
 import { createReservationLedger } from '../src/modules/actions/reservationLedger.js';
 import { createBuildingSystem } from '../src/modules/buildings/buildingSystem.js';
@@ -47,7 +53,7 @@ function digest(value) {
 
 function createReplayWorld(seed) {
   resetIdSequence(seed);
-  const bus = createEventBus();
+  const bus = createHeadlessEventBus();
   const time = createGameTime({ year: 1, day: 1, minute: 480 });
   const people = createPeopleSystem({ eventBus: bus, gameTime: time });
   const map = createMapSystem({ eventBus: bus, gameTime: time });
@@ -117,14 +123,10 @@ function createReplayWorld(seed) {
     worldSpeedSystem: { get: () => ({ value: 10, label: '10×', worldMinutesPerRealSecond: 60 }) },
   };
 
-  const baseResourceFlow = createResourceFlowSystem({
-    eventBus: bus,
-    gameTime: time,
-    getRuntime: () => runtime,
-  });
+  const baseResourceFlow = createResourceFlowSystem({ eventBus: bus, gameTime: time, getRuntime: () => runtime });
   const resourceFlow = createFarmSeedResourceFlowView({ resourceFlowSystem: baseResourceFlow });
   runtime.resourceFlowSystem = resourceFlow;
-  bus.on('*', ({ eventName, payload }) => baseResourceFlow.observe(eventName, payload));
+  subscribeObserverEvents({ eventBus: bus, observer: baseResourceFlow, eventNames: RESOURCE_FLOW_OBSERVER_EVENTS });
 
   const baseDailyEconomy = createDailyEconomySystem({
     eventBus: bus,
@@ -134,7 +136,7 @@ function createReplayWorld(seed) {
   });
   const dailyEconomy = createFarmSeedDailyEconomyView({ dailyEconomySystem: baseDailyEconomy });
   runtime.dailyEconomySystem = dailyEconomy;
-  bus.on('*', ({ eventName, payload }) => baseDailyEconomy.observe(eventName, payload));
+  subscribeObserverEvents({ eventBus: bus, observer: baseDailyEconomy, eventNames: DAILY_ECONOMY_OBSERVER_EVENTS });
 
   bus.on('simulation:tick', ({ weather: currentWeather }) => {
     ecology.sync();
@@ -173,6 +175,8 @@ function createReplayWorld(seed) {
   globalThis.requestAnimationFrame = originalRequestAnimationFrame;
   globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
 
+  const headlessReplay = createHeadlessReplay({ actionSystem: actions, gameTime: time, eventBus: bus, defaultBatchSize: 600 });
+  runtime.headlessReplay = headlessReplay;
   return {
     ...runtime,
     bus,
@@ -193,6 +197,7 @@ function createReplayWorld(seed) {
     chronicles,
     resourceFlow,
     dailyEconomy,
+    headlessReplay,
   };
 }
 
@@ -223,10 +228,7 @@ function worldFingerprint(world) {
     fire: world.fire.exportState(),
     farms: world.farms.exportState(),
     ecology: world.ecology.exportState(),
-    roads: {
-      ...world.roads.exportState(),
-      cells: sortById(world.roads.exportState().cells),
-    },
+    roads: { ...world.roads.exportState(), cells: sortById(world.roads.exportState().cells) },
     foodStorage: world.foodStorage.exportState(),
     socialEvents: world.socialEvents.exportState(),
     chronicles: world.chronicles.exportState(),
@@ -274,24 +276,16 @@ function economyFingerprint(world) {
   };
 }
 
-function advanceBatched(world, totalTicks, batchSize) {
-  let remaining = totalTicks;
-  while (remaining > 0) {
-    const amount = Math.min(batchSize, remaining);
-    world.actions.advanceTicks(amount);
-    remaining -= amount;
-  }
-}
-
-test('完整世界推进到第 60 日并命中经济指纹', { timeout: 600_000 }, () => {
+test('完整世界以无界面模式推进到第 60 日并命中经济指纹', { timeout: 600_000 }, () => {
   const originalRuntime = globalThis.shengling;
   try {
     const world = createReplayWorld('replay-seed-v0275-day60');
     globalThis.shengling = world;
-    world.actions.advanceTicks(DAY_60_TICKS);
+    const replay = world.headlessReplay.advanceTicks(DAY_60_TICKS, { batchSize: 600 });
     const state = economyFingerprint(world);
     const fingerprint = digest(state);
     console.log(`DAY60_FINGERPRINT=${fingerprint}`);
+    console.log(`DAY60_HEADLESS_TPS=${replay.ticksPerSecond}`);
 
     assert.deepEqual(world.time.now(), { year: 1, day: 60, minute: 720, tick: DAY_60_TICKS });
     assert.equal(world.dailyEconomy.listReports().length, 60);
@@ -304,14 +298,14 @@ test('完整世界推进到第 60 日并命中经济指纹', { timeout: 600_000 
   }
 });
 
-test('1×、5×、10× 批次推进在相同世界时间得到相同状态', { timeout: 300_000 }, () => {
+test('1×、5×、10× 无界面批次推进在相同世界时间得到相同状态', { timeout: 300_000 }, () => {
   const originalRuntime = globalThis.shengling;
   try {
     const totalTicks = 1_680;
     const fingerprints = [1, 5, 10].map((batchSize) => {
       const world = createReplayWorld('replay-seed-v0275-speed');
       globalThis.shengling = world;
-      advanceBatched(world, totalTicks, batchSize);
+      world.headlessReplay.advanceTicks(totalTicks, { batchSize });
       assert.deepEqual(world.time.now(), { year: 1, day: 2, minute: 720, tick: totalTicks });
       assert.equal(world.actions.getDiagnostics().lastSimulationError, null);
       return digest(worldFingerprint(world));
