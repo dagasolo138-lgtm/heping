@@ -6,9 +6,9 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  fast-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,33 +17,84 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - name: Run tests
+      - name: Run non-replay tests
+        shell: bash
         run: |
-          set -o pipefail
-          npm test | tee test-output.log
-      - name: Read deterministic fingerprints
-        if: always()
-        id: fingerprints
-        run: |
-          day30=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' test-output.log 2>/dev/null | tail -1 | cut -d= -f2)
-          day60=$(grep -oE 'DAY60_FINGERPRINT=[a-f0-9]{64}' test-output.log 2>/dev/null | tail -1 | cut -d= -f2)
-          echo "day30=$day30" >> "$GITHUB_OUTPUT"
-          echo "day60=$day60" >> "$GITHUB_OUTPUT"
-          if [ -n "$day30" ]; then echo "DAY30_FINGERPRINT=$day30"; fi
-          if [ -n "$day60" ]; then echo "DAY60_FINGERPRINT=$day60"; fi
-      - uses: actions/upload-artifact@v4
-        if: always() && steps.fingerprints.outputs.day30 != ''
-        with:
-          name: day30-${{ steps.fingerprints.outputs.day30 }}
-          path: test-output.log
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        if: always() && steps.fingerprints.outputs.day60 != ''
-        with:
-          name: day60-${{ steps.fingerprints.outputs.day60 }}
-          path: test-output.log
-          retention-days: 7
+          set -euo pipefail
+          mapfile -t replay_files < <(grep -rlE 'DAY30_FINGERPRINT|DAY60_FINGERPRINT' test --include='*.test.js' | sort)
+          if [ "${#replay_files[@]}" -ne 2 ]; then
+            printf 'Expected exactly two deterministic replay files, found %s:\n' "${#replay_files[@]}"
+            printf '%s\n' "${replay_files[@]}"
+            exit 1
+          fi
+          mapfile -t fast_tests < <(find test -type f -name '*.test.js' -print | sort | grep -vFf <(printf '%s\n' "${replay_files[@]}"))
+          if [ "${#fast_tests[@]}" -eq 0 ]; then
+            echo 'No non-replay tests found.'
+            exit 1
+          fi
+          printf 'Running %s non-replay test files.\n' "${#fast_tests[@]}"
+          node --test "${fast_tests[@]}"
       - run: npm run build
+
+  replay-day30:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run day-30 deterministic replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=$(grep -rl 'DAY30_FINGERPRINT' test --include='*.test.js' | head -1)
+          test -n "$file"
+          node --test "$file" | tee day30-output.log
+      - name: Read day-30 fingerprint
+        if: always()
+        run: |
+          fingerprint=$(grep -oE 'DAY30_FINGERPRINT=[a-f0-9]{64}' day30-output.log 2>/dev/null | tail -1 | cut -d= -f2)
+          if [ -n "$fingerprint" ]; then echo "DAY30_FINGERPRINT=$fingerprint"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: day30-replay-output
+          path: day30-output.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  replay-day60:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run day-60 deterministic replay
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=$(grep -rl 'DAY60_FINGERPRINT' test --include='*.test.js' | head -1)
+          test -n "$file"
+          node --test "$file" | tee day60-output.log
+      - name: Read day-60 fingerprint
+        if: always()
+        run: |
+          fingerprint=$(grep -oE 'DAY60_FINGERPRINT=[a-f0-9]{64}' day60-output.log 2>/dev/null | tail -1 | cut -d= -f2)
+          if [ -n "$fingerprint" ]; then echo "DAY60_FINGERPRINT=$fingerprint"; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: day60-replay-output
+          path: day60-output.log
+          if-no-files-found: warn
+          retention-days: 7
 
   mobile-smoke:
     runs-on: ubuntu-latest
