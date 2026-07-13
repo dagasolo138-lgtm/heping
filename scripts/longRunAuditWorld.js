@@ -42,13 +42,21 @@ import { createSocialEventSystem } from '../src/modules/social/socialEventSystem
 import { createFoodStorageSystem } from '../src/modules/storage/foodStorageSystem.js';
 import { createToolSystem } from '../src/modules/tools/toolSystem.js';
 
+const TOOL_RECONCILE_INTERVAL_TICKS = 60;
+
 function installToolRuntimeListeners({ bus, tools }) {
+  let lastReconcileTick = 0;
   bus.on('actions:assigned', ({ personId, task }) => tools.reserveForTask({ personId, task }));
   bus.on('people:changed', ({ reason, person }) => {
     if (reason === 'activity:set' && !person?.activity?.current) tools.releaseReservationForOwner(person.id);
   });
   bus.on('actions:completed', ({ personId, task }) => tools.completeTask({ personId, task }));
-  bus.on('simulation:tick', () => tools.reconcile());
+  bus.on('simulation:pre-tick', ({ time }) => {
+    const tick = Number(time?.tick ?? 0);
+    if (tick - lastReconcileTick < TOOL_RECONCILE_INTERVAL_TICKS) return;
+    lastReconcileTick = tick;
+    tools.reconcile();
+  });
   bus.on('save:loaded', () => tools.reconcile(new Set()));
 }
 
