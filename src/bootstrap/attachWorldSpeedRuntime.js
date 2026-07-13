@@ -1,3 +1,4 @@
+import { createSimulationTestAccelerator } from '../core/simulation/testSpeedHarness.js';
 import { createWorldSpeedSystem } from '../modules/time/worldSpeedSystem.js';
 
 const STYLESHEET_URL = new URL('../styles/worldSpeed.css', import.meta.url);
@@ -34,6 +35,10 @@ export function attachWorldSpeedRuntime() {
     gameTime: runtime.gameTime,
     initialSpeed: 1,
   });
+  const testAccelerator = createSimulationTestAccelerator({
+    actionSystem: runtime.actionSystem,
+    gameTime: runtime.gameTime,
+  });
   const buttons = [...document.querySelectorAll('[data-world-speed]')];
   const status = document.querySelector('#world-speed-status');
   const elements = { buttons, status };
@@ -52,6 +57,8 @@ export function attachWorldSpeedRuntime() {
   const api = Object.freeze({
     get: () => worldSpeedSystem.get(),
     set: (value) => worldSpeedSystem.set(value, 'runtime'),
+    testMultipliers: () => testAccelerator.options(),
+    advanceTestSeconds: (seconds, options = {}) => testAccelerator.advance(seconds, options),
   });
   globalThis.shengling = Object.freeze({ ...globalThis.shengling, worldSpeedSystem, worldSpeedRuntime: api });
   return api;
