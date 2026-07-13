@@ -9,11 +9,24 @@ import { changeItem, equipItem, addClaim } from './personInventory.js';
 import { markDead } from './personLifecycle.js';
 import { PEOPLE_SCHEMA_VERSION } from './personSchema.js';
 
+const RUNTIME_KEYS = Object.freeze([
+  'identity',
+  'location',
+  'work',
+  'state',
+  'activity',
+  'traits',
+  'family',
+  'relations',
+  'inventory',
+  'extensions',
+]);
+
 function clone(value) {
   return structuredClone(value);
 }
 
-function runtimeView(person) {
+function safeRuntimeView(person) {
   if (!person) return null;
   return clone({
     schemaVersion: person.schemaVersion,
@@ -34,21 +47,38 @@ function runtimeView(person) {
   });
 }
 
-function runtimeDraft(person) {
-  return {
-    ...person,
-    identity: clone(person.identity),
-    location: clone(person.location),
-    work: clone(person.work),
-    state: clone(person.state),
-    activity: clone(person.activity),
-    traits: clone(person.traits),
-    family: clone(person.family),
-    relations: clone(person.relations),
-    inventory: clone(person.inventory),
-    extensions: clone(person.extensions),
-    memories: person.memories,
-  };
+function cachedRuntimeView(person, cache) {
+  if (!person) return null;
+  const cached = cache.get(person.id);
+  if (cached?.revision === person.revision) return cached.view;
+  const view = Object.freeze({
+    schemaVersion: person.schemaVersion,
+    id: person.id,
+    revision: person.revision,
+    identity: person.identity,
+    location: person.location,
+    work: person.work,
+    state: person.state,
+    activity: person.activity,
+    traits: person.traits,
+    family: person.family,
+    relations: person.relations,
+    inventory: person.inventory,
+    extensions: person.extensions,
+    createdAt: person.createdAt,
+    updatedAt: person.updatedAt,
+  });
+  cache.set(person.id, { revision: person.revision, view });
+  return view;
+}
+
+function runtimeDraft(person, keys = RUNTIME_KEYS) {
+  const selected = new Set(keys);
+  const draft = { ...person, memories: person.memories };
+  RUNTIME_KEYS.forEach((key) => {
+    draft[key] = selected.has(key) ? clone(person[key]) : person[key];
+  });
+  return draft;
 }
 
 function migrateSnapshot(rawSnapshot) {
@@ -85,11 +115,27 @@ function migrateSnapshot(rawSnapshot) {
   return snapshot;
 }
 
-export function createPeopleSystem({ eventBus, gameTime }) {
+export function createPeopleSystem({ eventBus, gameTime, runtimeMode = 'safe' }) {
   const people = new Map();
+  const runtimeCache = new Map();
+  const headless = runtimeMode === 'headless';
+  let runtimeCacheHits = 0;
+  let runtimeCacheMisses = 0;
 
   function stamp() {
     return gameTime.stamp();
+  }
+
+  function invalidateRuntime(id) {
+    runtimeCache.delete(id);
+  }
+
+  function runtimeView(person) {
+    if (!headless) return safeRuntimeView(person);
+    const cached = person ? runtimeCache.get(person.id) : null;
+    if (cached?.revision === person.revision) runtimeCacheHits += 1;
+    else runtimeCacheMisses += 1;
+    return cachedRuntimeView(person, runtimeCache);
   }
 
   function commit(person, reason) {
@@ -97,6 +143,7 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     person.revision += 1;
     person.updatedAt = stamp();
     people.set(person.id, person);
+    invalidateRuntime(person.id);
     eventBus.emit('people:changed', { reason, person: clone(person) });
     return clone(person);
   }
@@ -106,6 +153,7 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     person.revision += 1;
     person.updatedAt = stamp();
     people.set(person.id, person);
+    invalidateRuntime(person.id);
     const view = runtimeView(person);
     eventBus.emit('people:changed', { reason, person: view });
     return view;
@@ -119,10 +167,10 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     return { person: commit(draft, reason), result: clone(result) };
   }
 
-  function transactRuntime(personId, reason, mutator) {
+  function transactRuntime(personId, reason, keys, mutator) {
     const original = people.get(personId);
     if (!original) throw new Error(`找不到人物：${personId}`);
-    const draft = runtimeDraft(original);
+    const draft = runtimeDraft(original, headless ? keys : RUNTIME_KEYS);
     const result = mutator(draft);
     return { person: commitRuntime(draft, reason), result: clone(result) };
   }
@@ -130,6 +178,7 @@ export function createPeopleSystem({ eventBus, gameTime }) {
   function create(input) {
     const person = createPerson(input, stamp());
     people.set(person.id, person);
+    invalidateRuntime(person.id);
     eventBus.emit('people:created', { person: clone(person) });
     return clone(person);
   }
@@ -167,8 +216,21 @@ export function createPeopleSystem({ eventBus, gameTime }) {
       draft.set(person.id, clone(person));
     });
     people.clear();
+    runtimeCache.clear();
     draft.forEach((person, id) => people.set(id, person));
     eventBus.emit('people:hydrated', { count: people.size });
+  }
+
+  function getRuntimeDiagnostics() {
+    return {
+      mode: headless ? 'headless' : 'safe',
+      cacheSize: runtimeCache.size,
+      hits: runtimeCacheHits,
+      misses: runtimeCacheMisses,
+      hitRate: runtimeCacheHits + runtimeCacheMisses > 0
+        ? runtimeCacheHits / (runtimeCacheHits + runtimeCacheMisses)
+        : 0,
+    };
   }
 
   return Object.freeze({
@@ -183,21 +245,22 @@ export function createPeopleSystem({ eventBus, gameTime }) {
     connect,
     exportState,
     importState,
-    patchState: (id, patch) => transactRuntime(id, 'state:patch', (draft) => patchPersonState(draft, patch)).person,
-    applyNeedDelta: (id, delta) => transactRuntime(id, 'state:needs', (draft) => applyNeedDelta(draft, delta)).person,
-    setOccupation: (id, occupation) => transactRuntime(id, 'work:occupation', (draft) => setOccupation(draft, occupation)).person,
-    setLocation: (id, location) => transactRuntime(id, 'location:set', (draft) => setLocation(draft, location)).person,
-    setActivity: (id, activity) => transactRuntime(id, 'activity:set', (draft) => setActivity(draft, activity)).person,
-    setExtension: (id, namespace, value) => transactRuntime(id, 'extension:set', (draft) => setExtension(draft, namespace, value)).person,
-    addStatusTag: (id, tag) => transactRuntime(id, 'state:status:add', (draft) => addStatusTag(draft, tag)).person,
-    removeStatusTag: (id, tag) => transactRuntime(id, 'state:status:remove', (draft) => removeStatusTag(draft, tag)).person,
+    getRuntimeDiagnostics,
+    patchState: (id, patch) => transactRuntime(id, 'state:patch', ['state'], (draft) => patchPersonState(draft, patch)).person,
+    applyNeedDelta: (id, delta) => transactRuntime(id, 'state:needs', ['state'], (draft) => applyNeedDelta(draft, delta)).person,
+    setOccupation: (id, occupation) => transactRuntime(id, 'work:occupation', ['work'], (draft) => setOccupation(draft, occupation)).person,
+    setLocation: (id, location) => transactRuntime(id, 'location:set', ['location'], (draft) => setLocation(draft, location)).person,
+    setActivity: (id, activity) => transactRuntime(id, 'activity:set', ['activity'], (draft) => setActivity(draft, activity)).person,
+    setExtension: (id, namespace, value) => transactRuntime(id, 'extension:set', ['extensions'], (draft) => setExtension(draft, namespace, value)).person,
+    addStatusTag: (id, tag) => transactRuntime(id, 'state:status:add', ['state'], (draft) => addStatusTag(draft, tag)).person,
+    removeStatusTag: (id, tag) => transactRuntime(id, 'state:status:remove', ['state'], (draft) => removeStatusTag(draft, tag)).person,
     addLifeEvent: (id, event) => transact(id, 'memory:life-event', (draft) => appendLifeEvent(draft, { ...event, time: event.time ?? stamp() })).result,
     addPersonalMemory: (id, memory) => transact(id, 'memory:personal', (draft) => appendPersonalMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
     addEncounterMemory: (id, memory) => transact(id, 'memory:encounter', (draft) => appendEncounterMemory(draft, { ...memory, time: memory.time ?? stamp() })).result,
-    adjustRelation: (id, otherId, patch) => transactRuntime(id, 'relation:adjust', (draft) => adjustRelation(draft, otherId, patch)).person,
-    changeItem: (id, itemId, delta) => transactRuntime(id, 'inventory:item', (draft) => changeItem(draft, itemId, delta)).person,
-    equipItem: (id, slot, itemId) => transactRuntime(id, 'inventory:equip', (draft) => equipItem(draft, slot, itemId)).person,
-    addClaim: (id, claim) => transactRuntime(id, 'inventory:claim', (draft) => addClaim(draft, claim)).person,
+    adjustRelation: (id, otherId, patch) => transactRuntime(id, 'relation:adjust', ['relations'], (draft) => adjustRelation(draft, otherId, patch)).person,
+    changeItem: (id, itemId, delta) => transactRuntime(id, 'inventory:item', ['inventory'], (draft) => changeItem(draft, itemId, delta)).person,
+    equipItem: (id, slot, itemId) => transactRuntime(id, 'inventory:equip', ['inventory'], (draft) => equipItem(draft, slot, itemId)).person,
+    addClaim: (id, claim) => transactRuntime(id, 'inventory:claim', ['inventory'], (draft) => addClaim(draft, claim)).person,
     markDead: (id, options = {}) => transact(id, 'lifecycle:death', (draft) => markDead(draft, { ...options, time: options.time ?? stamp() })).person,
   });
 }
