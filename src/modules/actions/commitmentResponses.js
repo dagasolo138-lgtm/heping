@@ -31,9 +31,8 @@ const RESPONSES_BY_COMMITMENT = Object.freeze({
     effects: [{ metric: 'effective-stock', subjectId: 'wood', direction: 'increase' }],
   }),
   'improve-storage': responseProfile({
-    actions: [ACTION_TYPES.CHOP_TREE, ACTION_TYPES.DELIVER_MATERIALS, ACTION_TYPES.BUILD_SITE],
+    actions: [ACTION_TYPES.DELIVER_MATERIALS, ACTION_TYPES.BUILD_SITE],
     effects: [
-      { metric: 'effective-stock', subjectId: 'wood', direction: 'increase' },
       { metric: 'building-material-readiness', direction: 'increase' },
       { metric: 'building-progress', direction: 'advance' },
     ],
