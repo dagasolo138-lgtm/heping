@@ -7,7 +7,7 @@ export const CROP_TYPES = Object.freeze({
     seedItemId: 'milletSeed',
     seedsPerPlanting: 1,
     seedShare: 0.15,
-    minimumSeedReturn: 1,
+    minimumSeedReturn: 2,
     harvestYield: 8,
     growthRequiredMinutes: 1440,
     soilDepletion: 18,

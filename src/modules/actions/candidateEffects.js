@@ -60,7 +60,7 @@ const EFFECTS_BY_ACTION = Object.freeze({
   ]),
   [ACTION_TYPES.HARVEST_MILLET]: Object.freeze([
     effect({ id: 'harvest-food', metric: 'effective-stock', subjectId: 'food', direction: 'increase', unit: 'item', estimateKey: 'foodAmount', defaultAmount: 6 }),
-    effect({ id: 'harvest-seeds', metric: 'seed-stock', subjectId: 'milletSeed', direction: 'increase', unit: 'item', estimateKey: 'seedReturn', defaultAmount: 1 }),
+    effect({ id: 'harvest-seeds', metric: 'seed-stock', subjectId: 'milletSeed', direction: 'increase', unit: 'item', estimateKey: 'seedReturn', defaultAmount: 2 }),
     effect({ id: 'mature-fields', metric: 'mature-fields', subjectId: 'farmland', subjectKey: 'fieldId', direction: 'decrease', unit: 'field', estimateKey: 'matureFields', defaultAmount: 1 }),
   ]),
   [ACTION_TYPES.REPAIR_TOOL]: Object.freeze([
