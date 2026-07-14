@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "project": "生灵",
-  "version": "v0.30.1",
-  "buildId": "v0.30.1-release-cleanup-20260713-02",
-  "sourceCommit": "f1561b9a37aa03bd9ea40f80dc956766900f1bae",
+  "version": "v0.31.0",
+  "buildId": "v0.31.0-carp-release-20260715-01",
+  "sourceCommit": "9cfb2a137f4b20d6367f20e2e05a932559e16ce1",
   "branch": "main",
   "verificationPath": "/heping/version.json",
   "verification": {
     "method": "Open this manifest with a cache-busting query parameter and compare buildId plus sourceCommit with the deployed page readout.",
     "cachePolicy": "The page fetches this file with cache: no-store and a cacheBust query parameter.",
-    "sourceCommitPolicy": "sourceCommit points to the squash-merged v0.30.1 functional release-alignment commit on main; this manifest-only follow-up records the final mainline SHA without changing world behavior or save data."
+    "sourceCommitPolicy": "sourceCommit points to the squash-merged v0.31 feature-complete action-explanation commit on main. This release-alignment commit only updates documentation, the build manifest and the non-schema save app version."
   }
 }
