@@ -1,5 +1,7 @@
 import { ACTION_TYPES } from './actionTypes.js';
 import { planCommitmentLaborPortfolio } from './commitmentLaborPlanner.js';
+import { evaluateCommitmentPolicy } from './commitmentPolicy.js';
+import { commitmentUsesLabor } from './commitmentResponses.js';
 import { readActiveRuntimeCommitments, scoreCommitmentUtility } from './commitmentUtility.js';
 import { campScarcity, scarcityForAction } from './scarcityUtility.js';
 import { scoreSocialUtility } from './socialUtility.js';
@@ -69,6 +71,7 @@ function explain(factors) {
       personalNeed: '个人需求',
       campScarcity: '动态库存缺口',
       communityCommitment: '共同承诺',
+      communityPolicy: '共同承诺约束',
       skillFit: '技能适配',
       roleFit: '职业倾向',
       traitBias: '性格倾向',
@@ -100,7 +103,7 @@ export function scoreUtilityCandidates({
     .map((candidate) => candidate.type)
     .filter(Boolean))];
   const laborPortfolio = commitmentLaborPortfolio ?? planCommitmentLaborPortfolio({
-    commitments,
+    commitments: commitments.filter((commitment) => commitmentUsesLabor(commitment?.type)),
     population,
     actionCounts,
     availableActions,
@@ -110,10 +113,12 @@ export function scoreUtilityCandidates({
   return candidates.map((candidate) => {
     const social = scoreSocialUtility({ person, candidate, allPeople });
     const commitment = scoreCommitmentUtility({ candidate, commitments, laborPortfolio });
+    const policy = evaluateCommitmentPolicy({ candidate, commitments });
     const factors = {
       personalNeed: needScore(candidate.type, desire),
       campScarcity: scarcityForAction(candidate.type, scarcity) * 42,
       communityCommitment: commitment.score,
+      communityPolicy: policy.penalty,
       skillFit: skillScore(candidate.type, person),
       roleFit: Number(ROLE_FIT[person.work.occupation]?.[candidate.type] ?? ROLE_FIT.unassigned[candidate.type] ?? 0),
       traitBias: traitScore(candidate.type, desire),
@@ -122,15 +127,21 @@ export function scoreUtilityCandidates({
       crowding: capPenalty(candidate.type, actionCounts),
       social: social.score,
     };
-    const score = round(Object.values(factors).reduce((total, value) => total + Number(value || 0), 0));
+    const rawScore = round(Object.values(factors).reduce((total, value) => total + Number(value || 0), 0));
+    const score = policy.blocked ? -10000 : rawScore;
     return Object.freeze({
       candidate,
       score,
       factors: Object.freeze(Object.fromEntries(Object.entries(factors).map(([key, value]) => [key, round(value)]))),
-      reason: explain(factors) || '低优先级待命',
+      reason: policy.blocked ? policy.reasons.join('、') : explain(factors) || '低优先级待命',
       socialTargets: social.targets ?? [],
       commitmentTargets: commitment.matches,
       commitmentBlocked: commitment.blocked,
+      commitmentPolicy: policy,
     });
-  }).sort((first, second) => second.score - first.score);
+  }).sort((first, second) => {
+    const blocked = Number(Boolean(first.commitmentPolicy?.blocked)) - Number(Boolean(second.commitmentPolicy?.blocked));
+    if (blocked !== 0) return blocked;
+    return second.score - first.score;
+  });
 }
