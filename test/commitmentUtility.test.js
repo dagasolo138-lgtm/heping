@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ACTION_TYPES } from '../src/modules/actions/actionTypes.js';
-import { scoreCommitmentUtility } from '../src/modules/actions/commitmentUtility.js';
+import {
+  runtimeOpportunityCommitments,
+  scoreCommitmentUtility,
+} from '../src/modules/actions/commitmentUtility.js';
 import { scoreUtilityCandidates } from '../src/modules/actions/utilityScorer.js';
 
 function candidate(type, effectEstimates = {}) {
@@ -84,6 +87,64 @@ test('已完成承诺不加分，多项有效承诺合计仍封顶 18', () => {
 
   assert.equal(score.score, 18);
   assert.deepEqual(score.matches.map((entry) => entry.id), ['storage', 'wood']);
+});
+
+test('播种与收获机会转成确定的运行时临时承诺', () => {
+  const commitments = runtimeOpportunityCommitments([
+    {
+      id: 'rain-1',
+      signature: 'farm:rain-sowing-window',
+      kind: 'rain-sowing-window',
+      state: 'active',
+      value: 0.8,
+      domain: 'agriculture',
+      evidence: { sowableFields: 2 },
+      openedAt: { tick: 10 },
+    },
+    {
+      id: 'harvest-1',
+      signature: 'farm:harvest-window',
+      kind: 'harvest-window',
+      state: 'active',
+      value: 0.7,
+      domain: 'agriculture',
+      evidence: { matureFields: 1 },
+      openedAt: { tick: 11 },
+    },
+    { id: 'surplus', kind: 'stock-surplus', state: 'active', value: 1 },
+  ]);
+
+  assert.deepEqual(commitments.map((entry) => entry.type), ['harvest-millet-window', 'sow-millet-window']);
+  assert.equal(commitments[0].priority, 70);
+  assert.equal(commitments[0].sourceKind, 'opportunity');
+  assert.equal(commitments[1].goal.target, 2);
+  assert.equal(Object.isFrozen(commitments), true);
+});
+
+test('种子短缺和收获窗口共同奖励真实收获，播种窗口只奖励播种', () => {
+  const opportunities = runtimeOpportunityCommitments([
+    { id: 'rain', kind: 'rain-sowing-window', state: 'active', value: 0.8, evidence: { sowableFields: 1 } },
+    { id: 'harvest', kind: 'harvest-window', state: 'active', value: 0.7, evidence: { matureFields: 1 } },
+  ]);
+  const harvest = scoreCommitmentUtility({
+    candidate: candidate(ACTION_TYPES.HARVEST_MILLET),
+    population: 10,
+    commitments: [
+      ...opportunities,
+      { id: 'seed', type: 'restore-seed-reserve', state: 'active', priority: 90, progress: 0 },
+    ],
+  });
+  const sow = scoreCommitmentUtility({
+    candidate: candidate(ACTION_TYPES.SOW_MILLET),
+    population: 10,
+    commitments: opportunities,
+  });
+
+  assert.equal(harvest.score, 18);
+  assert.deepEqual(harvest.matches.map((entry) => entry.type).sort(), ['harvest-millet-window', 'restore-seed-reserve']);
+  assert.equal(harvest.matches.find((entry) => entry.type === 'harvest-millet-window').sourceKind, 'opportunity');
+  assert.equal(sow.score, 14.4);
+  assert.deepEqual(sow.matches.map((entry) => entry.type), ['sow-millet-window']);
 });
 
 test('效用评分每轮只读取一次承诺快照，复用劳动力计划且不会创造候选', () => {
