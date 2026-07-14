@@ -33,7 +33,7 @@ function farmSystemFor(field) {
   };
 }
 
-test('收获任务同时响应收获窗口与种子短缺承诺', () => {
+test('单个收获工位优先响应更高优先级承诺，不重复计算同一劳动', () => {
   const task = planFarmAction({
     person: person(),
     farmSystem: farmSystemFor({ id: 'field-1', status: 'mature', soil: { fertility: 70 } }),
@@ -46,10 +46,14 @@ test('收获任务同时响应收获窗口与种子短缺承诺', () => {
   });
 
   assert.equal(task.type, ACTION_TYPES.HARVEST_MILLET);
-  assert.equal(task.data.commitmentResponse.score, 18);
+  assert.equal(task.data.commitmentResponse.score, 16.2);
   assert.deepEqual(
-    task.data.commitmentResponse.matches.map((entry) => entry.type).sort(),
-    ['harvest-millet-window', 'restore-seed-reserve'],
+    task.data.commitmentResponse.matches.map((entry) => entry.type),
+    ['restore-seed-reserve'],
+  );
+  assert.equal(
+    task.data.commitmentResponse.blocked.find((entry) => entry.type === 'harvest-millet-window')?.reason,
+    'response-capacity-exhausted',
   );
 });
 
