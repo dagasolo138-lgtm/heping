@@ -40,6 +40,9 @@ function withCommitmentResponse({ task, field, person, actionCounts, commitments
       fieldId: field.id,
       fieldStatus: field.status,
       fieldFertility: Number(field.soil?.fertility ?? 100),
+      seedAmount: Number(task.data?.seedAmount ?? 0),
+      seedTarget: Number(task.data?.seedTarget ?? 0),
+      seedAvailableAtCamp: Number(task.data?.seedAvailableAtCamp ?? 0),
     },
     commitments,
     population,
@@ -75,6 +78,7 @@ export function planFarmAction({ person, farmSystem, actionCounts, commitments =
       seedSourceCampId: 'starting-camp',
       seedTarget: seedPlan.target,
       seedShortage: seedPlan.shortage,
+      seedAvailableAtCamp: seedPlan.availableAtCamp,
     }, workerDuration(person, ACTION_META[ACTION_TYPES.SOW_MILLET].workDuration));
     return withCommitmentResponse({ task, field, person, actionCounts, commitments, population });
   }
