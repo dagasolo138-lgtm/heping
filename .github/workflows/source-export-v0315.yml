@@ -1,11 +1,9 @@
 name: Source Export v0.31 Step 5
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/v0310-action-explanation-ui
-    paths:
-      - .github/workflows/source-export-v0315.yml
+      - main
 
 jobs:
   export-source:
