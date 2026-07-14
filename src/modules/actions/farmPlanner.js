@@ -1,6 +1,6 @@
 import { createId } from '../../core/ids/createId.js';
 import { ACTION_META, ACTION_TYPES } from './actionTypes.js';
-import { attachTaskCommitmentResponse } from './commitmentTaskResponse.js';
+import { resolveTaskCommitmentResponse } from './commitmentTaskResponse.js';
 
 const FARM_ACTION_CAPS = Object.freeze({
   [ACTION_TYPES.CLEAR_FIELD]: 2,
@@ -30,9 +30,20 @@ function active(actionCounts, type, limit) {
   return Number(actionCounts[type] ?? 0) >= limit;
 }
 
-function withCommitmentResponse({ task, field, person, actionCounts, commitments, population }) {
-  if (!task) return null;
-  return attachTaskCommitmentResponse({
+function orderedWorkFields(farmSystem) {
+  const fields = farmSystem.listFields?.();
+  if (!Array.isArray(fields) || fields.length === 0) {
+    const field = farmSystem.nextWorkField?.();
+    return field ? [field] : [];
+  }
+  const mature = fields.filter((field) => field.status === 'mature');
+  const sowable = fields.filter((field) => field.status === 'readyToSow' && field.seasonal?.id !== 'waiting-spring');
+  const clearing = fields.filter((field) => field.status === 'planned' || field.status === 'clearing');
+  return [...mature, ...sowable, ...clearing];
+}
+
+function resolveCommitmentResponse({ task, field, person, actionCounts, commitments, population }) {
+  return resolveTaskCommitmentResponse({
     task,
     person,
     source: 'farm-planner',
@@ -51,25 +62,24 @@ function withCommitmentResponse({ task, field, person, actionCounts, commitments
   });
 }
 
-export function planFarmAction({ person, farmSystem, actionCounts, commitments = null, population = null }) {
-  const field = farmSystem.nextWorkField();
-  if (!field) return null;
+function planFieldAction({ field, person, farmSystem, actionCounts, commitments, population }) {
   const destination = farmSystem.getFieldCenter(field);
 
-  if ((field.status === 'planned' || field.status === 'clearing') && !active(actionCounts, ACTION_TYPES.CLEAR_FIELD, 2)) {
-    const workAmount = 1 + Number(person.work.skills?.gathering ?? 0) * 0.2;
+  if (field.status === 'mature') {
+    if (active(actionCounts, ACTION_TYPES.HARVEST_MILLET, 1)) return { task: null, blocked: false };
     const task = createTask(
-      ACTION_TYPES.CLEAR_FIELD,
+      ACTION_TYPES.HARVEST_MILLET,
       destination,
-      { fieldId: field.id, workAmount },
-      workerDuration(person, ACTION_META[ACTION_TYPES.CLEAR_FIELD].workDuration),
+      { fieldId: field.id },
+      workerDuration(person, ACTION_META[ACTION_TYPES.HARVEST_MILLET].workDuration),
     );
-    return withCommitmentResponse({ task, field, person, actionCounts, commitments, population });
+    return resolveCommitmentResponse({ task, field, person, actionCounts, commitments, population });
   }
 
-  if (field.status === 'readyToSow' && !active(actionCounts, ACTION_TYPES.SOW_MILLET, 1)) {
+  if (field.status === 'readyToSow') {
+    if (active(actionCounts, ACTION_TYPES.SOW_MILLET, 1)) return { task: null, blocked: false };
     const seedPlan = farmSystem.getSeedPlan(field.id);
-    if (!seedPlan || !farmSystem.canStartSowing({ person, fieldId: field.id })) return null;
+    if (!seedPlan || !farmSystem.canStartSowing({ person, fieldId: field.id })) return { task: null, blocked: false };
     const task = createTask(ACTION_TYPES.SOW_MILLET, destination, {
       fieldId: field.id,
       cropId: seedPlan.cropId,
@@ -80,18 +90,30 @@ export function planFarmAction({ person, farmSystem, actionCounts, commitments =
       seedShortage: seedPlan.shortage,
       seedAvailableAtCamp: seedPlan.availableAtCamp,
     }, workerDuration(person, ACTION_META[ACTION_TYPES.SOW_MILLET].workDuration));
-    return withCommitmentResponse({ task, field, person, actionCounts, commitments, population });
+    return resolveCommitmentResponse({ task, field, person, actionCounts, commitments, population });
   }
 
-  if (field.status === 'mature' && !active(actionCounts, ACTION_TYPES.HARVEST_MILLET, 1)) {
+  if (field.status === 'planned' || field.status === 'clearing') {
+    if (active(actionCounts, ACTION_TYPES.CLEAR_FIELD, 2)) return { task: null, blocked: false };
+    const workAmount = 1 + Number(person.work.skills?.gathering ?? 0) * 0.2;
     const task = createTask(
-      ACTION_TYPES.HARVEST_MILLET,
+      ACTION_TYPES.CLEAR_FIELD,
       destination,
-      { fieldId: field.id },
-      workerDuration(person, ACTION_META[ACTION_TYPES.HARVEST_MILLET].workDuration),
+      { fieldId: field.id, workAmount },
+      workerDuration(person, ACTION_META[ACTION_TYPES.CLEAR_FIELD].workDuration),
     );
-    return withCommitmentResponse({ task, field, person, actionCounts, commitments, population });
+    return resolveCommitmentResponse({ task, field, person, actionCounts, commitments, population });
   }
 
+  return { task: null, blocked: false };
+}
+
+export function planFarmAction({ person, farmSystem, actionCounts, commitments = null, population = null }) {
+  const fields = orderedWorkFields(farmSystem);
+  for (const field of fields) {
+    const result = planFieldAction({ field, person, farmSystem, actionCounts, commitments, population });
+    if (result.task) return result.task;
+    if (!result.blocked) return null;
+  }
   return null;
 }
