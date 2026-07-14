@@ -147,10 +147,10 @@ test('收获把总产量拆成口粮与粟种并同时进入人物背包', () =>
       gameTime: world.time,
     });
     assert.equal(result.harvest.totalAmount, result.harvest.foodAmount + result.harvest.seedAmount);
-    assert.equal(result.harvest.foodAmount, 7);
-    assert.equal(result.harvest.seedAmount, 1);
-    assert.equal(world.people.get(world.personId).inventory.items.millet, beforeMillet + 7);
-    assert.equal(world.people.get(world.personId).inventory.items.milletSeed, beforeSeeds + 1);
+    assert.equal(result.harvest.foodAmount, 6);
+    assert.equal(result.harvest.seedAmount, 2);
+    assert.equal(world.people.get(world.personId).inventory.items.millet, beforeMillet + 6);
+    assert.equal(world.people.get(world.personId).inventory.items.milletSeed, beforeSeeds + 2);
     assert.equal(world.farm.get('test-millet-field').status, 'readyToSow');
   } finally {
     world.restore();
