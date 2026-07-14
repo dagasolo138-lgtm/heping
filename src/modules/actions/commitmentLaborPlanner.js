@@ -92,9 +92,18 @@ function allocationTotal(allocation) {
   return Object.values(allocation).reduce((total, value) => total + integer(value), 0);
 }
 
-function stopState({ commitment, population, responseActions, legalActions, desiredWorkers, currentResponders, attractionSlots }) {
+function stopState({
+  commitment,
+  population,
+  demandStrength,
+  responseActions,
+  legalActions,
+  desiredWorkers,
+  currentResponders,
+  attractionSlots,
+}) {
   if (commitment?.state !== 'active') return { status: 'inactive', stopReason: 'inactive-commitment', blockers: ['inactive-commitment'] };
-  if (clamp(commitment?.progress) >= 1 || desiredWorkers <= 0) return { status: 'inactive', stopReason: 'goal-satisfied', blockers: ['goal-satisfied'] };
+  if (clamp(commitment?.progress) >= 1 || demandStrength <= 0) return { status: 'inactive', stopReason: 'goal-satisfied', blockers: ['goal-satisfied'] };
   if (population <= 0) return { status: 'blocked', stopReason: 'no-population', blockers: ['no-population'] };
   if (!responseActions.length) return { status: 'blocked', stopReason: 'no-response-action', blockers: ['no-response-action'] };
   if (!legalActions.length) return { status: 'blocked', stopReason: 'no-legal-response', blockers: ['no-legal-response'] };
@@ -128,6 +137,7 @@ function planOne({
   const state = stopState({
     commitment,
     population,
+    demandStrength,
     responseActions,
     legalActions,
     desiredWorkers,
@@ -176,7 +186,7 @@ export function planCommitmentLaborPortfolio({
   const ordered = [...(Array.isArray(commitments) ? commitments : [])].sort(commitmentOrder);
   const trackedActions = [...new Set(ordered.flatMap((commitment) => commitmentActions(commitment?.type)))].sort();
   const remainingResponders = Object.fromEntries(trackedActions
-    .map((actionType) => [actionType, integer(sourceActionCounts[actionType])])) ;
+    .map((actionType) => [actionType, integer(sourceActionCounts[actionType])]));
   const sourceCapacity = Object.fromEntries(trackedActions.map((actionType) => [
     actionType,
     actionCapacity(actionType, normalizedPopulation, capacityByAction),
