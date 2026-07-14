@@ -18,19 +18,23 @@ function person(overrides = {}) {
   };
 }
 
+function seedPlan(seedOverrides = {}) {
+  return {
+    cropId: 'millet',
+    seedItemId: 'milletSeed',
+    seedAmount: 1,
+    target: 2,
+    shortage: 0,
+    availableAtCamp: 4,
+    ...seedOverrides,
+  };
+}
+
 function farmSystemFor(field, seedOverrides = {}) {
   return {
     nextWorkField: () => structuredClone(field),
     getFieldCenter: () => ({ x: 4, y: 4 }),
-    getSeedPlan: () => ({
-      cropId: 'millet',
-      seedItemId: 'milletSeed',
-      seedAmount: 1,
-      target: 2,
-      shortage: 0,
-      availableAtCamp: 4,
-      ...seedOverrides,
-    }),
+    getSeedPlan: () => seedPlan(seedOverrides),
     canStartSowing: () => true,
   };
 }
@@ -107,7 +111,31 @@ test('种子恢复承诺会暂缓消耗留种缓冲，缓冲充足后允许播�
   assert.equal(allowed.type, ACTION_TYPES.SOW_MILLET);
 });
 
-test('贫瘠田休耕与劳动积压会阻止对应的新农业任务', () => {
+test('贫瘠田休耕时跳过该田，健康田仍可继续播种', () => {
+  const fields = [
+    { id: 'poor-field', status: 'readyToSow', soil: { fertility: 40 }, seasonal: { id: 'sowable' } },
+    { id: 'healthy-field', status: 'readyToSow', soil: { fertility: 70 }, seasonal: { id: 'sowable' } },
+  ];
+  const farmSystem = {
+    listFields: () => structuredClone(fields),
+    getFieldCenter: (field) => ({ x: field.id === 'poor-field' ? 4 : 8, y: 4 }),
+    getSeedPlan: () => seedPlan(),
+    canStartSowing: () => true,
+  };
+  const task = planFarmAction({
+    person: person(),
+    farmSystem,
+    actionCounts: {},
+    commitments: [
+      { id: 'soil', type: 'restore-soil-fertility', state: 'active', priority: 80, progress: 0 },
+    ],
+  });
+
+  assert.equal(task.type, ACTION_TYPES.SOW_MILLET);
+  assert.equal(task.data.fieldId, 'healthy-field');
+});
+
+test('全部贫瘠田休耕与劳动积压会阻止对应的新农业任务', () => {
   const sowing = planFarmAction({
     person: person(),
     farmSystem: farmSystemFor({ id: 'field-1', status: 'readyToSow', soil: { fertility: 40 } }),
