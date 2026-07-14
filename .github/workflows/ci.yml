@@ -146,3 +146,20 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
+
+  release-source-snapshot:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/v0310-release'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect release source files
+        run: |
+          mkdir -p .artifacts/v031-release-source/src/modules/persistence
+          cp README.md codex.md version.json .artifacts/v031-release-source/
+          cp src/modules/persistence/worldSaveSchema.js .artifacts/v031-release-source/src/modules/persistence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v031-release-source
+          path: .artifacts/v031-release-source
+          retention-days: 1
