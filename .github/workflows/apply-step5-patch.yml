@@ -1,9 +1,9 @@
 name: Apply v0.31 Step 5 Patch
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/v0310-action-explanation-ui
+      - main
     paths:
       - .github/workflows/apply-step5-patch.yml
 
@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
       - name: Assemble and verify patch
         shell: bash
@@ -36,4 +36,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "feat: add action explanation chain and observer UI"
-          git push origin HEAD:${{ github.ref_name }}
+          git push origin HEAD:${{ github.head_ref }}
