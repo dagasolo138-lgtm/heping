@@ -1,0 +1,39 @@
+name: Apply v0.31 Step 5 Patch
+
+on:
+  push:
+    branches:
+      - agent/v0310-action-explanation-ui
+    paths:
+      - .github/workflows/apply-step5-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - name: Assemble and verify patch
+        shell: bash
+        run: |
+          cat .github/step5-patch/part*.b64 | tr -d '\n' | base64 -d > /tmp/step5.patch
+          echo "b2a093f89b817567d020f2aafc5b4b3bc6ce49310c699762b7065eafbc7c4c7b  /tmp/step5.patch" | sha256sum --check
+          git apply --check /tmp/step5.patch
+      - name: Apply formal changes and clean temporary files
+        shell: bash
+        run: |
+          git apply /tmp/step5.patch
+          rm -rf .github/step5-patch
+          rm -f .github/workflows/apply-step5-patch.yml
+          rm -f .github/workflows/source-export-v0315.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add action explanation chain and observer UI"
+          git push origin HEAD:${{ github.ref_name }}
