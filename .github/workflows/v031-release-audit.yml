@@ -1,0 +1,38 @@
+name: v0.31 Release Audit
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/v031-release-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect release references
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '=== VERSION REFERENCES ==='
+            grep -RInE 'v0\.30\.1|0\.30\.1|v0\.30|WORLD_SAVE_APP_VERSION|sourceCommit|buildId' . \
+              --exclude-dir=.git --exclude='package-lock.json' || true
+            echo
+            echo '=== ROOT FILES ==='
+            find . -maxdepth 2 -type f | sort
+            echo
+            echo '=== SAVE/VERSION CANDIDATES ==='
+            find src test scripts -type f | sort | grep -Ei 'save|version|manifest|build' || true
+          } > /tmp/v031-release-audit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v031-release-audit
+          path: /tmp/v031-release-audit.txt
+          retention-days: 1
