@@ -1,0 +1,122 @@
+name: Update v0.31 Step 5 Handoff
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/update-codex-step5.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Update codex
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('codex.md')
+          text = path.read_text()
+
+          replacements = [
+              (
+                  "- `v0.31` 第四步：补齐农业、种子、储存建设、土壤休耕与劳动积压的正式响应闭环。\n",
+                  "- `v0.31` 第四步：补齐农业、种子、储存建设、土壤休耕与劳动积压的正式响应闭环。\n- `v0.31` 第五步：统一当前行动原因链与观察器解释，显示促成因素、共同承诺、硬规则、政策约束和替代候选。\n",
+              ),
+              (
+                  "v0.31 前四步没有新增持久化字段，存档 schema 不升级。",
+                  "v0.31 前五步没有新增持久化字段，存档 schema 不升级。",
+              ),
+              (
+                  "8. 农业、种子、储存、休耕与劳动积压已经接入正式响应，但最终行动解释尚未统一持久化。\n9. 承诺效果、劳动力缺口和政策阻断已进入评分或任务数据，观察器 UI 仍未完整显示。\n10. 自动 Chromium 不能替代真实 iPhone 安全区与浏览器外壳回归。",
+                  "8. 当前行动解释只保留正在执行任务的轻量快照，不保存完整候选历史。\n9. 自动 Chromium 不能替代真实 iPhone 安全区与浏览器外壳回归。",
+              ),
+              (
+                  "1. 第五步：保存最终选中行动的轻量解释，显示基础效用、共同承诺贡献、劳动力缺口、机会来源与政策阻断。\n2. 在观察器 UI 中显示人物当前选择原因和无法执行的承诺，不保存全部候选历史。\n3. 第六步：完成 v0.31 发布收口，更新 `version.json`、README、存档应用版本和正式版本记录。",
+                  "1. 第六步：完成 v0.31 发布收口，更新 `version.json`、README、存档应用版本和正式版本记录。\n2. 发布前复跑普通 CI、Day 60 多批次和 Day 120 长期审计，确认发布清单与 sourceCommit。",
+              ),
+              (
+                  "- `v0.31`（开发中）：已完成候选效果目录、组合级劳动力规划、承诺评分，以及农业、种子、储存、休耕和劳动积压响应闭环；下一步建立最终行动解释。",
+                  "- `v0.31`（开发中）：已完成候选效果目录、组合级劳动力规划、承诺评分、生产链响应闭环与当前行动解释；下一步完成正式发布收口。",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one match, found {count}: {old[:80]}')
+              text = text.replace(old, new)
+
+          marker = '## 存档与迁移\n'
+          if text.count(marker) != 1:
+              raise SystemExit('unexpected storage section count')
+
+          section = '''## v0.31 第五步：行动原因链与观察器解释
+
+核心模块：
+
+- `src/modules/actions/actionExplanation.js`
+- `src/modules/actions/actionPlanner.js`
+- `src/modules/actions/actionSystem.js`
+- `src/modules/actions/farmPlanner.js`
+- `src/app-v4.js`
+
+`actionSystem.getActionExplanation(personId)` 根据人物当前运行时任务即时生成只读解释，结构版本为 `1`，包含：
+
+```text
+planner / plannerLabel
+score / summary
+factors
+commitments / blockedCommitments
+policies
+hardRules
+alternatives
+effects
+```
+
+解释覆盖综合效用、紧急生存、携带物资、农业、建设、工具维护、篝火、环境恢复和夜间睡眠。综合效用行动保留各项分值、共同承诺劳动力状态、被阻断承诺、政策约束以及替代候选；农业调度会记录被休耕或留种政策跳过的农田，再解释为何改选其他合法农田。
+
+观察器人物详情页显示调度器、总分或规则优先级、行动摘要、硬规则、促成因素、共同承诺、政策约束和候选比较。解释只读取已经形成的任务，不写入人物存档、任务生命周期、资源流水或确定性人物活动视图，因此不改变行为与存档 schema。
+
+第五步验证结果：
+
+- 语法、全部专项与非回放测试、生产构建成功；
+- 移动 Chromium 与隐藏 100× 成功；
+- Day 30 与 Day 60 原确定性指纹成功，无需更新基准；
+- Day 60 batch 1 / 5 / 10 成功，三批最终摘要一致；
+- Day 120 batch 10 共 171,600 ticks 成功；
+- Day 120 期末 10 人存活、种子 22、短缺 0、累计收获 40 次；
+- 任务生命周期、资源流水、世界动力、工具维护、公共工具保障、种子守恒和预留检查全部通过。
+
+'''
+          text = text.replace(marker, section + marker)
+
+          required = [
+              '## v0.31 第五步：行动原因链与观察器解释',
+              'v0.31 前五步没有新增持久化字段',
+              '第六步：完成 v0.31 发布收口',
+              '当前行动解释只保留正在执行任务的轻量快照',
+          ]
+          for phrase in required:
+              if phrase not in text:
+                  raise SystemExit(f'missing required phrase: {phrase}')
+
+          path.write_text(text)
+          PY
+          git diff --check
+          rm -f .github/workflows/update-codex-step5.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: record v0.31 step 5 action explanations"
+          git push origin HEAD:${{ github.head_ref }}
