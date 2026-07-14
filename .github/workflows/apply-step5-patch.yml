@@ -19,10 +19,21 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Assemble and verify patch
+      - name: Assemble patch
         shell: bash
         run: |
           cat .github/step5-patch/part*.b64 | tr -d '\n' | base64 -d > /tmp/step5.patch
+          wc -c /tmp/step5.patch
+          sha256sum /tmp/step5.patch
+      - name: Upload assembled patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: assembled-step5-patch
+          path: /tmp/step5.patch
+          retention-days: 1
+      - name: Verify patch
+        shell: bash
+        run: |
           echo "b2a093f89b817567d020f2aafc5b4b3bc6ce49310c699762b7065eafbc7c4c7b  /tmp/step5.patch" | sha256sum --check
           git apply --check /tmp/step5.patch
       - name: Apply formal changes and clean temporary files
