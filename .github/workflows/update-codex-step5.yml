@@ -1,6 +1,7 @@
 name: Update v0.31 Step 5 Handoff
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
