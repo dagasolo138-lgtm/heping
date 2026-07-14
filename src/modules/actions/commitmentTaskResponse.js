@@ -21,6 +21,26 @@ function compactUtility(utility) {
   });
 }
 
+function annotatedTask(task, response) {
+  const relevant = response.utility.score > 0
+    || response.utility.matches.length > 0
+    || response.utility.blocked.length > 0
+    || response.policy.matches.length > 0;
+  if (!relevant) return task;
+  return {
+    ...task,
+    data: {
+      ...(task.data ?? {}),
+      commitmentResponse: {
+        score: response.utility.score,
+        matches: response.utility.matches,
+        blocked: response.utility.blocked,
+        policy: response.policy,
+      },
+    },
+  };
+}
+
 export function evaluateTaskCommitmentResponse({
   task,
   person,
@@ -52,25 +72,14 @@ export function evaluateTaskCommitmentResponse({
   });
 }
 
-export function attachTaskCommitmentResponse(context = {}) {
+export function resolveTaskCommitmentResponse(context = {}) {
+  const task = context.task ?? null;
   const response = evaluateTaskCommitmentResponse(context);
-  if (!response) return context.task ?? null;
-  if (!response.allowed) return null;
-  const relevant = response.utility.score > 0
-    || response.utility.matches.length > 0
-    || response.utility.blocked.length > 0
-    || response.policy.matches.length > 0;
-  if (!relevant) return context.task;
-  return {
-    ...context.task,
-    data: {
-      ...(context.task.data ?? {}),
-      commitmentResponse: {
-        score: response.utility.score,
-        matches: response.utility.matches,
-        blocked: response.utility.blocked,
-        policy: response.policy,
-      },
-    },
-  };
+  if (!response) return Object.freeze({ task, blocked: false, response: null });
+  if (!response.allowed) return Object.freeze({ task: null, blocked: true, response });
+  return Object.freeze({ task: annotatedTask(task, response), blocked: false, response });
+}
+
+export function attachTaskCommitmentResponse(context = {}) {
+  return resolveTaskCommitmentResponse(context).task;
 }
