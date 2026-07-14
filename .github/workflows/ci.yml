@@ -33,7 +33,15 @@ jobs:
             exit 1
           fi
           printf 'Running %s non-replay test files.\n' "${#fast_tests[@]}"
-          node --test "${fast_tests[@]}"
+          node --test "${fast_tests[@]}" | tee fast-tests-output.log
+      - name: Upload non-replay test output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fast-tests-output
+          path: fast-tests-output.log
+          if-no-files-found: warn
+          retention-days: 7
       - run: npm run build
 
   replay-day30:
