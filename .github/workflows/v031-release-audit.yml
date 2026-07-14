@@ -1,4 +1,4 @@
-name: Apply v0.31 Release Closeout
+name: Prepare v0.31 Release Files
 
 on:
   pull_request:
@@ -8,18 +8,15 @@ on:
       - .github/workflows/v031-release-audit.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - name: Apply release metadata
+      - name: Prepare release files
         shell: bash
         run: |
           set -euo pipefail
@@ -134,23 +131,13 @@ jobs:
               },
           }
           Path('version.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
-
-          checks = {
-              'README.md': ['## 当前版本：v0.31.0', '## v0.31 共同承诺响应规划'],
-              'codex.md': ['## 当前版本：v0.31.0', '## v0.32 建议方向', '`v0.31.0`：完成候选效果目录'],
-              'src/modules/persistence/worldSaveSchema.js': ["WORLD_SAVE_APP_VERSION = '0.31.0'"],
-              'version.json': ['"version": "v0.31.0"', '"sourceCommit": "9cfb2a137f4b20d6367f20e2e05a932559e16ce1"'],
-          }
-          for filename, phrases in checks.items():
-              text = Path(filename).read_text()
-              for phrase in phrases:
-                  if phrase not in text:
-                      raise SystemExit(f'{filename}: missing {phrase!r}')
           PY
           git diff --check
-          rm -f .github/workflows/v031-release-audit.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md codex.md src/modules/persistence/worldSaveSchema.js version.json .github/workflows/v031-release-audit.yml
-          git commit -m "release: publish v0.31.0"
-          git push origin HEAD:${{ github.head_ref }}
+          mkdir -p /tmp/v031-release-files/src/modules/persistence
+          cp README.md codex.md version.json /tmp/v031-release-files/
+          cp src/modules/persistence/worldSaveSchema.js /tmp/v031-release-files/src/modules/persistence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v031-release-files
+          path: /tmp/v031-release-files
+          retention-days: 1
