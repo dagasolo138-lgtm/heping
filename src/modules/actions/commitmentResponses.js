@@ -40,6 +40,7 @@ const RESPONSES_BY_COMMITMENT = Object.freeze({
   'restore-seed-reserve': responseProfile({
     actions: [ACTION_TYPES.HARVEST_MILLET],
     effects: [{ metric: 'seed-stock', subjectId: 'milletSeed', direction: 'increase' }],
+    policyActions: [ACTION_TYPES.SOW_MILLET],
   }),
   'sow-millet-window': responseProfile({
     actions: [ACTION_TYPES.SOW_MILLET],
