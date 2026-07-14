@@ -1,5 +1,5 @@
 import { ACTION_TYPES } from './actionTypes.js';
-import { commitmentAffectsAction, commitmentResponseMode } from './commitmentResponses.js';
+import { commitmentAffectsAction } from './commitmentResponses.js';
 
 export const SOIL_FALLOW_FERTILITY_THRESHOLD = 55;
 export const BACKLOG_LONG_TASK_MIN_DURATION = 6;
@@ -19,16 +19,19 @@ function round(value) {
   return Math.round((Number(value) || 0) * 10) / 10;
 }
 
+function finite(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function demandStrength(commitment) {
   return clamp(Number(commitment?.priority) / 100) * (1 - clamp(commitment?.progress));
 }
 
 function fieldFertility(candidate) {
-  const value = candidate?.target?.fieldFertility
+  return finite(candidate?.target?.fieldFertility
     ?? candidate?.fieldFertility
-    ?? candidate?.data?.fieldFertility;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
+    ?? candidate?.data?.fieldFertility);
 }
 
 function soilPolicy(commitment, candidate) {
@@ -45,6 +48,37 @@ function soilPolicy(commitment, candidate) {
       fieldId: candidate?.target?.fieldId ?? candidate?.data?.fieldId ?? null,
       fertility,
       threshold: SOIL_FALLOW_FERTILITY_THRESHOLD,
+    }),
+  });
+}
+
+function seedReservePolicy(commitment, candidate) {
+  if (candidate?.type !== ACTION_TYPES.SOW_MILLET) return null;
+  const available = finite(candidate?.target?.seedAvailableAtCamp
+    ?? candidate?.seedAvailableAtCamp
+    ?? candidate?.data?.seedAvailableAtCamp);
+  const seedAmount = Math.max(0, finite(candidate?.target?.seedAmount
+    ?? candidate?.seedAmount
+    ?? candidate?.data?.seedAmount) ?? 0);
+  const target = Math.max(0, finite(candidate?.target?.seedTarget
+    ?? candidate?.seedTarget
+    ?? candidate?.data?.seedTarget
+    ?? commitment?.goal?.target) ?? 0);
+  if (available === null || seedAmount <= 0 || target <= 0) return null;
+  const afterSowing = available - seedAmount;
+  if (afterSowing >= target) return null;
+  return Object.freeze({
+    id: commitment.id ?? null,
+    type: commitment.type,
+    blocked: true,
+    penalty: 0,
+    reason: 'preserve-seed-buffer',
+    details: Object.freeze({
+      available: round(available),
+      seedAmount: round(seedAmount),
+      afterSowing: round(afterSowing),
+      target: round(target),
+      shortageAfterSowing: round(Math.max(0, target - afterSowing)),
     }),
   });
 }
@@ -84,6 +118,7 @@ function backlogPolicy(commitment, candidate) {
 }
 
 function evaluateOne(commitment, candidate) {
+  if (commitment?.type === 'restore-seed-reserve') return seedReservePolicy(commitment, candidate);
   if (commitment?.type === 'restore-soil-fertility') return soilPolicy(commitment, candidate);
   if (commitment?.type === 'reduce-labor-backlog') return backlogPolicy(commitment, candidate);
   return null;
@@ -100,7 +135,6 @@ export function evaluateCommitmentPolicy({ candidate, commitments = [] } = {}) {
   }
   const matches = (Array.isArray(commitments) ? commitments : [])
     .filter((commitment) => commitment?.state === 'active')
-    .filter((commitment) => commitmentResponseMode(commitment.type) === 'policy')
     .filter((commitment) => commitmentAffectsAction(commitment.type, candidate.type))
     .map((commitment) => evaluateOne(commitment, candidate))
     .filter(Boolean)
