@@ -9,9 +9,10 @@
 - `v0.29.0`：粟种成为真实物资，完成播种消耗、返种、迁移、流水和日报闭环；建立无界面高速回放基础。
 - `v0.30.0`：新增世界压力、机会、共同承诺、承诺评分权重、动力观察页、存档集成和隐藏 100× 浏览器测试。
 - `v0.30.1`：发布收口，统一 README、交接文档、构建清单和世界存档应用版本；不改变固定 tick 与世界结算。
-- `v0.31` 第一步：新增候选行动效果描述层和目录诊断，尚未接入共同承诺评分，不改变人物选择和世界回放结果。
+- `v0.31` 第一步：新增全部候选行动的统一效果描述层和目录诊断，不改变人物选择。
+- `v0.31` 第二步：新增共同承诺劳动力规划器，计算需求人数、当前响应、饱和程度、可吸引名额和停止原因；尚未接入人物评分。
 
-项目是部署在 GitHub Pages 的纯前端 ES Module 动态世界模拟游戏。当前主线不是聊天应用或 AI 代理项目；规则系统负责决定世界，未来 AI 只负责把已经存在的事实表达得更自然。
+项目是部署在 GitHub Pages 的纯前端 ES Module 动态世界模拟游戏。规则系统负责决定世界，未来 AI 只负责把已经存在的事实表达得更自然。
 
 ## 不可破坏规则
 
@@ -25,7 +26,7 @@
    - 流水：已经发生的资源或耐久变化。
 6. **内部转移必须配对。** 同一批物资从地图到人物、人物到营地、营地到工地或农田不能重复计入生产和消费。
 7. **失败原子性。** 任务失败、取消、路线失败、人物死亡和读档回滚不能吞材料、部分推进代际或留下幽灵预留。
-8. **长期事实与运行时分离。** 工具代际、人物记忆、日报和世界动力可持久化；路径游标、正在进行的动画和预留属于瞬时运行时。
+8. **长期事实与运行时分离。** 工具代际、人物记忆、日报和世界动力可持久化；路径游标、动画和预留属于瞬时运行时。
 9. **高频热路径禁止完整深拷贝。** 无界面模式不得反复复制全部人物记忆、地图或增长型历史。
 10. **版本必须真实。** `version.json.sourceCommit` 指向实际功能提交；后续仅文档或构建清单提交可以跟随其后。
 
@@ -35,7 +36,7 @@
 1 tick = 1 世界分钟 = 1 / 6 模拟秒
 ```
 
-固定结算顺序的核心要求：
+固定结算顺序：
 
 ```text
 时间推进
@@ -100,18 +101,18 @@ peopleSystem.getAlive()       // 完整副本，按中文姓名排序
 peopleSystem.getAliveRuntime()// 轻量视图，Map 插入顺序
 ```
 
-**重要顺序约束：** 社会事件系统使用 `getAliveRuntime()` 后仍显式按中文姓名排序，这是为了保持旧 `getAlive()` 的遍历顺序。不要为了“减少排序”直接删除该排序，否则见证者、传闻传播、关系更新和确定性指纹可能改变。
+社会事件系统使用 `getAliveRuntime()` 后仍显式按中文姓名排序，以保持旧 `getAlive()` 的遍历顺序。删除该排序会改变见证者、传闻、关系更新和确定性指纹。
 
-社会事件热路径当前策略：
+社会事件热路径：
 
 - 单个事件只读取一次人物移动位置快照；
 - 见证者和传闻传播复用位置快照；
-- 关系视图按传播者逐轮刷新，保留原更新顺序；
+- 关系视图按传播者逐轮刷新；
 - 每个人物已知的社会事件 ID 使用缓存查重；
 - 人物或社会事件存档载入后清空缓存并按真实记忆重建；
-- 实际记忆写入仍进入人物系统，不得只写缓存。
+- 实际记忆写入仍进入人物系统。
 
-旧 PR #27 已关闭：它基于旧性能分支，内容已经随 v0.29 进入主线，且其旧 Day 60 回放失败，不能重复合并。
+旧 PR #27 已关闭：其内容已经随 v0.29 进入主线，且旧 Day 60 回放失败，不能重复合并。
 
 ## 统一预留账本
 
@@ -129,12 +130,10 @@ tool
 - 任务完成、失败、取消、人物死亡、路线失败和读档重规划必须释放对应预留。
 - 维修与替换同时预留目标工具和营地材料。
 - 目标工具维护期间不能参与生产。
-- 成功读档采用 `cancel-and-replan`，清理瞬时预留后重新规划。
+- 成功读档采用 `cancel-and-replan`。
 - 失败读档通过检查点恢复原预留、活动和长期事实。
 
 ## 动态目标库存
-
-营地计算未来三日需求：
 
 ```text
 水目标 = 人口 × 每日饮水 × 3 × 温度倍率
@@ -157,7 +156,13 @@ tool
 
 ## 工具、维修和替换
 
-工具长期字段：
+工具状态：
+
+```text
+healthy → worn → critical → broken
+```
+
+长期字段：
 
 ```text
 generation
@@ -168,39 +173,11 @@ totalWear
 wearSinceReplacement
 ```
 
-工具状态：
+维护需求区分 `repair / replace`。同一代完成两次维修后再次磨损，或 `wearSinceReplacement >= maxDurability × 2.5` 时进入替换。替换成功必须在全部材料扣除后一次性恢复耐久、推进代际并清零本代计数。
 
-```text
-healthy → worn → critical → broken
-```
-
-维护需求：
-
-```text
-state: none / requested / urgent
-mode: repair / replace
-```
-
-替换触发：
-
-- 同一代完成两次维修后再次进入磨损区间；或
-- `wearSinceReplacement >= maxDurability × 2.5`。
-
-成功替换必须在全部材料扣除后一次性执行：
-
-```text
-durability = maxDurability
-generation += 1
-replacedCount += 1
-repairsSinceReplacement = 0
-wearSinceReplacement = 0
-```
-
-石斧、搬运篮和简易农具最低保障为 1；石镐暂不强制。维修与替换合计最多并发一个。失败不能改变工具、代际、需求或既有库存。
+石斧、搬运篮和简易农具最低保障为 1；维修与替换合计最多并发一个。失败不能改变工具、代际、需求或既有库存。
 
 ## v0.29 粟种事实链
-
-核心要求：
 
 ```text
 营地种子
@@ -215,7 +192,7 @@ wearSinceReplacement = 0
 - 第一块农田出现时，初始两份种子进入营地库存。
 - 旧农田存档的隐藏 `seedStock` 迁移到营地库存。
 - 播种失败、取消或路径失败不能静默消耗种子。
-- `farmSystem.verifySeeds()` 必须保证种子非负、在途不超过人物携带量，并防止已有农业彻底失去种源。
+- `farmSystem.verifySeeds()` 保证种子非负、在途不超过人物携带量，并防止农业彻底失去种源。
 - 无界面回放使用农田成长调度器，避免每 tick 扫描全部无变化农田。
 
 ## 统一资源流水
@@ -224,7 +201,7 @@ wearSinceReplacement = 0
 
 - `src/modules/economy/resourceFlowSystem.js`
 - `src/modules/economy/resourceFlowTaskContextGuard.js`
-- 工具维护与粟种的专用流水视图
+- 工具维护与粟种专用流水视图
 
 类别：
 
@@ -233,21 +210,11 @@ production / transfer / consumption / fuel
 construction / spoilage / wear / repair / replacement
 ```
 
-任务化流水必须携带足够上下文，如 `taskId / personId / toolId / maintenanceMode`。管理用途的直接修理 API 可没有任务上下文，但不能伪装成任务化流水。
-
-资源流水查询必须同时考虑年份和日号，避免跨年同日混合。历史记录存在上限，长期审计要求不超过配置的保留量。
+任务化流水必须携带足够上下文，如 `taskId / personId / toolId / maintenanceMode`。查询同时考虑年份和日号，避免跨年同日混合。
 
 ## 每日经济与任务生命周期
 
-日报保存：
-
-- 期初和期末人物/营地库存；
-- 生产、消费、燃料、施工、腐败、维修、替换；
-- 农业种子转移、投入和返种；
-- 任务分配、完成、取消、失败、跨日结转和阶段成本；
-- 生存请求拒绝；
-- 目标库存、瓶颈、压力和模拟错误；
-- 预期净变化、实际净变化和账实差异。
+日报保存期初与期末库存、生产、消费、燃料、施工、腐败、维修、替换、种子、任务生命周期、生存拒绝、目标库存、压力、模拟错误和账实差异。
 
 任务状态：
 
@@ -255,7 +222,7 @@ construction / spoilage / wear / repair / replacement
 active / completed / cancelled / failed
 ```
 
-跨午夜任务使用 `carryIn / carryOut`。任务只有在实际耗时超过 `max(30 秒, 预计耗时 × 2)` 时才属于 overdue。
+跨午夜任务使用 `carryIn / carryOut`。实际耗时超过 `max(30 秒, 预计耗时 × 2)` 才属于 overdue。
 
 ## v0.30 世界动力事实层
 
@@ -267,45 +234,27 @@ active / completed / cancelled / failed
 
 每日经济报告封存后执行一次 `worldDynamicsSystem.evaluate(report)`。
 
-### 压力来源
+压力来源包括库存缺口、生存供给失败、腐败损失、劳动积压、粟种短缺和土壤退化。机会包括库存富余、雨天播种窗口和成熟收获窗口。
 
-- 库存目标缺口；
-- 食物和饮水请求被拒绝；
-- 腐败损失占生产比例过高；
-- 劳动积压；
-- 粟种短缺；
-- 土壤肥力退化。
+共同承诺规则：
 
-压力保存 `severity / baseSeverity / persistenceDays / causes / evidence / suggestedResponses / openedAt / updatedAt / resolvedAt`。
-
-### 机会来源
-
-- 食物或其他目标库存达到明显富余；
-- 雨天且存在可播农田与种子；
-- 存在成熟待收获农田。
-
-机会只提供可解释事实，不直接创建任务；消失后进入过期历史。
-
-### 共同承诺
-
-- 普通压力需持续至少两日且严重度达到门槛；
-- 紧急食物或饮水拒绝可立即创建承诺；
-- 承诺随压力缓解更新进度，压力解除后完成；
+- 普通压力持续至少两日且达到门槛后形成承诺；
+- 紧急食物或饮水拒绝可立即形成承诺；
+- 承诺随压力缓解更新，压力解除后完成；
 - `communityCommitment` 只给已有合法候选加权；
 - 单个候选最高加 18 分；
 - 每轮候选评分只读取一次承诺快照；
-- 完成态承诺不得继续加分。
+- 完成态承诺不得继续加分；
+- 承诺不能生成候选、绕过路线、库存、预留和并发，也不能覆盖硬优先级。
 
-承诺不能生成候选、绕过路线、库存、预留和并发，也不能覆盖紧急生存、睡眠、篝火、建造、农业和工具保障的硬优先级。
-
-## v0.31 候选行动效果描述层（第一步）
+## v0.31 第一步：候选行动效果描述层
 
 核心模块：
 
 - `src/modules/actions/candidateEffects.js`
 - `test/candidateEffects.test.js`
 
-当前全部 16 种 `ACTION_TYPES` 都有至少一项效果描述。统一字段：
+当前全部 16 种 `ACTION_TYPES` 都有至少一项效果描述：
 
 ```text
 metric / subjectId / direction / amount / unit / horizon / estimateKey
@@ -326,21 +275,90 @@ verifyCandidateEffectCatalog()
 - 数量只能是非负数，增减语义由 `direction` 表达；
 - 动态目标依次读取显式 `subjects`、候选字段、`candidate.data` 和目录默认值；
 - 显式 `estimates` 优先于 `candidate.effectEstimates` 和目录默认估算；
-- 未知行动返回空效果，不生成候选、任务或世界事实；
-- 收获同时描述食物增加、返种增加和成熟农田减少；
-- 播种同时描述种子消耗、已播农田增加和未来食物能力增加。
+- 未知行动返回空效果；
+- 收获同时描述食物、返种和成熟农田变化；
+- 播种同时描述种子消耗、已播农田和未来食物能力。
 
-**当前边界：** 该模块尚未被 `utilityScorer`、`commitmentUtility` 或行动规划器导入。第一步只建立语义数据层，因此人物选择、固定 tick、存档和资源结算必须保持 v0.30.1 基线不变。
+当前仍未接入评分器，因此人物选择、固定 tick、存档和资源结算保持 v0.30.1 基线。
+
+## v0.31 第二步：共同承诺劳动力规划器
+
+核心模块：
+
+- `src/modules/actions/commitmentResponses.js`
+- `src/modules/actions/commitmentLaborPlanner.js`
+- `test/commitmentLaborPlanner.test.js`
+
+承诺响应映射从 `commitmentUtility.js` 抽离到统一目录；原有最高 18 分公式不变。
+
+需求强度：
+
+```text
+demandStrength = priority / 100 × (1 - progress)
+```
+
+期望人数：
+
+```text
+desiredWorkers
+= ceil(population × 0.30 × demandStrength)
+= 活跃且有剩余需求时至少 1 人
+= 不超过人口
+= 绝对上限 4 人
+```
+
+组合规划按以下顺序分配当前响应者：
+
+```text
+priority 降序
+→ createdAt.tick 升序
+→ commitmentId 字典序
+```
+
+同一个正在执行的行动只能分配给一个承诺，不能被多个目标重复计算。
+
+主要字段：
+
+```text
+desiredWorkers      原始需求人数
+targetWorkers       当前约束下可达到的人数
+currentResponders   已经响应的人数
+remainingDemand     尚未由当前响应者覆盖的需求
+attractionSlots     仍可继续吸引的名额
+unmetWorkers        受容量或可执行性限制后仍无法满足的人数
+saturation          currentResponders / desiredWorkers
+capacitySaturation  currentResponders / targetWorkers
+```
+
+状态：
+
+```text
+inactive     承诺无效或目标完成
+blocked      无人口、无响应行动或无合法行动
+constrained  仍有需求但响应容量已耗尽
+saturated    目标人数已经满足
+attracting   仍应继续吸引村民
+```
+
+主要接口：
+
+```js
+estimateCommitmentDemandStrength(commitment)
+planCommitmentLabor({ commitment, ...context })
+planCommitmentLaborPortfolio({ commitments, population, actionCounts, availableActions, capacityByAction })
+verifyCommitmentLaborPortfolio(portfolio)
+```
+
+当前边界：劳动力规划器尚未被 `utilityScorer` 或 `actionPlanner` 导入。它只提供确定性计划与诊断，因此人物选择和旧回放指纹必须保持不变。
 
 ## 存档与迁移
 
 - 主世界存档 schema 保持 `1`。
 - v0.30.1 的 `WORLD_SAVE_APP_VERSION` 为 `0.30.1`。
-- 子系统可独立升级 schema，但必须提供旧状态迁移或明确拒绝不兼容状态。
 - `systems.worldDynamics` 保存压力、机会、承诺和历史。
 - 旧存档没有 `worldDynamics` 时初始化为空状态。
 - 读档先验证目标，再停止世界循环并导入。
-- 导入失败必须恢复建筑、工具、维护运行时、流水、日报、世界动力和行动运行时检查点。
+- 导入失败恢复建筑、工具、维护运行时、流水、日报、世界动力和行动运行时检查点。
 - 成功读档恢复长期事实和坐标，取消未完成任务后重新规划。
 
 ## CI 与长期稳定性
@@ -369,10 +387,9 @@ Stability Audit：
 
 v0.30.0 封版结果：
 
-- 普通 CI 与 Stability Audit 全部成功；
 - Day 60 batch 10 平均约 217 ticks/s；
 - Day 120 batch 10 平均约 161 ticks/s；
-- 10 人存活，世界动力、任务生命周期、流水、日报、工具、种子与公共保障全部校验通过；
+- 10 人存活，世界动力、任务生命周期、流水、日报、工具、种子与公共保障全部通过；
 - Day 120 最终摘要：`e94ed1acb02050e4fa305881ee485c3d0e823c45a380fcb0b097853fabc29f9c`。
 
 ## 已知限制
@@ -384,16 +401,16 @@ v0.30.0 封版结果：
 5. 石镐没有正式采石行动与石材资源。
 6. 休息、睡眠和空闲时间没有完整时间预算。
 7. 草棚、储物棚和农田还不是寻路障碍。
-8. 候选效果描述层尚未接入共同承诺评分；当前承诺响应仍集中在食物、饮水、木材和储存。
-9. 自动 Chromium 不能替代真实 iPhone 安全区与浏览器外壳回归。
+8. 候选效果与劳动力规划尚未接入共同承诺评分；当前人物行为仍使用 v0.30 的静态承诺权重。
+9. 农业、种子、储存和劳动积压尚未补齐正式响应映射。
+10. 自动 Chromium 不能替代真实 iPhone 安全区与浏览器外壳回归。
 
 ## v0.31 后续步骤
 
-1. 建立共同承诺劳动力规划器，计算需求强度、目标人数、当前响应人数、饱和程度和不可执行原因。
-2. 将效果描述层接入新的共同承诺评分公式，同时继续保持最高加 18 分和“只加权、不生成候选”的边界。
-3. 补齐农业、种子、储存与劳动积压响应。
-4. 保存最终选中行动的轻量解释，并显示不可执行承诺。
-5. 建立新的行为基准，执行 Day 30、Day 60、多批次和 Day 120 验证。
+1. 将候选效果描述与劳动力计划接入新的共同承诺评分公式，同时保持最高加 18 分和“只加权、不生成候选”的边界。
+2. 补齐农业、种子、储存与劳动积压响应。
+3. 保存最终选中行动的轻量解释，并显示不可执行承诺。
+4. 建立新的行为基准，执行 Day 30、Day 60、多批次和 Day 120 验证。
 
 ## 版本记录
 
@@ -405,4 +422,4 @@ v0.30.0 封版结果：
 - `v0.29`：真实粟种事实链、无界面高速回放与长期热路径优化。
 - `v0.30`：世界动力、压力、机会、共同承诺、隐藏 100× 与存档/观察页集成。
 - `v0.30.1`：发布版本、文档、构建清单与存档应用版本统一。
-- `v0.31`（开发中）：第一步建立全部候选行动的统一效果描述和目录校验；尚未改变人物决策。
+- `v0.31`（开发中）：第一步建立候选效果目录；第二步建立组合级承诺劳动力规划；两步均尚未改变人物决策。
