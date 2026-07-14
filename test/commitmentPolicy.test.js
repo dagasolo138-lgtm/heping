@@ -29,6 +29,30 @@ function candidate(type, overrides = {}) {
   };
 }
 
+test('种子恢复承诺要求播种后仍保留目标缓冲', () => {
+  const commitment = policyCommitment('restore-seed-reserve', {
+    goal: { metric: 'seed-stock', itemId: 'milletSeed', target: 3, unit: 'item' },
+  });
+  const blocked = evaluateCommitmentPolicy({
+    candidate: candidate(ACTION_TYPES.SOW_MILLET, {
+      target: { seedAvailableAtCamp: 3, seedAmount: 1, seedTarget: 3 },
+    }),
+    commitments: [commitment],
+  });
+  const allowed = evaluateCommitmentPolicy({
+    candidate: candidate(ACTION_TYPES.SOW_MILLET, {
+      target: { seedAvailableAtCamp: 4, seedAmount: 1, seedTarget: 3 },
+    }),
+    commitments: [commitment],
+  });
+
+  assert.equal(blocked.blocked, true);
+  assert.equal(blocked.matches[0].reason, 'preserve-seed-buffer');
+  assert.equal(blocked.matches[0].details.afterSowing, 2);
+  assert.equal(blocked.matches[0].details.shortageAfterSowing, 1);
+  assert.equal(allowed.blocked, false);
+});
+
 test('土壤恢复承诺阻止贫瘠田继续播种，达到阈值后解除', () => {
   const commitment = policyCommitment('restore-soil-fertility');
   const blocked = evaluateCommitmentPolicy({
