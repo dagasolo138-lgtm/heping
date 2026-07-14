@@ -1,0 +1,1 @@
+Trigger the temporary CI job that rewrites codex.md and restores the normal workflow.
