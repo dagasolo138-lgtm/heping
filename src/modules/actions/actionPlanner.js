@@ -244,6 +244,16 @@ function compactCandidateScore(item) {
   };
 }
 
+function compactCandidateExplanation(item) {
+  return {
+    ...compactCandidateScore(item),
+    blocked: Boolean(item.commitmentPolicy?.blocked),
+    blockReasons: item.commitmentPolicy?.reasons ?? [],
+    commitmentTargets: item.commitmentTargets ?? [],
+    commitmentBlocked: item.commitmentBlocked ?? [],
+  };
+}
+
 function attachUtilityDebug(task, scoring, scored = []) {
   return {
     ...task,
@@ -256,6 +266,13 @@ function attachUtilityDebug(task, scoring, scored = []) {
         candidates: scored.map(compactCandidateScore),
         socialTargets: scoring.socialTargets ?? [],
       }),
+      explanationContext: {
+        planner: scoring.planner ?? 'utility',
+        commitmentTargets: scoring.commitmentTargets ?? [],
+        commitmentBlocked: scoring.commitmentBlocked ?? [],
+        commitmentPolicy: scoring.commitmentPolicy ?? null,
+        candidates: scored.map(compactCandidateExplanation),
+      },
     },
   };
 }

@@ -108,11 +108,35 @@ function planFieldAction({ field, person, farmSystem, actionCounts, commitments,
   return { task: null, blocked: false };
 }
 
+function withSkippedConstraints(task, skipped) {
+  if (!task || skipped.length === 0) return task;
+  return {
+    ...task,
+    data: {
+      ...(task.data ?? {}),
+      explanationContext: {
+        ...(task.data?.explanationContext ?? {}),
+        planner: 'farm-planner',
+        skipped,
+      },
+    },
+  };
+}
+
 export function planFarmAction({ person, farmSystem, actionCounts, commitments = null, population = null }) {
   const fields = orderedWorkFields(farmSystem);
+  const skipped = [];
   for (const field of fields) {
     const result = planFieldAction({ field, person, farmSystem, actionCounts, commitments, population });
-    if (result.task) return result.task;
+    if (result.task) return withSkippedConstraints(result.task, skipped);
+    if (result.blocked && result.response) {
+      skipped.push({
+        fieldId: field.id,
+        actionType: result.response.candidate?.type ?? null,
+        policy: result.response.policy,
+        utility: result.response.utility,
+      });
+    }
     if (!result.blocked) return null;
   }
   return null;
