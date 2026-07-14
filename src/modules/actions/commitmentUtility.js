@@ -1,15 +1,6 @@
-import { ACTION_TYPES } from './actionTypes.js';
+import { commitmentSupportsAction } from './commitmentResponses.js';
 
 const MAX_COMMITMENT_SCORE = 18;
-
-const ACTIONS_BY_COMMITMENT = Object.freeze({
-  'restore-food-reserve': Object.freeze([ACTION_TYPES.GATHER_BERRIES]),
-  'emergency-food-supply': Object.freeze([ACTION_TYPES.GATHER_BERRIES]),
-  'restore-water-reserve': Object.freeze([ACTION_TYPES.FETCH_WATER]),
-  'emergency-water-supply': Object.freeze([ACTION_TYPES.FETCH_WATER]),
-  'restore-wood-reserve': Object.freeze([ACTION_TYPES.CHOP_TREE]),
-  'improve-storage': Object.freeze([ACTION_TYPES.CHOP_TREE]),
-});
 
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.max(minimum, Math.min(maximum, Number(value) || 0));
@@ -39,7 +30,7 @@ export function scoreCommitmentUtility({ candidate, commitments = null } = {}) {
   if (!candidate?.type) return Object.freeze({ score: 0, matches: Object.freeze([]) });
   const matches = source
     .filter((commitment) => commitment?.state === 'active')
-    .filter((commitment) => ACTIONS_BY_COMMITMENT[commitment.type]?.includes(candidate.type))
+    .filter((commitment) => commitmentSupportsAction(commitment.type, candidate.type))
     .map((commitment) => Object.freeze({
       id: commitment.id ?? null,
       type: commitment.type,
@@ -53,6 +44,4 @@ export function scoreCommitmentUtility({ candidate, commitments = null } = {}) {
   return Object.freeze({ score, matches: Object.freeze(matches) });
 }
 
-export function commitmentActions(type) {
-  return [...(ACTIONS_BY_COMMITMENT[type] ?? [])];
-}
+export { commitmentActions } from './commitmentResponses.js';
