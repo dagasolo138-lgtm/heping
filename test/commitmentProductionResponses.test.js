@@ -18,7 +18,7 @@ function person(overrides = {}) {
   };
 }
 
-function farmSystemFor(field) {
+function farmSystemFor(field, seedOverrides = {}) {
   return {
     nextWorkField: () => structuredClone(field),
     getFieldCenter: () => ({ x: 4, y: 4 }),
@@ -28,6 +28,8 @@ function farmSystemFor(field) {
       seedAmount: 1,
       target: 2,
       shortage: 0,
+      availableAtCamp: 4,
+      ...seedOverrides,
     }),
     canStartSowing: () => true,
   };
@@ -71,6 +73,38 @@ test('雨天播种窗口进入合法播种任务的承诺注记', () => {
   assert.equal(task.type, ACTION_TYPES.SOW_MILLET);
   assert.equal(task.data.commitmentResponse.score, 14.4);
   assert.equal(task.data.commitmentResponse.matches[0].type, 'sow-millet-window');
+});
+
+test('种子恢复承诺会暂缓消耗留种缓冲，缓冲充足后允许播种', () => {
+  const commitment = {
+    id: 'seed-shortage',
+    type: 'restore-seed-reserve',
+    state: 'active',
+    priority: 90,
+    progress: 0,
+    goal: { metric: 'seed-stock', itemId: 'milletSeed', target: 3, unit: 'item' },
+  };
+  const blocked = planFarmAction({
+    person: person(),
+    farmSystem: farmSystemFor(
+      { id: 'field-1', status: 'readyToSow', soil: { fertility: 70 } },
+      { target: 3, availableAtCamp: 3 },
+    ),
+    actionCounts: {},
+    commitments: [commitment],
+  });
+  const allowed = planFarmAction({
+    person: person(),
+    farmSystem: farmSystemFor(
+      { id: 'field-1', status: 'readyToSow', soil: { fertility: 70 } },
+      { target: 3, availableAtCamp: 4 },
+    ),
+    actionCounts: {},
+    commitments: [commitment],
+  });
+
+  assert.equal(blocked, null);
+  assert.equal(allowed.type, ACTION_TYPES.SOW_MILLET);
 });
 
 test('贫瘠田休耕与劳动积压会阻止对应的新农业任务', () => {
