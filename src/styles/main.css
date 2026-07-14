@@ -98,3 +98,30 @@ h1,h2,h3,p { margin-top:0; } h1,h2,h3 { font-family:Georgia,'Times New Roman','N
 
 .map-canvas-wrap canvas.is-drag-mode { touch-action:none; }
 .map-panel__tools [data-map-control="drag-mode"] { width:auto; min-width:74px; padding:0 10px; font-size:12px; }
+
+.action-explanation-card .explanation-rules { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+.action-explanation-card .explanation-rules span { padding:4px 8px; border:1px solid rgba(131,199,176,.2); border-radius:999px; background:rgba(131,199,176,.08); color:var(--accent-2); font-size:11px; }
+.explanation-details { margin-top:8px; }
+.explanation-details > summary { color:var(--accent); cursor:pointer; font-size:12px; font-weight:700; list-style:none; }
+.explanation-details > summary::-webkit-details-marker { display:none; }
+.explanation-details > summary::after { content:'＋'; margin-left:6px; color:var(--muted); }
+.explanation-details[open] > summary::after { content:'−'; }
+.explanation-section { margin-top:11px; padding-top:10px; border-top:1px solid rgba(217,178,105,.18); }
+.explanation-section h4 { margin:0 0 7px; color:var(--muted); font-size:12px; font-weight:600; }
+.explanation-list { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.explanation-list li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; align-items:center; padding:7px 8px; border:1px solid rgba(217,178,105,.16); border-radius:9px; background:rgba(0,0,0,.12); font-size:12px; }
+.explanation-list li div { display:grid; gap:2px; min-width:0; }
+.explanation-list li strong { color:#efe2bc; }
+.explanation-list li small { color:var(--muted); line-height:1.4; }
+.explanation-list li b { color:var(--accent-2); }
+.explanation-list li.is-blocked { border-color:rgba(239,147,134,.24); background:rgba(239,147,134,.06); }
+.explanation-list li.is-blocked b,
+.utility-candidates li.is-blocked strong,
+.utility-factors strong.is-negative { color:var(--danger); }
+.utility-candidates li.is-blocked { outline:1px solid rgba(239,147,134,.2); }
+@media (max-width:420px) {
+  .utility-card__header { align-items:flex-start; }
+  .utility-card__header span { text-align:right; }
+  .explanation-list li { grid-template-columns:1fr; }
+  .explanation-list li b { justify-self:start; }
+}

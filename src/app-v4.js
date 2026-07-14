@@ -114,28 +114,116 @@ function conditionLabel(tag) {
 
 function factorLabel(key) {
   return ({
-    personalNeed: '个人需求', campScarcity: '营地稀缺', skillFit: '技能适配', roleFit: '职业倾向',
-    traitBias: '性格倾向', distance: '距离成本', crowding: '并发拥挤', social: '社会因素',
-    emergency: '紧急程度', cargo: '携带物资', campStorage: '营地容量', cold: '受寒', wetness: '潮湿',
+    personalNeed: '个人需求', campScarcity: '营地稀缺', communityCommitment: '共同承诺',
+    communityPolicy: '承诺约束', skillFit: '技能适配', roleFit: '职业倾向',
+    traitBias: '性格倾向', distance: '距离成本', laborCost: '劳动成本',
+    crowding: '并发拥挤', social: '社会因素', emergency: '紧急程度',
+    cargo: '携带物资', campStorage: '营地容量', cold: '受寒', wetness: '潮湿',
+    minimumGuarantee: '公共工具保障', maintenanceUrgency: '维护紧迫度',
+    replacementNeed: '替换需求', productionContinuity: '生产连续性',
   }[key] ?? key);
 }
 
-function renderUtilityDebug(utility) {
-  if (!utility) return '<section class="utility-card utility-card--empty"><h3>行动原因</h3><p class="muted">当前行动尚未接入效用评分，或正在待命。</p></section>';
-  const factorRows = Object.entries(utility.factors ?? {})
-    .sort(([, first], [, second]) => Math.abs(Number(second)) - Math.abs(Number(first)))
-    .slice(0, 5)
-    .map(([key, value]) => `<li><span>${esc(factorLabel(key))}</span><strong>${Number(value) > 0 ? '+' : ''}${esc(value)}</strong></li>`)
+function commitmentLabel(type) {
+  return ({
+    'restore-food-reserve': '恢复食物储备',
+    'emergency-food-supply': '紧急食物供应',
+    'restore-water-reserve': '恢复饮水储备',
+    'emergency-water-supply': '紧急饮水供应',
+    'restore-wood-reserve': '恢复木材储备',
+    'improve-storage': '改善储存条件',
+    'restore-seed-reserve': '恢复种子储备',
+    'sow-millet-window': '把握播种窗口',
+    'harvest-millet-window': '完成成熟收获',
+    'restore-soil-fertility': '恢复土壤肥力',
+    'reduce-labor-backlog': '减少劳动积压',
+  }[type] ?? type ?? '未知承诺');
+}
+
+function constraintLabel(reason) {
+  return ({
+    'no-useful-effect': '该行动不能有效推进目标',
+    'labor-target-met': '目标响应人数已经满足',
+    'response-capacity-exhausted': '可用响应工位已经占满',
+    'no-effective-candidate': '当前没有有效行动能力',
+    'soil-fallow-required': '田块肥力过低，需要继续休耕',
+    'preserve-seed-buffer': '播种后会跌破留种安全线',
+    'defer-field-expansion': '劳动积压期间暂停新开垦',
+    'long-discretionary-work-penalty': '积压期间降低长耗时非紧急劳动',
+    'no-available-action': '当前没有合法响应行动',
+    'no-labor-demand': '该目标当前不需要新增劳动',
+    blocked: '被规则阻断',
+  }[reason] ?? reason ?? '规则约束');
+}
+
+function signed(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  return `${numeric > 0 ? '+' : ''}${numeric}`;
+}
+
+function legacyExplanation(utility) {
+  if (!utility) return null;
+  return {
+    plannerLabel: utility.planner ?? '综合效用',
+    score: utility.score ?? null,
+    summary: utility.reason ?? '暂无原因',
+    factors: Object.entries(utility.factors ?? {}).map(([key, value]) => ({ key, value })),
+    commitments: [],
+    blockedCommitments: [],
+    policies: [],
+    hardRules: [],
+    alternatives: utility.candidates ?? [],
+  };
+}
+
+function renderActionExplanation(input) {
+  const explanation = input?.version ? input : legacyExplanation(input);
+  if (!explanation) {
+    return '<section class="utility-card utility-card--empty"><h3>行动原因</h3><p class="muted">当前人物正在待命，或行动尚未形成可解释的任务。</p></section>';
+  }
+  const factors = [...(explanation.factors ?? [])]
+    .sort((first, second) => Math.abs(Number(second.value)) - Math.abs(Number(first.value)))
+    .slice(0, 6);
+  const factorRows = factors.map((entry) => `<li><span>${esc(factorLabel(entry.key))}</span><strong class="${Number(entry.value) < 0 ? 'is-negative' : ''}">${esc(signed(entry.value))}</strong></li>`).join('');
+  const commitmentRows = (explanation.commitments ?? []).map((entry) => {
+    const staffing = Number.isFinite(Number(entry.desiredWorkers))
+      ? `响应 ${Number(entry.currentResponders ?? 0)} / ${Number(entry.desiredWorkers)}`
+      : '';
+    const effect = entry.effects?.[0];
+    const effectText = effect?.subjectId ? `影响 ${effect.subjectId}` : '';
+    return `<li><div><strong>${esc(commitmentLabel(entry.type))}</strong><small>${esc([staffing, effectText].filter(Boolean).join(' · ') || '该行动能够推进目标')}</small></div><b>${esc(signed(entry.score))}</b></li>`;
+  }).join('');
+  const policyRows = [
+    ...(explanation.policies ?? []).map((entry) => ({
+      label: commitmentLabel(entry.type),
+      reason: constraintLabel(entry.reason),
+      blocked: entry.blocked,
+      penalty: entry.penalty,
+    })),
+    ...(explanation.blockedCommitments ?? []).map((entry) => ({
+      label: commitmentLabel(entry.type),
+      reason: constraintLabel(entry.reason ?? entry.stopReason),
+      blocked: true,
+      penalty: null,
+    })),
+  ].map((entry) => `<li class="${entry.blocked ? 'is-blocked' : ''}"><div><strong>${esc(entry.label)}</strong><small>${esc(entry.reason)}</small></div>${Number(entry.penalty) ? `<b>${esc(signed(entry.penalty))}</b>` : '<b>限制</b>'}</li>`).join('');
+  const ruleRows = (explanation.hardRules ?? []).map((rule) => `<span>${esc(rule)}</span>`).join('');
+  const candidateRows = (explanation.alternatives ?? []).slice(0, 5)
+    .map((candidate) => `<li class="${candidate.blocked ? 'is-blocked' : ''}"><span>${esc(candidate.label ?? candidate.type)}</span><strong>${candidate.blocked ? '阻断' : esc(candidate.score ?? '—')}</strong><small>${esc(candidate.blocked ? (candidate.blockReasons ?? []).map(constraintLabel).join('、') || candidate.reason : candidate.reason ?? '')}</small></li>`)
     .join('');
-  const candidateRows = (utility.candidates ?? []).slice(0, 4)
-    .map((candidate) => `<li><span>${esc(candidate.label ?? candidate.type)}</span><strong>${esc(candidate.score)}</strong><small>${esc(candidate.reason ?? '')}</small></li>`)
-    .join('');
-  return `<section class="utility-card"><div class="utility-card__header"><h3>行动原因</h3><span>${esc(utility.planner ?? 'utility')} · ${esc(utility.score ?? 0)} 分</span></div>
-    <p>${esc(utility.reason ?? '暂无原因')}</p>
-    <details><summary>展开评分细节</summary>
-      ${factorRows ? `<ul class="utility-factors">${factorRows}</ul>` : '<p class="muted">暂无 utility factors。</p>'}
-      ${candidateRows ? `<div class="utility-candidates"><h4>候选评分</h4><ol>${candidateRows}</ol></div>` : ''}
-    </details>
+  const scoreText = Number.isFinite(Number(explanation.score)) ? `${esc(explanation.score)} 分` : '规则优先';
+  const details = factorRows || commitmentRows || policyRows || ruleRows || candidateRows;
+  return `<section class="utility-card action-explanation-card">
+    <div class="utility-card__header"><h3>行动原因</h3><span>${esc(explanation.plannerLabel ?? explanation.planner ?? '规则调度')} · ${scoreText}</span></div>
+    <p>${esc(explanation.summary ?? '当前行动由世界规则决定。')}</p>
+    ${ruleRows ? `<div class="explanation-rules" aria-label="硬规则">${ruleRows}</div>` : ''}
+    ${details ? `<details class="explanation-details"><summary>查看完整决策链</summary>
+      ${factorRows ? `<section class="explanation-section"><h4>促成因素</h4><ul class="utility-factors">${factorRows}</ul></section>` : ''}
+      ${commitmentRows ? `<section class="explanation-section"><h4>共同承诺</h4><ul class="explanation-list explanation-list--commitments">${commitmentRows}</ul></section>` : ''}
+      ${policyRows ? `<section class="explanation-section"><h4>约束与被阻断目标</h4><ul class="explanation-list">${policyRows}</ul></section>` : ''}
+      ${candidateRows ? `<div class="utility-candidates"><h4>候选比较</h4><ol>${candidateRows}</ol></div>` : ''}
+    </details>` : ''}
   </section>`;
 }
 
@@ -178,6 +266,7 @@ function renderDetail() {
   const runtime = actions.getRenderPeople().find((item) => item.id === person.id) ?? person;
   const home = person.location.homeId ? buildings.get(person.location.homeId) : null;
   const current = person.activity.current;
+  const actionExplanation = actions.getActionExplanation?.(person.id) ?? current?.utility ?? null;
   const exposure = getExposure(person);
   const skillRows = Object.entries(person.work.skills).filter(([, value]) => value > 0).sort(([, a], [, b]) => b - a).slice(0, 4)
     .map(([name, value]) => `<div><span>${esc(name)}</span><b>${value}</b></div>`).join('');
@@ -194,7 +283,7 @@ function renderDetail() {
       <div class="tag-row">${person.traits.map((trait) => `<span class="tag">${traitLabel(trait)}</span>`).join('')}${conditions}</div>
     </div></div>
     <div class="activity-banner ${current ? '' : 'activity-banner--idle'}"><span class="activity-banner__dot"></span><div><small>当前行动</small><strong>${current ? `${esc(current.label)} · ${esc(current.phase)}` : '待命'}</strong></div></div>
-    ${renderUtilityDebug(current?.utility)}
+    ${renderActionExplanation(actionExplanation)}
     <div class="exposure-summary"><span>潮湿 ${Math.round(exposure.wetness)} / 100</span><span>受寒 ${Math.round(exposure.cold)} / 100</span></div>
     <div class="metrics-grid">
       <div class="metric"><span>饥饿</span><strong>${Math.round(person.state.hunger)}</strong></div>

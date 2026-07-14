@@ -3,6 +3,7 @@ import { createFixedStepClock, SIMULATION_SECONDS_PER_TICK, WORLD_MINUTES_PER_RE
 import { getDayPhase } from '../environment/dayCycle.js';
 import { EXPOSURE_KEY, evaluateExposure, getExposure } from '../environment/exposureSystem.js';
 import { ACTION_TYPES } from './actionTypes.js';
+import { buildActionExplanation } from './actionExplanation.js';
 import { createRuntimeTask, advanceRuntimeTask } from './actionExecutor.js';
 import { completeAction } from './actionEffects.js';
 import { collectConstructionMaterial, deliverConstructionMaterial, performConstructionWork } from './constructionEffects.js';
@@ -198,6 +199,13 @@ export function createActionSystem({
         activity: { status: person.activity?.status ?? 'idle' },
       };
     });
+  }
+
+  function getActionExplanation(personId) {
+    ensureAgents();
+    const task = agents.get(personId)?.task ?? null;
+    const explanation = buildActionExplanation(task);
+    return explanation ? copy(explanation) : null;
   }
 
   function counts() {
@@ -727,6 +735,7 @@ export function createActionSystem({
     advanceTicks,
     getRenderPeople: renderPeople,
     getMovementPeople: movementPeople,
+    getActionExplanation,
     getRecentLogs: recentLogs,
     getDayPhase: () => getDayPhase(gameTime.now()),
     getWeather: () => weatherSystem.get(),
