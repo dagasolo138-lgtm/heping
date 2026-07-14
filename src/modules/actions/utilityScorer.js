@@ -1,4 +1,5 @@
 import { ACTION_TYPES } from './actionTypes.js';
+import { planCommitmentLaborPortfolio } from './commitmentLaborPlanner.js';
 import { readActiveRuntimeCommitments, scoreCommitmentUtility } from './commitmentUtility.js';
 import { campScarcity, scarcityForAction } from './scarcityUtility.js';
 import { scoreSocialUtility } from './socialUtility.js';
@@ -79,12 +80,36 @@ function explain(factors) {
     .join('、');
 }
 
-export function scoreUtilityCandidates({ person, desire, candidates, camp, population, actionCounts, allPeople = [], stockTargets = null }) {
+export function scoreUtilityCandidates({
+  person,
+  desire,
+  candidates,
+  camp,
+  population,
+  actionCounts,
+  allPeople = [],
+  stockTargets = null,
+  commitments: providedCommitments = null,
+  commitmentLaborPortfolio = null,
+  commitmentCapacityByAction = {},
+}) {
   const scarcity = campScarcity({ camp, population, stockTargets });
-  const commitments = readActiveRuntimeCommitments();
+  const commitments = Array.isArray(providedCommitments) ? providedCommitments : readActiveRuntimeCommitments();
+  const availableActions = [...new Set(candidates
+    .filter((candidate) => candidate?.availability?.executable !== false)
+    .map((candidate) => candidate.type)
+    .filter(Boolean))];
+  const laborPortfolio = commitmentLaborPortfolio ?? planCommitmentLaborPortfolio({
+    commitments,
+    population,
+    actionCounts,
+    availableActions,
+    capacityByAction: commitmentCapacityByAction,
+  });
+
   return candidates.map((candidate) => {
     const social = scoreSocialUtility({ person, candidate, allPeople });
-    const commitment = scoreCommitmentUtility({ candidate, commitments });
+    const commitment = scoreCommitmentUtility({ candidate, commitments, laborPortfolio });
     const factors = {
       personalNeed: needScore(candidate.type, desire),
       campScarcity: scarcityForAction(candidate.type, scarcity) * 42,
@@ -105,6 +130,7 @@ export function scoreUtilityCandidates({ person, desire, candidates, camp, popul
       reason: explain(factors) || '低优先级待命',
       socialTargets: social.targets ?? [],
       commitmentTargets: commitment.matches,
+      commitmentBlocked: commitment.blocked,
     });
   }).sort((first, second) => second.score - first.score);
 }
