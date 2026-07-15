@@ -8,6 +8,7 @@ import {
 } from '../src/modules/map-v2/mapV2Boundary.js';
 import { verifyMapV2AssetManifest } from '../src/modules/map-v2/mapV2AssetManifest.js';
 import { verifyMapV2LayerCatalog } from '../src/modules/map-v2/mapV2LayerCatalog.js';
+import { attachMapV2Runtime } from '../src/bootstrap/attachMapV2Runtime.js';
 
 test('Map V2 默认保持旧地图、旧渲染器和旧模拟行为', () => {
   const boundary = createMapV2Boundary({ legacySeed: 'shengling-starting-valley-v1' });
@@ -58,4 +59,23 @@ test('候选素材默认不打包，混合许可素材保持阻断', () => {
   assert.equal(lpc.reviewStatus, 'blocked');
   assert.equal(lpc.bundled, false);
   assert.equal(boundary.verify().simulationBehaviorChanged, false);
+});
+
+test('只读运行时挂接后保留已有世界系统并且可重复调用', () => {
+  const original = Object.freeze({
+    mapSystem: Object.freeze({ get: () => ({ seed: 'legacy-map-seed' }) }),
+    marker: 'keep-existing-runtime',
+  });
+  globalThis.shengling = original;
+
+  const first = attachMapV2Runtime();
+  const second = attachMapV2Runtime();
+
+  assert.equal(first, second);
+  assert.equal(globalThis.shengling.marker, 'keep-existing-runtime');
+  assert.equal(globalThis.shengling.mapSystem, original.mapSystem);
+  assert.equal(globalThis.shengling.mapV2Runtime, first);
+  assert.equal(first.getState().fallbackSeed, 'legacy-map-seed');
+  assert.equal(first.verify().ok, true);
+  delete globalThis.shengling;
 });
