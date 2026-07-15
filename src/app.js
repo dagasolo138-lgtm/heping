@@ -1,4 +1,5 @@
 import './app-v4.js';
+import { attachMapV2Runtime } from './bootstrap/attachMapV2Runtime.js';
 import { attachEcologyRuntime } from './bootstrap/attachEcologyRuntime.js';
 import { attachRoadRuntime } from './bootstrap/attachRoadRuntime.js';
 import { attachSeasonRuntime } from './bootstrap/attachSeasonRuntime.js';
@@ -19,6 +20,7 @@ import { attachMapHudRuntime } from './bootstrap/attachMapHudRuntime.js';
 import { attachObserverUiRuntime } from './bootstrap/attachObserverUiRuntime.js';
 import { attachBuildInfoRuntime } from './bootstrap/attachBuildInfoRuntime.js';
 
+attachMapV2Runtime();
 attachEcologyRuntime();
 attachRoadRuntime();
 attachSeasonRuntime();
